@@ -1,0 +1,36 @@
+"""Pipeline settings — Pydantic BaseSettings for configuration from .env and YAML."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class PipelineSettings(BaseSettings):
+    """Pipeline configuration loaded from environment variables and .env file.
+
+    All secrets (tokens, API keys) come from environment.
+    Non-secret config comes from YAML files loaded separately.
+    """
+
+    # Telegram
+    telegram_token: str = Field(default="", description="Telegram Bot API token")
+    telegram_chat_id: str = Field(default="", description="Authorized Telegram chat ID")
+
+    # Anthropic
+    anthropic_api_key: str = Field(default="", description="Anthropic API key for Claude")
+
+    # Paths
+    workspace_dir: Path = Field(default=Path("workspace"), description="Base directory for run workspaces")
+    queue_dir: Path = Field(default=Path("queue"), description="Base directory for FIFO queue")
+    config_dir: Path = Field(default=Path("config"), description="Runtime YAML configuration directory")
+
+    # Agent execution
+    agent_timeout_seconds: float = Field(default=300.0, description="Timeout for agent subprocess execution")
+
+    # QA
+    min_qa_score: int = Field(default=40, description="Minimum QA score before escalation")
+
+    model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
