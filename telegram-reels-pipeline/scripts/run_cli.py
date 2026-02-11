@@ -136,7 +136,11 @@ async def run_pipeline(
 
             elicitation: dict[str, str] = {}
             if stage == PipelineStage.ROUTER:
-                elicitation["telegram_message"] = message
+                # Ensure the URL is always present in the message (as it would be in a real Telegram message)
+                if url not in message:
+                    elicitation["telegram_message"] = f"{url} {message}"
+                else:
+                    elicitation["telegram_message"] = message
 
             request = AgentRequest(
                 stage=stage,
