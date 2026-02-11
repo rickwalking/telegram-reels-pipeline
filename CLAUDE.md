@@ -51,7 +51,7 @@ All commands run from `telegram-reels-pipeline/`:
 - Do not mention AI tools or models in commit messages
 - Stage specific files, never `git add -A` or `git add .`
 - Run tests and linters before committing
-- Author: Pedro <ph.marins@hotmail.com>
+- Author: Pedro Marins <ph.marins@hotmail.com>
 
 ## Sprint Tracking
 
