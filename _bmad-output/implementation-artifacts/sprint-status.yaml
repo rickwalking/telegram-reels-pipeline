@@ -87,28 +87,28 @@ development_status:
   6-4-operations-tooling-filesystem-inspection: done
   epic-6-retrospective: done
 
-  epic-7: in-progress
-  7-1-router-agent-definition-elicitation-flow: ready-for-dev
-  7-2-research-agent-definition-metadata-extraction: ready-for-dev
-  7-3-transcript-agent-definition-moment-selection: ready-for-dev
-  7-4-content-creator-agent-definition-style-guides: ready-for-dev
-  7-5-layout-detective-agent-definition-escalation: ready-for-dev
-  7-6-ffmpeg-engineer-agent-definition-crop-playbook: ready-for-dev
-  7-7-assembly-agent-definition: ready-for-dev
-  7-8-delivery-agent-definition-message-templates: ready-for-dev
+  epic-7: done
+  7-1-router-agent-definition-elicitation-flow: done
+  7-2-research-agent-definition-metadata-extraction: done
+  7-3-transcript-agent-definition-moment-selection: done
+  7-4-content-creator-agent-definition-style-guides: done
+  7-5-layout-detective-agent-definition-escalation: done
+  7-6-ffmpeg-engineer-agent-definition-crop-playbook: done
+  7-7-assembly-agent-definition: done
+  7-8-delivery-agent-definition-message-templates: done
   epic-7-retrospective: optional
 
-  epic-8: in-progress
-  8-1-stage-workflow-files: ready-for-dev
-  8-2-qa-gate-criteria-files: ready-for-dev
-  8-3-revision-flow-definitions: ready-for-dev
+  epic-8: done
+  8-1-stage-workflow-files: done
+  8-2-qa-gate-criteria-files: done
+  8-3-revision-flow-definitions: done
   epic-8-retrospective: optional
 
-  epic-9: in-progress
-  9-1-execution-contract-hardening: ready-for-dev
-  9-2-wire-pipeline-runner-into-orchestrator: ready-for-dev
-  9-3-connect-main-processing-loop: ready-for-dev
-  9-4-env-template-configuration-alignment: ready-for-dev
-  9-5-mocked-end-to-end-integration-tests: ready-for-dev
+  epic-9: done
+  9-1-execution-contract-hardening: done
+  9-2-wire-pipeline-runner-into-orchestrator: done
+  9-3-connect-main-processing-loop: done
+  9-4-env-template-configuration-alignment: done
+  9-5-mocked-end-to-end-integration-tests: done
   9-6-smoke-test-real-services: ready-for-dev
   epic-9-retrospective: optional
