@@ -9,7 +9,7 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus
+from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus, RevisionType
 from pipeline.domain.types import GateName, RunId, SessionId
 
 
@@ -252,3 +252,35 @@ class PipelineEvent:
             object.__setattr__(self, "data", _freeze_mapping(self.data))
         if not self.event_name:
             raise ValueError("event_name must not be empty")
+
+
+@dataclass(frozen=True)
+class RevisionRequest:
+    """User revision request classified by the Router Agent."""
+
+    revision_type: RevisionType
+    run_id: RunId
+    user_message: str
+    target_segment: int | None = None
+    timestamp_hint: float | None = None
+    extra_seconds: float = 0.0
+
+    def __post_init__(self) -> None:
+        if not self.run_id:
+            raise ValueError("run_id must not be empty")
+        if not self.user_message:
+            raise ValueError("user_message must not be empty")
+        if self.target_segment is not None and self.target_segment < 0:
+            raise ValueError(f"target_segment must be non-negative, got {self.target_segment}")
+        if self.extra_seconds < 0:
+            raise ValueError(f"extra_seconds must be non-negative, got {self.extra_seconds}")
+
+
+@dataclass(frozen=True)
+class RevisionResult:
+    """Output of a completed revision."""
+
+    revision_type: RevisionType
+    original_run_id: RunId
+    artifacts: tuple[Path, ...] = field(default_factory=tuple)
+    stages_rerun: tuple[str, ...] = field(default_factory=tuple)
