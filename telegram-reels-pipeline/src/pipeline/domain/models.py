@@ -159,6 +159,35 @@ class ReflectionResult:
 
 
 @dataclass(frozen=True)
+class MomentSelection:
+    """Selected segment from a transcript with timestamps and rationale."""
+
+    start_seconds: float
+    end_seconds: float
+    transcript_text: str
+    rationale: str
+    topic_match_score: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.start_seconds < 0:
+            raise ValueError(f"start_seconds must be non-negative, got {self.start_seconds}")
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError(f"end_seconds ({self.end_seconds}) must be > start_seconds ({self.start_seconds})")
+        duration = self.end_seconds - self.start_seconds
+        if not 30.0 <= duration <= 120.0:
+            raise ValueError(f"Segment duration must be 30-120s, got {duration:.1f}s")
+        if not self.rationale:
+            raise ValueError("rationale must not be empty")
+        if not 0.0 <= self.topic_match_score <= 1.0:
+            raise ValueError(f"topic_match_score must be 0.0-1.0, got {self.topic_match_score}")
+
+    @property
+    def duration_seconds(self) -> float:
+        """Duration of the selected segment in seconds."""
+        return self.end_seconds - self.start_seconds
+
+
+@dataclass(frozen=True)
 class PipelineEvent:
     """Structured event emitted via EventBus for observability."""
 
