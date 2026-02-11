@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Reels Pipeline
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=umbrel
+WorkingDirectory=/home/umbrel/umbrel/home/claude_docker/telegram-reels-pipeline
+ExecStart=/home/umbrel/.local/bin/poetry run python -m pipeline.app.main
+Restart=on-failure
+RestartSec=30
+WatchdogSec=300
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
