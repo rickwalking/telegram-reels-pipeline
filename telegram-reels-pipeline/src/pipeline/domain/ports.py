@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from pipeline.domain.models import AgentRequest, AgentResult, CropRegion, RunState, VideoMetadata
+from pipeline.domain.models import AgentRequest, AgentResult, CropRegion, QueueItem, RunState, VideoMetadata
 from pipeline.domain.types import RunId
 
 
@@ -32,6 +32,17 @@ class MessagingPort(Protocol):
     async def notify_user(self, message: str) -> None: ...
 
     async def send_file(self, path: Path, caption: str) -> None: ...
+
+
+@runtime_checkable
+class QueuePort(Protocol):
+    """Enqueue pipeline requests and inspect queue state."""
+
+    def enqueue(self, item: QueueItem) -> Path: ...
+
+    def pending_count(self) -> int: ...
+
+    def processing_count(self) -> int: ...
 
 
 @runtime_checkable

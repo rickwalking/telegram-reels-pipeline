@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from pipeline.app.settings import PipelineSettings
 from pipeline.application.event_bus import EventBus
@@ -14,6 +14,8 @@ from pipeline.application.workspace_manager import WorkspaceManager
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 from pipeline.infrastructure.adapters.file_state_store import FileStateStore
 from pipeline.infrastructure.listeners.event_journal_writer import EventJournalWriter
+from pipeline.infrastructure.telegram_bot.bot import TelegramBotAdapter
+from pipeline.infrastructure.telegram_bot.polling import TelegramPoller
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,8 @@ class Orchestrator:
     cli_backend: CliBackend
     recovery_chain: RecoveryChain
     reflection_loop: ReflectionLoop
+    telegram_bot: TelegramBotAdapter | None = field(default=None)
+    telegram_poller: TelegramPoller | None = field(default=None)
 
 
 def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrator:
@@ -62,10 +66,30 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
     )
 
     # Register default listeners
-    # Note: telegram_notifier and frontmatter_checkpointer are registered
-    # when messaging port is available (requires Telegram bot connection)
     journal_writer = EventJournalWriter(log_path=settings.workspace_dir / "events.log")
     event_bus.subscribe(journal_writer)
+
+    # Telegram adapter (optional — requires token and chat_id)
+    telegram_bot: TelegramBotAdapter | None = None
+    telegram_poller: TelegramPoller | None = None
+    if settings.telegram_token and settings.telegram_chat_id:
+        from pipeline.infrastructure.listeners.telegram_notifier import TelegramNotifier
+
+        telegram_bot = TelegramBotAdapter(
+            token=settings.telegram_token,
+            chat_id=settings.telegram_chat_id,
+        )
+        telegram_poller = TelegramPoller(
+            bot=telegram_bot,
+            queue=queue_consumer,
+            authorized_chat_id=settings.telegram_chat_id,
+        )
+        # Register Telegram notifier as event listener
+        notifier = TelegramNotifier(messaging=telegram_bot)
+        event_bus.subscribe(notifier)
+        logger.info("Telegram bot connected (chat_id=%s)", settings.telegram_chat_id)
+    else:
+        logger.warning("Telegram not configured — bot disabled")
 
     logger.info(
         "Orchestrator created: workspace=%s, queue=%s, timeout=%.0fs",
@@ -83,4 +107,6 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
         cli_backend=cli_backend,
         recovery_chain=recovery_chain,
         reflection_loop=reflection_loop,
+        telegram_bot=telegram_bot,
+        telegram_poller=telegram_poller,
     )

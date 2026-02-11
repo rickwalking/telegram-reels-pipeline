@@ -24,6 +24,10 @@ async def run() -> None:
     logger.info("Pipeline service started — polling queue for work")
 
     while True:
+        # Poll Telegram for new messages (if configured)
+        if orchestrator.telegram_poller is not None:
+            await orchestrator.telegram_poller.poll_once()
+
         claimed = orchestrator.queue_consumer.claim_next()
         if claimed is not None:
             item, processing_path = claimed
