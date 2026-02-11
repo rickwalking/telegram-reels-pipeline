@@ -116,10 +116,36 @@ Required variables:
 ```
 TELEGRAM_TOKEN=<your-bot-token>
 TELEGRAM_CHAT_ID=<your-chat-id>
-ANTHROPIC_API_KEY=<your-api-key>
 ```
 
 ### Running
+
+#### CLI Mode (no Telegram)
+
+Run the full pipeline directly from a terminal:
+
+```bash
+# Full pipeline — provide a YouTube URL and topic
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC"
+
+# Limit to first N stages (useful for testing)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --stages 3
+
+# Increase timeout for slow hardware (default: 300s)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --timeout 600
+
+# Resume a failed run from a specific stage
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --timeout 600 \
+  --resume workspace/runs/WORKSPACE_ID --start-stage 6
+```
+
+Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4`.
+
+#### Telegram Daemon
 
 ```bash
 # Direct
@@ -134,7 +160,7 @@ The service polls the queue directory every 5 seconds. To enqueue a request, pla
 ### Development
 
 ```bash
-# Tests (272 passing, 93% coverage)
+# Tests
 poetry run pytest tests/ -x -q
 
 # Linting
@@ -149,28 +175,19 @@ poetry run black src/ tests/
 
 ## Project Status
 
-### Epic 1: Project Foundation & Pipeline Orchestration - Done
-
-All core infrastructure is implemented and tested:
-
-- 1.1 Project scaffolding & domain model
-- 1.2 Pipeline state machine & file persistence
-- 1.3 Agent execution engine
-- 1.4 QA reflection loop
-- 1.5 Event bus & observability
-- 1.6 Queue management & workspace isolation
-- 1.7 Recovery chain & error handling
-- 1.8 Composition root & service bootstrap
-
-### Upcoming
-
 | Epic | Description | Status |
 |------|-------------|--------|
-| **Epic 2** | Telegram trigger & episode analysis | Backlog |
-| **Epic 3** | Video processing & camera intelligence | Backlog |
-| **Epic 4** | Content generation & delivery | Backlog |
-| **Epic 5** | Revision & feedback loop | Backlog |
-| **Epic 6** | Reliability, recovery & operations | Backlog |
+| **Epic 1** | Project foundation & pipeline orchestration | Done |
+| **Epic 2** | Telegram trigger & episode analysis | Done |
+| **Epic 3** | Video processing & camera intelligence | Done |
+| **Epic 4** | Content generation & delivery | Done |
+| **Epic 5** | Revision & feedback loop | Done |
+| **Epic 6** | Reliability, recovery & operations | Done |
+| **Epic 7** | Stage workflows & QA gate criteria | Done |
+| **Epic 8** | Agent definitions for all 8 pipeline stages | Done |
+| **Epic 9** | Pipeline execution, crash recovery & boot validation | Done |
+
+The CLI pipeline has been validated end-to-end producing a 1080x1920 Reel from a real podcast episode.
 
 ## License
 
