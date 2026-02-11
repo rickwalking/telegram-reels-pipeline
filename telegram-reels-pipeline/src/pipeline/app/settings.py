@@ -33,4 +33,10 @@ class PipelineSettings(BaseSettings):
     # QA
     min_qa_score: int = Field(default=40, description="Minimum QA score before escalation")
 
+    # Elicitation defaults
+    default_topic_focus: str = Field(default="", description="Default topic focus when user skips elicitation")
+    default_duration_preference: str = Field(
+        default="60-90s", description="Default clip duration preference"
+    )
+
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
