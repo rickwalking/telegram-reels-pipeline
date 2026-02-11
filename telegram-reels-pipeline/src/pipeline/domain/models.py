@@ -223,6 +223,22 @@ class SegmentLayout:
 
 
 @dataclass(frozen=True)
+class ContentPackage:
+    """Generated content for Instagram posting alongside the Reel."""
+
+    descriptions: tuple[str, ...]
+    hashtags: tuple[str, ...]
+    music_suggestion: str
+    mood_category: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.descriptions:
+            raise ValueError("descriptions must not be empty")
+        if not self.music_suggestion:
+            raise ValueError("music_suggestion must not be empty")
+
+
+@dataclass(frozen=True)
 class PipelineEvent:
     """Structured event emitted via EventBus for observability."""
 
