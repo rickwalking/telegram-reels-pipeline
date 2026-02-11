@@ -33,6 +33,47 @@ All commands run from `telegram-reels-pipeline/`:
 /home/umbrel/.local/bin/poetry run black --check src/ tests/
 ```
 
+## Running the Pipeline
+
+### CLI Mode (no Telegram)
+
+Run the full pipeline from a terminal using `scripts/run_cli.py`:
+
+```bash
+# Basic usage — provide a YouTube URL and topic
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC"
+
+# Limit to first N stages (useful for testing)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --stages 3
+
+# Increase timeout for slow hardware (default: 300s)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --timeout 600
+
+# Resume a failed run from a specific stage
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --timeout 600 \
+  --resume workspace/runs/WORKSPACE_ID --start-stage 6
+```
+
+Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4`.
+
+### Pipeline Stages
+
+| # | Stage | Agent | Output |
+|---|-------|-------|--------|
+| 1 | Router | `router` | `router-output.json` |
+| 2 | Research | `research` | `research-output.json`, `transcript_clean.txt` |
+| 3 | Transcript | `transcript` | `moment-selection.json` |
+| 4 | Content | `content-creator` | `content.json` |
+| 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, extracted frames |
+| 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-001.mp4`, `encoding-plan.json` |
+| 7 | Assembly | `qa` | `final-reel.mp4`, `assembly-report.json` |
+
+Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fail get retried via the recovery chain.
+
 ## Code Conventions
 
 - Frozen dataclasses with `tuple` (not list), `Mapping` + `MappingProxyType` (not dict)
