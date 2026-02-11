@@ -58,11 +58,11 @@ development_status:
   2-4-transcript-agent-moment-selection: done
   epic-2-retrospective: optional
 
-  epic-3: backlog
-  3-1-layout-detective-frame-extraction-classification: backlog
-  3-2-ffmpeg-engineer-crop-encode: backlog
-  3-3-unknown-layout-escalation-learning: backlog
-  3-4-final-reel-assembly: backlog
+  epic-3: done
+  3-1-layout-detective-frame-extraction-classification: done
+  3-2-ffmpeg-engineer-crop-encode: done
+  3-3-unknown-layout-escalation-learning: done
+  3-4-final-reel-assembly: done
   epic-3-retrospective: optional
 
   epic-4: backlog
