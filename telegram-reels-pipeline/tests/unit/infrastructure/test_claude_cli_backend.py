@@ -258,6 +258,16 @@ class TestCliBackendDispatch:
         with pytest.raises(AgentExecutionError, match="failed to start"):
             await backend.dispatch("qa_evaluator", "prompt")
 
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_dispatch_uses_separate_timeout(
+        self, mock_exec: AsyncMock, step_file: Path, agent_def: Path, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True)
+        backend = CliBackend(work_dir=work_dir, timeout_seconds=600.0, dispatch_timeout_seconds=0.01)
+        mock_exec.return_value = _make_slow_proc()
+        with pytest.raises(AgentExecutionError, match="timed out after 0.01s"):
+            await backend.dispatch("qa_evaluator", "prompt")
+
 
 class TestCliBackendProtocol:
     def test_satisfies_agent_execution_port(self, backend: CliBackend) -> None:

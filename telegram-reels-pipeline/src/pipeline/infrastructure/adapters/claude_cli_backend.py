@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS: float = 300.0
+DEFAULT_DISPATCH_TIMEOUT_SECONDS: float = 120.0
 
 # Tools allowed for agent execution (stages that need bash, file I/O)
 AGENT_ALLOWED_TOOLS: tuple[str, ...] = ("Bash", "Read", "Write", "Edit", "Glob", "Grep")
@@ -39,9 +40,11 @@ class CliBackend:
         self,
         work_dir: Path,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
+        dispatch_timeout_seconds: float = DEFAULT_DISPATCH_TIMEOUT_SECONDS,
     ) -> None:
         self._work_dir = work_dir
         self._timeout_seconds = timeout_seconds
+        self._dispatch_timeout_seconds = dispatch_timeout_seconds
         self._workspace_override: Path | None = None
 
     def set_workspace(self, workspace: Path | None) -> None:
@@ -117,25 +120,36 @@ class CliBackend:
         """Send a raw prompt to Claude CLI and return the text response.
 
         Used for QA evaluation and other non-agent model calls.
+        Uses --tools "" to disable tool loading (QA doesn't need tools),
+        --model sonnet for faster evaluation, and --no-session-persistence
+        to skip session save overhead.
         Raises AgentExecutionError on non-zero exit, timeout, or OS errors.
         """
         cwd = self.effective_work_dir
+        effective_model = model or "sonnet"
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 "claude",
                 "-p",
+                "--tools",
+                "",
+                "--model",
+                effective_model,
+                "--no-session-persistence",
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cwd),
             )
-            async with asyncio.timeout(self._timeout_seconds):
+            async with asyncio.timeout(self._dispatch_timeout_seconds):
                 stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
         except TimeoutError as exc:
             proc.kill()
             await proc.wait()
-            raise AgentExecutionError(f"Model dispatch ({role}) timed out after {self._timeout_seconds}s") from exc
+            raise AgentExecutionError(
+                f"Model dispatch ({role}) timed out after {self._dispatch_timeout_seconds}s"
+            ) from exc
         except OSError as exc:
             raise AgentExecutionError(f"Model dispatch ({role}) failed to start: {exc}") from exc
 
