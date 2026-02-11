@@ -51,11 +51,11 @@ development_status:
   1-8-composition-root-service-bootstrap: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-telegram-bot-polling-url-validation: backlog
-  2-2-router-agent-elicitation-smart-defaults: backlog
-  2-3-research-agent-episode-metadata-context: backlog
-  2-4-transcript-agent-moment-selection: backlog
+  epic-2: done
+  2-1-telegram-bot-polling-url-validation: done
+  2-2-router-agent-elicitation-smart-defaults: done
+  2-3-research-agent-episode-metadata-context: done
+  2-4-transcript-agent-moment-selection: done
   epic-2-retrospective: optional
 
   epic-3: backlog
