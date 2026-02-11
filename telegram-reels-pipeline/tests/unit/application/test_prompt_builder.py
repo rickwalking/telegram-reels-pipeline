@@ -99,7 +99,15 @@ class TestBuildAgentPrompt:
         prompt = build_agent_prompt(request)
         assert "## Attempt History" not in prompt
 
-    def test_minimal_request_has_two_sections(self, step_file: Path, agent_def: Path) -> None:
+    def test_minimal_request_has_three_sections(self, step_file: Path, agent_def: Path) -> None:
         request = AgentRequest(stage=PipelineStage.ROUTER, step_file=step_file, agent_definition=agent_def)
         prompt = build_agent_prompt(request)
-        assert prompt.count("## ") == 2
+        # Stage Requirements + Agent Definition + Execution Environment
+        assert prompt.count("## ") == 3
+
+    def test_includes_execution_environment(self, step_file: Path, agent_def: Path) -> None:
+        request = AgentRequest(stage=PipelineStage.ROUTER, step_file=step_file, agent_definition=agent_def)
+        prompt = build_agent_prompt(request)
+        assert "## Execution Environment" in prompt
+        assert "tool access" in prompt
+        assert "Write tool" in prompt

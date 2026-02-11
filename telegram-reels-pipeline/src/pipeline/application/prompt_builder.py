@@ -39,4 +39,17 @@ def build_agent_prompt(request: AgentRequest) -> str:
             history_parts.append(f"### Attempt {i}\n{lines}")
         sections.append("## Attempt History\n\n" + "\n\n".join(history_parts))
 
+    # Execution environment — always last
+    sections.append(
+        "## Execution Environment\n\n"
+        "You are running as a Claude Code subprocess with tool access (Bash, Read, Write, Edit).\n"
+        "Your working directory is a dedicated workspace for this pipeline run.\n\n"
+        "**CRITICAL OUTPUT RULES**:\n\n"
+        "- Use the Write tool to create each output file listed in Expected Outputs above\n"
+        "- Write files to the current working directory (not subdirectories)\n"
+        "- For JSON outputs: write valid JSON files directly, no markdown wrapping\n"
+        "- You may use Bash to run CLI tools (yt-dlp, ffmpeg, etc.) as needed\n"
+        "- If you cannot write files, output ONLY the raw content to stdout as a fallback"
+    )
+
     return "\n\n".join(sections)

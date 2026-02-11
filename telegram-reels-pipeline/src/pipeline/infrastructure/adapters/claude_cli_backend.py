@@ -21,6 +21,9 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS: float = 300.0
 
+# Tools allowed for agent execution (stages that need bash, file I/O)
+AGENT_ALLOWED_TOOLS: tuple[str, ...] = ("Bash", "Read", "Write", "Edit", "Glob", "Grep")
+
 
 class CliBackend:
     """Execute BMAD agents via ``claude -p`` subprocess.
@@ -63,13 +66,15 @@ class CliBackend:
             proc = await asyncio.create_subprocess_exec(
                 "claude",
                 "-p",
-                prompt,
+                "--allowedTools",
+                *AGENT_ALLOWED_TOOLS,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cwd),
             )
             async with asyncio.timeout(self._timeout_seconds):
-                stdout_bytes, stderr_bytes = await proc.communicate()
+                stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
         except TimeoutError as exc:
             proc.kill()
             await proc.wait()
@@ -89,6 +94,10 @@ class CliBackend:
 
         session_id = _extract_session_id(stdout)
         artifacts = collect_artifacts(cwd)
+
+        # Fallback: save stdout to workspace if agent wrote to stdout instead of files
+        if not artifacts and stdout.strip():
+            artifacts = _save_stdout_fallback(cwd, request.stage.value, stdout)
 
         logger.info(
             "Agent %s completed in %.1fs with %d artifacts",
@@ -110,24 +119,23 @@ class CliBackend:
         Used for QA evaluation and other non-agent model calls.
         Raises AgentExecutionError on non-zero exit, timeout, or OS errors.
         """
-        cmd = ["claude", "-p", prompt]
         cwd = self.effective_work_dir
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                *cmd,
+                "claude",
+                "-p",
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cwd),
             )
             async with asyncio.timeout(self._timeout_seconds):
-                stdout_bytes, stderr_bytes = await proc.communicate()
+                stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
         except TimeoutError as exc:
             proc.kill()
             await proc.wait()
-            raise AgentExecutionError(
-                f"Model dispatch ({role}) timed out after {self._timeout_seconds}s"
-            ) from exc
+            raise AgentExecutionError(f"Model dispatch ({role}) timed out after {self._timeout_seconds}s") from exc
         except OSError as exc:
             raise AgentExecutionError(f"Model dispatch ({role}) failed to start: {exc}") from exc
 
@@ -138,8 +146,87 @@ class CliBackend:
             raise AgentExecutionError(f"Model dispatch ({role}) exited with code {returncode}: {stderr}")
 
         stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
-        logger.info("Model dispatch (%s) completed", role)
+        logger.info(
+            "Model dispatch (%s) completed: stdout=%d bytes, stderr=%d bytes",
+            role,
+            len(stdout),
+            len(stderr),
+        )
+        if not stdout.strip():
+            logger.warning(
+                "Model dispatch (%s) returned empty stdout. stderr: %.500s",
+                role,
+                stderr,
+            )
         return stdout
+
+
+def _save_stdout_fallback(cwd: Path, stage_name: str, stdout: str) -> tuple[Path, ...]:
+    """Save agent stdout to a file when no artifacts were written to disk.
+
+    Attempts to extract clean JSON from the output. Falls back to saving as text.
+    Returns the re-collected artifacts after saving.
+    """
+    content = _extract_json_from_stdout(stdout)
+    if content is not None:
+        fallback_path = cwd / f"{stage_name}-output.json"
+        fallback_path.write_text(content)
+    else:
+        fallback_path = cwd / f"{stage_name}-output.txt"
+        fallback_path.write_text(stdout)
+    logger.warning(
+        "Agent %s wrote to stdout instead of files — saved to %s",
+        stage_name,
+        fallback_path.name,
+    )
+    return collect_artifacts(cwd)
+
+
+def _extract_json_from_stdout(stdout: str) -> str | None:
+    """Extract JSON content from agent stdout, handling markdown fences and mixed text.
+
+    Tries multiple strategies:
+    1. Direct JSON (starts with { or [)
+    2. JSON inside markdown code fences
+    3. Line-by-line scan for JSON objects
+    4. First { to matching } using raw_decode
+
+    Returns the extracted JSON string, or None if no valid JSON found.
+    """
+    import json
+    import re
+
+    stripped = stdout.strip()
+
+    # Strategy 1: Direct JSON output
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            json.loads(stripped)
+            return stripped
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 2: JSON inside markdown code fences
+    fence_pattern = re.compile(r"```(?:json)?\s*\n(.*?)\n```", re.DOTALL)
+    for match in fence_pattern.finditer(stripped):
+        candidate = match.group(1).strip()
+        try:
+            json.loads(candidate)
+            return candidate
+        except json.JSONDecodeError:
+            continue
+
+    # Strategy 3: Find first { and try raw_decode from there
+    brace_idx = stripped.find("{")
+    if brace_idx >= 0:
+        decoder = json.JSONDecoder()
+        try:
+            obj, _ = decoder.raw_decode(stripped, brace_idx)
+            return json.dumps(obj)
+        except json.JSONDecodeError:
+            pass
+
+    return None
 
 
 def _extract_session_id(stdout: str) -> SessionId:

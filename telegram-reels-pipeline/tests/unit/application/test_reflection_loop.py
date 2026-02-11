@@ -10,6 +10,8 @@ import pytest
 
 from pipeline.application.reflection_loop import (
     ReflectionLoop,
+    _build_artifact_section,
+    _extract_json_object,
     _parse_critique,
     select_best,
 )
@@ -105,12 +107,23 @@ class TestParseCritique:
         result = _parse_critique(raw, GateName("router"), 1)
         assert result.decision == QADecision.PASS
 
+    def test_parses_json_with_trailing_text(self) -> None:
+        raw = _make_qa_json(decision="PASS", score=88) + "\n\nSome explanation text after."
+        result = _parse_critique(raw, GateName("router"), 1)
+        assert result.decision == QADecision.PASS
+        assert result.score == 88
+
+    def test_parses_json_with_leading_text(self) -> None:
+        raw = "Here is my evaluation:\n\n" + _make_qa_json(decision="REWORK", score=60)
+        result = _parse_critique(raw, GateName("router"), 1)
+        assert result.decision == QADecision.REWORK
+
     def test_invalid_json_raises_qa_error(self) -> None:
-        with pytest.raises(QAError, match="not valid JSON"):
+        with pytest.raises(QAError, match="no valid JSON object"):
             _parse_critique("not json at all", GateName("router"), 1)
 
     def test_non_object_raises_qa_error(self) -> None:
-        with pytest.raises(QAError, match="not a JSON object"):
+        with pytest.raises(QAError, match="no valid JSON object"):
             _parse_critique("[1, 2, 3]", GateName("router"), 1)
 
     def test_missing_decision_raises_qa_error(self) -> None:
@@ -279,9 +292,7 @@ class TestReflectionLoopRun:
         assert len(second_call_request.attempt_history) == 1
         assert "Fix the header" in second_call_request.attempt_history[0]["prescriptive_fixes"]
 
-    async def test_custom_min_score_threshold(
-        self, request_: AgentRequest, gate: GateName, gate_criteria: str
-    ) -> None:
+    async def test_custom_min_score_threshold(self, request_: AgentRequest, gate: GateName, gate_criteria: str) -> None:
         agent_port = AsyncMock()
         agent_port.execute.return_value = _make_agent_result()
         model_port = AsyncMock()
@@ -309,6 +320,74 @@ class TestReflectionLoopRun:
 
     async def test_max_attempts_constant_is_three(self) -> None:
         assert MAX_QA_ATTEMPTS == 3
+
+
+class TestExtractJsonObject:
+    def test_direct_json(self) -> None:
+        data = _extract_json_object('{"key": "value"}')
+        assert data == {"key": "value"}
+
+    def test_json_in_fences(self) -> None:
+        data = _extract_json_object('```json\n{"key": "value"}\n```')
+        assert data == {"key": "value"}
+
+    def test_json_with_trailing_text(self) -> None:
+        data = _extract_json_object('{"key": "value"}\n\nSome extra text')
+        assert data == {"key": "value"}
+
+    def test_json_with_leading_text(self) -> None:
+        data = _extract_json_object('Explanation:\n{"key": "value"}')
+        assert data == {"key": "value"}
+
+    def test_returns_none_for_array(self) -> None:
+        assert _extract_json_object("[1, 2, 3]") is None
+
+    def test_returns_none_for_plain_text(self) -> None:
+        assert _extract_json_object("no json here") is None
+
+    def test_returns_none_for_empty(self) -> None:
+        assert _extract_json_object("") is None
+
+
+class TestBuildArtifactSection:
+    def test_empty_artifacts(self) -> None:
+        result = _build_artifact_section(())
+        assert "No artifacts produced" in result
+
+    def test_inlines_text_file(self, tmp_path: Path) -> None:
+        f = tmp_path / "output.json"
+        f.write_text('{"url": "test"}')
+        result = _build_artifact_section((f,))
+        assert "output.json" in result
+        assert '{"url": "test"}' in result
+        assert "~~~~" in result
+
+    def test_inlines_multiple_files(self, tmp_path: Path) -> None:
+        f1 = tmp_path / "data.json"
+        f1.write_text("{}")
+        f2 = tmp_path / "notes.md"
+        f2.write_text("# Notes")
+        result = _build_artifact_section((f1, f2))
+        assert "data.json" in result
+        assert "notes.md" in result
+
+    def test_shows_metadata_for_large_files(self, tmp_path: Path) -> None:
+        f = tmp_path / "huge.json"
+        f.write_text("x" * 60_000)
+        result = _build_artifact_section((f,))
+        assert "binary/large" in result
+        assert "60000 bytes" in result
+
+    def test_shows_metadata_for_binary_files(self, tmp_path: Path) -> None:
+        f = tmp_path / "video.mp4"
+        f.write_bytes(b"\x00" * 100)
+        result = _build_artifact_section((f,))
+        assert "binary/large" in result
+
+    def test_handles_missing_file(self, tmp_path: Path) -> None:
+        missing = tmp_path / "gone.json"
+        result = _build_artifact_section((missing,))
+        assert "not found" in result
 
 
 class TestReflectionResult:

@@ -13,7 +13,12 @@ from pipeline.domain.errors import AgentExecutionError
 from pipeline.domain.models import AgentRequest, AgentResult
 from pipeline.domain.ports import AgentExecutionPort, ModelDispatchPort
 from pipeline.domain.types import SessionId
-from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend, _extract_session_id
+from pipeline.infrastructure.adapters.claude_cli_backend import (
+    CliBackend,
+    _extract_json_from_stdout,
+    _extract_session_id,
+    _save_stdout_fallback,
+)
 
 
 @pytest.fixture
@@ -57,7 +62,7 @@ def _make_mock_proc(stdout: bytes = b"", stderr: bytes = b"", returncode: int = 
 def _make_slow_proc() -> AsyncMock:
     """Create a mock process whose communicate hangs long enough to trigger timeout."""
 
-    async def _hang() -> tuple[bytes, bytes]:
+    async def _hang(**_kwargs: object) -> tuple[bytes, bytes]:
         await asyncio.sleep(10)
         return (b"", b"")
 
@@ -89,16 +94,19 @@ class TestCliBackendSuccess:
         assert result.duration_seconds >= 0.0
 
     @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
-    async def test_passes_prompt_to_cli(
+    async def test_passes_prompt_via_stdin(
         self, mock_exec: AsyncMock, backend: CliBackend, request_: AgentRequest, work_dir: Path
     ) -> None:
         work_dir.mkdir(parents=True)
         mock_exec.return_value = _make_mock_proc()
         await backend.execute(request_)
-        call_args = mock_exec.call_args
-        assert call_args[0][0] == "claude"
-        assert call_args[0][1] == "-p"
-        assert "Run the router stage" in call_args[0][2]
+        call_args = mock_exec.call_args[0]
+        assert call_args[0] == "claude"
+        assert call_args[1] == "-p"
+        assert "--allowedTools" in call_args
+        # Prompt delivered via stdin, not CLI argument
+        input_bytes = mock_exec.return_value.communicate.call_args[1]["input"]
+        assert b"Run the router stage" in input_bytes
 
     @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
     async def test_sets_cwd_to_work_dir(
@@ -294,6 +302,107 @@ class TestCliBackendWorkspaceOverride:
         mock_exec.return_value = _make_mock_proc(stdout=b"response")
         await backend.dispatch("qa", "prompt")
         assert mock_exec.call_args[1]["cwd"] == str(override)
+
+
+class TestStdoutFallback:
+    def test_saves_json_stdout_with_json_extension(self, tmp_path: Path) -> None:
+        result = _save_stdout_fallback(tmp_path, "router", '{"url": "https://example.com"}')
+        assert len(result) == 1
+        assert result[0].name == "router-output.json"
+        assert "https://example.com" in result[0].read_text()
+
+    def test_saves_array_stdout_with_json_extension(self, tmp_path: Path) -> None:
+        result = _save_stdout_fallback(tmp_path, "router", '[{"key": "value"}]')
+        assert len(result) == 1
+        assert result[0].suffix == ".json"
+
+    def test_saves_plain_text_with_txt_extension(self, tmp_path: Path) -> None:
+        result = _save_stdout_fallback(tmp_path, "research", "Some plain text output")
+        assert len(result) == 1
+        assert result[0].name == "research-output.txt"
+
+    def test_returns_empty_when_workspace_missing(self, tmp_path: Path) -> None:
+        missing = tmp_path / "no-such-dir"
+        # _save_stdout_fallback writes to cwd which must exist; collect_artifacts handles missing
+        missing.mkdir()
+        result = _save_stdout_fallback(missing, "router", '{"url": "test"}')
+        assert len(result) == 1
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_execute_saves_stdout_when_no_artifacts(
+        self, mock_exec: AsyncMock, backend: CliBackend, request_: AgentRequest, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True)
+        json_out = b'{"url": "https://youtube.com/watch?v=test", "topic_focus": null}'
+        mock_exec.return_value = _make_mock_proc(stdout=json_out)
+        result = await backend.execute(request_)
+        assert len(result.artifacts) == 1
+        assert result.artifacts[0].name == "router-output.json"
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_execute_skips_fallback_when_artifacts_exist(
+        self, mock_exec: AsyncMock, backend: CliBackend, request_: AgentRequest, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True)
+        (work_dir / "router-output.json").write_text('{"url": "test"}')
+        mock_exec.return_value = _make_mock_proc(stdout=b"extra stdout")
+        result = await backend.execute(request_)
+        # Only the pre-existing file, no fallback created
+        assert len(result.artifacts) == 1
+        assert result.artifacts[0].name == "router-output.json"
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_execute_skips_fallback_when_stdout_empty(
+        self, mock_exec: AsyncMock, backend: CliBackend, request_: AgentRequest, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True)
+        mock_exec.return_value = _make_mock_proc(stdout=b"")
+        result = await backend.execute(request_)
+        assert len(result.artifacts) == 0
+
+
+class TestExtractJsonFromStdout:
+    def test_direct_json_object(self) -> None:
+        assert _extract_json_from_stdout('{"url": "test"}') == '{"url": "test"}'
+
+    def test_direct_json_array(self) -> None:
+        assert _extract_json_from_stdout("[1, 2, 3]") == "[1, 2, 3]"
+
+    def test_json_in_markdown_fences(self) -> None:
+        stdout = 'Some explanation\n\n```json\n{"url": "test"}\n```\n\nMore text'
+        assert _extract_json_from_stdout(stdout) == '{"url": "test"}'
+
+    def test_json_in_plain_fences(self) -> None:
+        stdout = '```\n{"key": "value"}\n```'
+        assert _extract_json_from_stdout(stdout) == '{"key": "value"}'
+
+    def test_returns_none_for_plain_text(self) -> None:
+        assert _extract_json_from_stdout("Just some text") is None
+
+    def test_returns_none_for_invalid_json(self) -> None:
+        assert _extract_json_from_stdout("not json at all") is None
+
+    def test_extracts_from_mixed_output_with_fences(self) -> None:
+        stdout = (
+            "I need write permission to create the output file.\n\n"
+            "**Output** (`router-output.json`):\n"
+            "```json\n"
+            '{"url": "https://youtube.com/watch?v=test", "topic_focus": null}\n'
+            "```\n\n"
+            "Please grant write permission."
+        )
+        result = _extract_json_from_stdout(stdout)
+        assert result is not None
+        assert '"url"' in result
+
+    def test_extracts_json_from_trailing_text(self) -> None:
+        stdout = (
+            "The URL is valid. Here is the output:\n\n"
+            '{"url": "https://youtube.com/watch?v=test", "topic_focus": null}\n'
+        )
+        result = _extract_json_from_stdout(stdout)
+        assert result is not None
+        assert '"url"' in result
 
 
 class TestExtractSessionId:

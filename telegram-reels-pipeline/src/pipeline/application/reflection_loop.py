@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pipeline.domain.enums import QADecision
 from pipeline.domain.errors import QAError
@@ -55,13 +55,14 @@ class ReflectionLoop:
     ) -> QACritique:
         """Evaluate artifacts against QA gate criteria via the model dispatch port.
 
+        Inlines text artifact contents so the QA model can evaluate without tool access.
         Raises QAError if the model response cannot be parsed into a valid QACritique.
         """
-        artifact_list = "\n".join(f"- {p}" for p in artifacts)
+        artifacts_text = _build_artifact_section(artifacts)
         prompt = (
             f"## QA Gate Evaluation: {gate}\n\n"
             f"### Gate Criteria\n\n{gate_criteria}\n\n"
-            f"### Artifacts to Evaluate\n\n{artifact_list}\n\n"
+            f"### Artifacts to Evaluate\n\n{artifacts_text}\n\n"
             f"### Attempt: {attempt}\n\n"
             "Evaluate the artifacts against the gate criteria. "
             "Respond with ONLY a JSON object matching this exact schema:\n"
@@ -154,6 +155,75 @@ class ReflectionLoop:
         )
 
 
+def _extract_json_object(raw: str) -> dict[str, Any] | None:
+    """Extract the first JSON object from a raw string.
+
+    Handles markdown code fences, trailing text, and mixed content.
+    Returns the parsed dict, or None if no valid JSON object found.
+    """
+    cleaned = raw.strip()
+
+    # Strategy 1: Strip markdown code fences and try direct parse
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [line for line in lines if not line.strip().startswith("```")]
+        candidate = "\n".join(lines).strip()
+        try:
+            data = json.loads(candidate)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # Strategy 2: Direct parse
+    try:
+        data = json.loads(cleaned)
+        if isinstance(data, dict):
+            return data
+    except json.JSONDecodeError:
+        pass
+
+    # Strategy 3: raw_decode from first { to handle JSON + trailing text
+    brace_idx = cleaned.find("{")
+    if brace_idx >= 0:
+        decoder = json.JSONDecoder()
+        try:
+            data, _ = decoder.raw_decode(cleaned, brace_idx)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+_TEXT_SUFFIXES: frozenset[str] = frozenset({".md", ".json", ".txt", ".yaml", ".yml"})
+_MAX_INLINE_BYTES: int = 50_000
+
+
+def _build_artifact_section(artifacts: tuple[Path, ...]) -> str:
+    """Build a text block with inlined artifact contents for QA evaluation.
+
+    Inlines text files under 50 KB; shows only metadata for binary/large files.
+    Returns a placeholder when no artifacts are present.
+    """
+    if not artifacts:
+        return "(No artifacts produced — agent did not write any output files)"
+
+    parts: list[str] = []
+    for path in artifacts:
+        if not path.exists():
+            parts.append(f"#### {path.name}\n\n(file not found)")
+            continue
+        size = path.stat().st_size
+        if path.suffix in _TEXT_SUFFIXES and size <= _MAX_INLINE_BYTES:
+            content = path.read_text(errors="replace")
+            parts.append(f"#### {path.name}\n\n~~~~\n{content}\n~~~~")
+        else:
+            parts.append(f"#### {path.name} (binary/large — {size} bytes)")
+    return "\n\n".join(parts)
+
+
 def select_best(
     attempts: list[tuple[QACritique, AgentResult]],
 ) -> tuple[QACritique, AgentResult]:
@@ -169,20 +239,16 @@ def select_best(
 def _parse_critique(raw: str, gate: GateName, attempt: int) -> QACritique:
     """Parse a raw JSON string into a QACritique domain model.
 
+    Uses multiple strategies to extract JSON from the response:
+    1. Direct parse after stripping markdown fences
+    2. raw_decode from first { to handle JSON with trailing text
+    3. Search for JSON in markdown fences
+
     Raises QAError if parsing fails or the response is invalid.
     """
-    # Strip markdown code fences if present
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        # Remove first and last lines (fences)
-        lines = [line for line in lines if not line.strip().startswith("```")]
-        cleaned = "\n".join(lines)
-
-    try:
-        data = json.loads(cleaned)
-    except json.JSONDecodeError as exc:
-        raise QAError(f"QA response is not valid JSON: {exc}") from exc
+    data = _extract_json_object(raw)
+    if data is None:
+        raise QAError(f"QA response contains no valid JSON object (response length: {len(raw)})")
 
     if not isinstance(data, dict):
         raise QAError(f"QA response is not a JSON object, got {type(data).__name__}")
