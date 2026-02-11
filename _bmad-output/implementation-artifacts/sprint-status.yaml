@@ -87,27 +87,28 @@ development_status:
   6-4-operations-tooling-filesystem-inspection: done
   epic-6-retrospective: done
 
-  epic-7: backlog
-  7-1-router-agent-definition-elicitation-flow: backlog
-  7-2-research-agent-definition-metadata-extraction: backlog
-  7-3-transcript-agent-definition-moment-selection: backlog
-  7-4-content-creator-agent-definition-style-guides: backlog
-  7-5-layout-detective-agent-definition-escalation: backlog
-  7-6-ffmpeg-engineer-agent-definition-crop-playbook: backlog
-  7-7-assembly-agent-definition: backlog
-  7-8-delivery-agent-definition-message-templates: backlog
+  epic-7: in-progress
+  7-1-router-agent-definition-elicitation-flow: ready-for-dev
+  7-2-research-agent-definition-metadata-extraction: ready-for-dev
+  7-3-transcript-agent-definition-moment-selection: ready-for-dev
+  7-4-content-creator-agent-definition-style-guides: ready-for-dev
+  7-5-layout-detective-agent-definition-escalation: ready-for-dev
+  7-6-ffmpeg-engineer-agent-definition-crop-playbook: ready-for-dev
+  7-7-assembly-agent-definition: ready-for-dev
+  7-8-delivery-agent-definition-message-templates: ready-for-dev
   epic-7-retrospective: optional
 
-  epic-8: backlog
-  8-1-stage-workflow-files: backlog
-  8-2-qa-gate-criteria-files: backlog
-  8-3-revision-flow-definitions: backlog
+  epic-8: in-progress
+  8-1-stage-workflow-files: ready-for-dev
+  8-2-qa-gate-criteria-files: ready-for-dev
+  8-3-revision-flow-definitions: ready-for-dev
   epic-8-retrospective: optional
 
-  epic-9: backlog
-  9-1-wire-pipeline-runner-into-orchestrator: backlog
-  9-2-connect-main-processing-loop: backlog
-  9-3-env-template-configuration: backlog
-  9-4-mocked-end-to-end-integration-tests: backlog
-  9-5-smoke-test-real-services: backlog
+  epic-9: in-progress
+  9-1-execution-contract-hardening: ready-for-dev
+  9-2-wire-pipeline-runner-into-orchestrator: ready-for-dev
+  9-3-connect-main-processing-loop: ready-for-dev
+  9-4-env-template-configuration-alignment: ready-for-dev
+  9-5-mocked-end-to-end-integration-tests: ready-for-dev
+  9-6-smoke-test-real-services: ready-for-dev
   epic-9-retrospective: optional
