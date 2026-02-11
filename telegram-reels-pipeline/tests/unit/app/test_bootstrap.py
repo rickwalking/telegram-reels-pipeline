@@ -29,10 +29,9 @@ from pipeline.infrastructure.adapters.systemd_watchdog import WatchdogHeartbeat
 
 
 def _settings(tmp_path: Path, **overrides: object) -> PipelineSettings:
-    defaults = {
+    defaults: dict[str, object] = {
         "workspace_dir": tmp_path / "workspace",
         "queue_dir": tmp_path / "queue",
-        "anthropic_api_key": "test-key",
     }
     defaults.update(overrides)
     return PipelineSettings(**defaults)
@@ -90,16 +89,6 @@ class TestCreateOrchestrator:
 
 
 class TestBootValidation:
-    def test_raises_without_anthropic_key(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        settings = PipelineSettings(
-            workspace_dir=tmp_path / "workspace",
-            queue_dir=tmp_path / "queue",
-            anthropic_api_key="",
-        )
-        with pytest.raises(ConfigurationError, match="ANTHROPIC_API_KEY"):
-            create_orchestrator(settings)
-
     def test_raises_token_without_chat_id(self, tmp_path: Path) -> None:
         with pytest.raises(ConfigurationError, match="TELEGRAM_CHAT_ID"):
             create_orchestrator(_settings(tmp_path, telegram_token="tok", telegram_chat_id=""))

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass, field
 
 from pipeline.app.settings import PipelineSettings
@@ -188,9 +187,6 @@ def _validate_settings(settings: PipelineSettings) -> None:
 
     Raises ConfigurationError if the environment is not viable.
     """
-    if not settings.anthropic_api_key and not os.environ.get("ANTHROPIC_API_KEY"):
-        raise ConfigurationError("ANTHROPIC_API_KEY is required — set it in .env or environment")
-
     if settings.telegram_token and not settings.telegram_chat_id:
         raise ConfigurationError("TELEGRAM_CHAT_ID is required when TELEGRAM_TOKEN is set")
 

@@ -110,5 +110,5 @@ development_status:
   9-3-connect-main-processing-loop: done
   9-4-env-template-configuration-alignment: done
   9-5-mocked-end-to-end-integration-tests: done
-  9-6-smoke-test-real-services: ready-for-dev
+  9-6-smoke-test-real-services: done
   epic-9-retrospective: optional

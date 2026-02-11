@@ -1,6 +1,6 @@
 # Story 9.6: Smoke Test with Real Services
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -76,9 +76,18 @@ Each check should:
 ## Dev Agent Record
 
 ### Agent Model Used
+Claude Opus 4.6
 
 ### Debug Log References
 
 ### Completion Notes List
+- Created smoke test module with 4 connectivity checks (Telegram, Claude CLI, yt-dlp, FFmpeg)
+- Added `--run` flag for optional single-URL pipeline execution
+- 13 unit tests with mocked subprocess/Telegram calls
+- All checks return frozen CheckResult dataclass with service/passed/message
+- Critical services (Claude CLI, yt-dlp) block pipeline run if they fail
+- Uses "Me at the zoo" (jNQXAC9IVRw) as known-good test URL
 
 ### File List
+- src/pipeline/smoke_test.py (new)
+- tests/unit/app/test_smoke_test.py (new)

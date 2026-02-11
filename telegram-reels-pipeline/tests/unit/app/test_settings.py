@@ -12,7 +12,6 @@ class TestPipelineSettings:
         settings = PipelineSettings(
             telegram_token="test-token",
             telegram_chat_id="12345",
-            anthropic_api_key="sk-test",
         )
         assert settings.workspace_dir == Path("workspace")
         assert settings.queue_dir == Path("queue")
@@ -23,7 +22,6 @@ class TestPipelineSettings:
         settings = PipelineSettings(
             telegram_token="token",
             telegram_chat_id="chat",
-            anthropic_api_key="key",
             workspace_dir=Path("/custom/workspace"),
             queue_dir=Path("/custom/queue"),
             agent_timeout_seconds=600.0,
@@ -37,4 +35,3 @@ class TestPipelineSettings:
         settings = PipelineSettings()
         assert settings.telegram_token == ""
         assert settings.telegram_chat_id == ""
-        assert settings.anthropic_api_key == ""

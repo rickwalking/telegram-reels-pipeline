@@ -19,9 +19,6 @@ class PipelineSettings(BaseSettings):
     telegram_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Authorized Telegram chat ID")
 
-    # Anthropic
-    anthropic_api_key: str = Field(default="", description="Anthropic API key for Claude")
-
     # Paths
     workspace_dir: Path = Field(default=Path("workspace"), description="Base directory for run workspaces")
     queue_dir: Path = Field(default=Path("queue"), description="Base directory for FIFO queue")
