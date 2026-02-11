@@ -65,11 +65,11 @@ development_status:
   3-4-final-reel-assembly: done
   epic-3-retrospective: optional
 
-  epic-4: backlog
-  4-1-content-creator-agent-descriptions-hashtags-music: backlog
-  4-2-delivery-agent-telegram-video-content-options: backlog
-  4-3-google-drive-fallback-large-files: backlog
-  4-4-end-to-end-happy-path-integration: backlog
+  epic-4: done
+  4-1-content-creator-agent-descriptions-hashtags-music: done
+  4-2-delivery-agent-telegram-video-content-options: done
+  4-3-google-drive-fallback-large-files: done
+  4-4-end-to-end-happy-path-integration: done
   epic-4-retrospective: optional
 
   epic-5: backlog
