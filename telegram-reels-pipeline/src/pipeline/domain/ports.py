@@ -10,6 +10,7 @@ from pipeline.domain.models import (
     AgentResult,
     CropRegion,
     QueueItem,
+    ResourceSnapshot,
     RunState,
     SegmentLayout,
     VideoMetadata,
@@ -100,3 +101,10 @@ class KnowledgeBasePort(Protocol):
     async def save_strategy(self, layout_name: str, region: CropRegion) -> None: ...
 
     async def list_strategies(self) -> dict[str, CropRegion]: ...
+
+
+@runtime_checkable
+class ResourceMonitorPort(Protocol):
+    """Read system resource metrics (CPU, memory, temperature)."""
+
+    async def snapshot(self) -> ResourceSnapshot: ...

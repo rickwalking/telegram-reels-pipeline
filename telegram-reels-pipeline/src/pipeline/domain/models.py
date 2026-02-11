@@ -284,3 +284,23 @@ class RevisionResult:
     original_run_id: RunId
     artifacts: tuple[Path, ...] = field(default_factory=tuple)
     stages_rerun: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class ResourceSnapshot:
+    """Point-in-time system resource measurements."""
+
+    memory_used_bytes: int
+    memory_total_bytes: int
+    cpu_load_percent: float
+    temperature_celsius: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.memory_used_bytes < 0:
+            raise ValueError(f"memory_used_bytes must be non-negative, got {self.memory_used_bytes}")
+        if self.memory_total_bytes <= 0:
+            raise ValueError(f"memory_total_bytes must be positive, got {self.memory_total_bytes}")
+        if self.cpu_load_percent < 0.0:
+            raise ValueError(f"cpu_load_percent must be non-negative, got {self.cpu_load_percent}")
+        if self.temperature_celsius is not None and self.temperature_celsius < -273.15:
+            raise ValueError(f"temperature_celsius below absolute zero, got {self.temperature_celsius}")
