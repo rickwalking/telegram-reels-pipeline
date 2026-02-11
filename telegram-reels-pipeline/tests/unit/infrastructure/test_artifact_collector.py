@@ -42,11 +42,18 @@ class TestCollectArtifacts:
         assert result[0].name == "visible.md"
 
     def test_ignores_non_artifact_extensions(self, tmp_path: Path) -> None:
-        (tmp_path / "video.mp4").write_text("binary")
         (tmp_path / "image.png").write_text("binary")
+        (tmp_path / "archive.zip").write_text("binary")
         (tmp_path / "good.md").write_text("text")
         result = collect_artifacts(tmp_path)
         assert len(result) == 1
+
+    def test_collects_mp4_files(self, tmp_path: Path) -> None:
+        (tmp_path / "segment-001.mp4").write_text("video")
+        (tmp_path / "final-reel.mp4").write_text("video")
+        result = collect_artifacts(tmp_path)
+        assert len(result) == 2
+        assert all(p.suffix == ".mp4" for p in result)
 
     def test_returns_sorted_paths(self, tmp_path: Path) -> None:
         (tmp_path / "z_last.md").write_text("")

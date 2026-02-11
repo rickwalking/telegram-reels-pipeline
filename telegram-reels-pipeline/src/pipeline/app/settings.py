@@ -26,6 +26,7 @@ class PipelineSettings(BaseSettings):
     workspace_dir: Path = Field(default=Path("workspace"), description="Base directory for run workspaces")
     queue_dir: Path = Field(default=Path("queue"), description="Base directory for FIFO queue")
     config_dir: Path = Field(default=Path("config"), description="Runtime YAML configuration directory")
+    workflows_dir: Path = Field(default=Path("workflows"), description="BMAD workflow stage definitions")
 
     # Agent execution
     agent_timeout_seconds: float = Field(default=300.0, description="Timeout for agent subprocess execution")
@@ -35,8 +36,6 @@ class PipelineSettings(BaseSettings):
 
     # Elicitation defaults
     default_topic_focus: str = Field(default="", description="Default topic focus when user skips elicitation")
-    default_duration_preference: str = Field(
-        default="60-90s", description="Default clip duration preference"
-    )
+    default_duration_preference: str = Field(default="60-90s", description="Default clip duration preference")
 
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

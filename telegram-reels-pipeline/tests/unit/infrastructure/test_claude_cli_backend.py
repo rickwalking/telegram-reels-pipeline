@@ -229,9 +229,7 @@ class TestCliBackendTimeout:
 
 class TestCliBackendDispatch:
     @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
-    async def test_dispatch_returns_stdout(
-        self, mock_exec: AsyncMock, backend: CliBackend, work_dir: Path
-    ) -> None:
+    async def test_dispatch_returns_stdout(self, mock_exec: AsyncMock, backend: CliBackend, work_dir: Path) -> None:
         work_dir.mkdir(parents=True)
         mock_exec.return_value = _make_mock_proc(stdout=b'{"decision":"PASS","score":85}')
         result = await backend.dispatch("qa_evaluator", "Evaluate this")
@@ -259,6 +257,43 @@ class TestCliBackendProtocol:
 
     def test_satisfies_model_dispatch_port(self, backend: CliBackend) -> None:
         assert isinstance(backend, ModelDispatchPort)
+
+
+class TestCliBackendWorkspaceOverride:
+    def test_effective_work_dir_defaults_to_work_dir(self, backend: CliBackend, work_dir: Path) -> None:
+        assert backend.effective_work_dir == work_dir
+
+    def test_set_workspace_overrides(self, backend: CliBackend, tmp_path: Path) -> None:
+        override = tmp_path / "override"
+        backend.set_workspace(override)
+        assert backend.effective_work_dir == override
+
+    def test_set_workspace_none_clears_override(self, backend: CliBackend, work_dir: Path, tmp_path: Path) -> None:
+        backend.set_workspace(tmp_path / "override")
+        backend.set_workspace(None)
+        assert backend.effective_work_dir == work_dir
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_execute_uses_overridden_workspace(
+        self, mock_exec: AsyncMock, backend: CliBackend, request_: AgentRequest, tmp_path: Path
+    ) -> None:
+        override = tmp_path / "run-workspace"
+        override.mkdir(parents=True)
+        backend.set_workspace(override)
+        mock_exec.return_value = _make_mock_proc()
+        await backend.execute(request_)
+        assert mock_exec.call_args[1]["cwd"] == str(override)
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_dispatch_uses_overridden_workspace(
+        self, mock_exec: AsyncMock, backend: CliBackend, tmp_path: Path
+    ) -> None:
+        override = tmp_path / "run-workspace"
+        override.mkdir(parents=True)
+        backend.set_workspace(override)
+        mock_exec.return_value = _make_mock_proc(stdout=b"response")
+        await backend.dispatch("qa", "prompt")
+        assert mock_exec.call_args[1]["cwd"] == str(override)
 
 
 class TestExtractSessionId:

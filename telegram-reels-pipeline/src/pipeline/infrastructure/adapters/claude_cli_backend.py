@@ -39,6 +39,16 @@ class CliBackend:
     ) -> None:
         self._work_dir = work_dir
         self._timeout_seconds = timeout_seconds
+        self._workspace_override: Path | None = None
+
+    def set_workspace(self, workspace: Path | None) -> None:
+        """Set per-run workspace override. Pass None to clear."""
+        self._workspace_override = workspace
+
+    @property
+    def effective_work_dir(self) -> Path:
+        """Return the workspace override if set, else the default work_dir."""
+        return self._workspace_override or self._work_dir
 
     async def execute(self, request: AgentRequest) -> AgentResult:
         """Run a Claude Code CLI subprocess and collect results.
@@ -46,6 +56,7 @@ class CliBackend:
         Raises AgentExecutionError on non-zero exit, timeout, or OS errors.
         """
         start = time.monotonic()
+        cwd = self.effective_work_dir
 
         try:
             prompt = build_agent_prompt(request)
@@ -55,7 +66,7 @@ class CliBackend:
                 prompt,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(self._work_dir),
+                cwd=str(cwd),
             )
             async with asyncio.timeout(self._timeout_seconds):
                 stdout_bytes, stderr_bytes = await proc.communicate()
@@ -77,7 +88,7 @@ class CliBackend:
             raise AgentExecutionError(f"Agent {request.stage.value} exited with code {returncode}: {stderr}")
 
         session_id = _extract_session_id(stdout)
-        artifacts = collect_artifacts(self._work_dir)
+        artifacts = collect_artifacts(cwd)
 
         logger.info(
             "Agent %s completed in %.1fs with %d artifacts",
@@ -100,13 +111,14 @@ class CliBackend:
         Raises AgentExecutionError on non-zero exit, timeout, or OS errors.
         """
         cmd = ["claude", "-p", prompt]
+        cwd = self.effective_work_dir
 
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=str(self._work_dir),
+                cwd=str(cwd),
             )
             async with asyncio.timeout(self._timeout_seconds):
                 stdout_bytes, stderr_bytes = await proc.communicate()

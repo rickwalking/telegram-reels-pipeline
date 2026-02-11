@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 # File extensions considered valid artifacts
-_ARTIFACT_EXTENSIONS: frozenset[str] = frozenset({".md", ".json", ".txt", ".yaml", ".yml"})
+_ARTIFACT_EXTENSIONS: frozenset[str] = frozenset({".md", ".json", ".txt", ".yaml", ".yml", ".mp4"})
 
 
 def collect_artifacts(work_dir: Path) -> tuple[Path, ...]:

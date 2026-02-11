@@ -120,6 +120,39 @@ class TestQueueConsumerComplete:
         assert consumer.processing_count() == 0
 
 
+class TestQueueConsumerFail:
+    def test_fail_moves_to_failed(self, tmp_path: Path) -> None:
+        consumer = QueueConsumer(tmp_path / "queue")
+        consumer.enqueue(_make_item())
+        result = consumer.claim_next()
+        assert result is not None
+        _, proc_path = result
+
+        failed_path = consumer.fail(proc_path)
+        assert failed_path.parent.name == "failed"
+        assert failed_path.exists()
+
+    def test_fail_removes_from_processing(self, tmp_path: Path) -> None:
+        consumer = QueueConsumer(tmp_path / "queue")
+        consumer.enqueue(_make_item())
+        result = consumer.claim_next()
+        assert result is not None
+        _, proc_path = result
+
+        consumer.fail(proc_path)
+        assert consumer.processing_count() == 0
+
+    def test_fail_creates_failed_dir(self, tmp_path: Path) -> None:
+        consumer = QueueConsumer(tmp_path / "queue")
+        consumer.enqueue(_make_item())
+        result = consumer.claim_next()
+        assert result is not None
+        _, proc_path = result
+
+        consumer.fail(proc_path)
+        assert (tmp_path / "queue" / "failed").is_dir()
+
+
 class TestQueueConsumerCounts:
     def test_pending_count_empty(self, tmp_path: Path) -> None:
         consumer = QueueConsumer(tmp_path / "queue")

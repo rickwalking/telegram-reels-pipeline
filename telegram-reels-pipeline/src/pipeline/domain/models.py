@@ -134,6 +134,7 @@ class RunState:
     best_of_three_overrides: tuple[str, ...] = field(default_factory=tuple)
     created_at: str = ""
     updated_at: str = ""
+    workspace_path: str = ""
 
     def __post_init__(self) -> None:
         if not self.run_id:

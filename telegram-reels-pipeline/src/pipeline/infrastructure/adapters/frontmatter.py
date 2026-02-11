@@ -22,6 +22,7 @@ def serialize_run_state(state: RunState) -> str:
         "best_of_three_overrides": list(state.best_of_three_overrides),
         "created_at": state.created_at,
         "updated_at": state.updated_at,
+        "workspace_path": state.workspace_path,
     }
     body = yaml.safe_dump(data, default_flow_style=False, sort_keys=False)
     return f"---\n{body}---\n"
@@ -45,16 +46,19 @@ def deserialize_run_state(content: str) -> RunState:
 
     try:
         return RunState(
-            run_id=RunId(raw["run_id"]),
-            youtube_url=raw["youtube_url"],
+            run_id=RunId(str(raw["run_id"])),
+            youtube_url=str(raw["youtube_url"]),
             current_stage=PipelineStage(raw["current_stage"]),
-            current_attempt=raw["current_attempt"],
+            current_attempt=int(raw["current_attempt"]),
             qa_status=QAStatus(raw["qa_status"]),
-            stages_completed=tuple(raw.get("stages_completed", [])),
+            stages_completed=tuple(str(s) for s in raw.get("stages_completed", [])),
             escalation_state=EscalationState(raw["escalation_state"]),
-            best_of_three_overrides=tuple(raw.get("best_of_three_overrides", [])),
-            created_at=raw.get("created_at", ""),
-            updated_at=raw.get("updated_at", ""),
+            best_of_three_overrides=tuple(str(s) for s in raw.get("best_of_three_overrides", [])),
+            created_at=str(raw.get("created_at", "")),
+            updated_at=str(raw.get("updated_at", "")),
+            workspace_path=str(raw.get("workspace_path", "")),
         )
     except KeyError as e:
         raise ValueError(f"Missing required key in frontmatter: {e}") from e
+    except (TypeError, ValueError) as e:
+        raise ValueError(f"Invalid value in frontmatter: {e}") from e

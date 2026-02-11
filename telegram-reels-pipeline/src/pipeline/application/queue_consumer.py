@@ -32,10 +32,11 @@ class QueueConsumer:
         self._inbox = base_dir / "inbox"
         self._processing = base_dir / "processing"
         self._completed = base_dir / "completed"
+        self._failed = base_dir / "failed"
 
     def ensure_dirs(self) -> None:
         """Create queue directories if they don't exist."""
-        for d in (self._inbox, self._processing, self._completed):
+        for d in (self._inbox, self._processing, self._completed, self._failed):
             d.mkdir(parents=True, exist_ok=True)
 
     def enqueue(self, item: QueueItem) -> Path:
@@ -114,8 +115,24 @@ class QueueConsumer:
         """Move a processing item to completed/. Returns the completed path."""
         self.ensure_dirs()
         dest = self._completed / processing_path.name
-        processing_path.rename(dest)
+        try:
+            processing_path.rename(dest)
+        except OSError:
+            logger.exception("Failed to move %s to completed/", processing_path.name)
+            return processing_path
         logger.info("Completed queue item: %s", processing_path.name)
+        return dest
+
+    def fail(self, processing_path: Path) -> Path:
+        """Move a processing item to failed/. Returns the failed path."""
+        self.ensure_dirs()
+        dest = self._failed / processing_path.name
+        try:
+            processing_path.rename(dest)
+        except OSError:
+            logger.exception("Failed to move %s to failed/", processing_path.name)
+            return processing_path
+        logger.info("Failed queue item: %s", processing_path.name)
         return dest
 
     def pending_count(self) -> int:

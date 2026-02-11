@@ -58,6 +58,10 @@ class DeliveryHandler:
         await self._deliver_video(video)
         await self._deliver_content(content)
 
+    async def deliver_video_only(self, video: Path) -> None:
+        """Send the video without content metadata."""
+        await self._deliver_video(video)
+
     async def _deliver_video(self, video: Path) -> None:
         """Send video via Telegram or Google Drive fallback."""
         stat_result = await asyncio.to_thread(video.stat)
