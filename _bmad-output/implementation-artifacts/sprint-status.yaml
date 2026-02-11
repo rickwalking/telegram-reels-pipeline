@@ -49,28 +49,28 @@ development_status:
   1-6-queue-management-workspace-isolation: done
   1-7-recovery-chain-error-handling: done
   1-8-composition-root-service-bootstrap: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   epic-2: done
   2-1-telegram-bot-polling-url-validation: done
   2-2-router-agent-elicitation-smart-defaults: done
   2-3-research-agent-episode-metadata-context: done
   2-4-transcript-agent-moment-selection: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   epic-3: done
   3-1-layout-detective-frame-extraction-classification: done
   3-2-ffmpeg-engineer-crop-encode: done
   3-3-unknown-layout-escalation-learning: done
   3-4-final-reel-assembly: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   epic-4: done
   4-1-content-creator-agent-descriptions-hashtags-music: done
   4-2-delivery-agent-telegram-video-content-options: done
   4-3-google-drive-fallback-large-files: done
   4-4-end-to-end-happy-path-integration: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   epic-5: done
   5-1-revision-type-detection-routing: done
@@ -78,11 +78,36 @@ development_status:
   5-3-fix-framing-revision: done
   5-4-different-moment-revision: done
   5-5-add-context-revision-incremental-re-delivery: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   epic-6: done
   6-1-crash-detection-checkpoint-resume: done
   6-2-systemd-auto-start-watchdog: done
   6-3-resource-monitoring-throttling: done
   6-4-operations-tooling-filesystem-inspection: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
+
+  epic-7: backlog
+  7-1-router-agent-definition-elicitation-flow: backlog
+  7-2-research-agent-definition-metadata-extraction: backlog
+  7-3-transcript-agent-definition-moment-selection: backlog
+  7-4-content-creator-agent-definition-style-guides: backlog
+  7-5-layout-detective-agent-definition-escalation: backlog
+  7-6-ffmpeg-engineer-agent-definition-crop-playbook: backlog
+  7-7-assembly-agent-definition: backlog
+  7-8-delivery-agent-definition-message-templates: backlog
+  epic-7-retrospective: optional
+
+  epic-8: backlog
+  8-1-stage-workflow-files: backlog
+  8-2-qa-gate-criteria-files: backlog
+  8-3-revision-flow-definitions: backlog
+  epic-8-retrospective: optional
+
+  epic-9: backlog
+  9-1-wire-pipeline-runner-into-orchestrator: backlog
+  9-2-connect-main-processing-loop: backlog
+  9-3-env-template-configuration: backlog
+  9-4-mocked-end-to-end-integration-tests: backlog
+  9-5-smoke-test-real-services: backlog
+  epic-9-retrospective: optional
