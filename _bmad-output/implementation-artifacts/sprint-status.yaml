@@ -80,9 +80,9 @@ development_status:
   5-5-add-context-revision-incremental-re-delivery: done
   epic-5-retrospective: optional
 
-  epic-6: backlog
-  6-1-crash-detection-checkpoint-resume: backlog
-  6-2-systemd-auto-start-watchdog: backlog
-  6-3-resource-monitoring-throttling: backlog
-  6-4-operations-tooling-filesystem-inspection: backlog
+  epic-6: done
+  6-1-crash-detection-checkpoint-resume: done
+  6-2-systemd-auto-start-watchdog: done
+  6-3-resource-monitoring-throttling: done
+  6-4-operations-tooling-filesystem-inspection: done
   epic-6-retrospective: optional

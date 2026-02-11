@@ -6,13 +6,18 @@ import logging
 from dataclasses import dataclass, field
 
 from pipeline.app.settings import PipelineSettings
+from pipeline.application.crash_recovery import CrashRecoveryHandler
 from pipeline.application.event_bus import EventBus
 from pipeline.application.queue_consumer import QueueConsumer
 from pipeline.application.recovery_chain import RecoveryChain
 from pipeline.application.reflection_loop import ReflectionLoop
+from pipeline.application.resource_throttler import ResourceThrottler
+from pipeline.application.run_cleanup import RunCleaner
 from pipeline.application.workspace_manager import WorkspaceManager
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 from pipeline.infrastructure.adapters.file_state_store import FileStateStore
+from pipeline.infrastructure.adapters.proc_resource_monitor import ProcResourceMonitor
+from pipeline.infrastructure.adapters.systemd_watchdog import WatchdogHeartbeat
 from pipeline.infrastructure.listeners.event_journal_writer import EventJournalWriter
 from pipeline.infrastructure.telegram_bot.bot import TelegramBotAdapter
 from pipeline.infrastructure.telegram_bot.polling import TelegramPoller
@@ -35,6 +40,10 @@ class Orchestrator:
     cli_backend: CliBackend
     recovery_chain: RecoveryChain
     reflection_loop: ReflectionLoop
+    crash_recovery: CrashRecoveryHandler | None = field(default=None)
+    resource_throttler: ResourceThrottler | None = field(default=None)
+    run_cleaner: RunCleaner | None = field(default=None)
+    watchdog: WatchdogHeartbeat | None = field(default=None)
     telegram_bot: TelegramBotAdapter | None = field(default=None)
     telegram_poller: TelegramPoller | None = field(default=None)
 
@@ -91,6 +100,13 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
     else:
         logger.warning("Telegram not configured — bot disabled")
 
+    # Reliability components (Epic 6)
+    crash_recovery = CrashRecoveryHandler(state_store=state_store, messaging=telegram_bot)
+    resource_monitor = ProcResourceMonitor()
+    resource_throttler = ResourceThrottler(monitor=resource_monitor, messaging=telegram_bot)
+    run_cleaner = RunCleaner(runs_dir=settings.workspace_dir / "runs")
+    watchdog = WatchdogHeartbeat()
+
     logger.info(
         "Orchestrator created: workspace=%s, queue=%s, timeout=%.0fs",
         settings.workspace_dir,
@@ -107,6 +123,10 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
         cli_backend=cli_backend,
         recovery_chain=recovery_chain,
         reflection_loop=reflection_loop,
+        crash_recovery=crash_recovery,
+        resource_throttler=resource_throttler,
+        run_cleaner=run_cleaner,
+        watchdog=watchdog,
         telegram_bot=telegram_bot,
         telegram_poller=telegram_poller,
     )
