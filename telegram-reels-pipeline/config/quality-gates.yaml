@@ -1,0 +1,23 @@
+# Per-gate validation criteria and scoring thresholds
+gates:
+  router:
+    min_score: 70
+    criteria_file: "workflows/qa/gate-criteria/router-criteria.md"
+  research:
+    min_score: 70
+    criteria_file: "workflows/qa/gate-criteria/research-criteria.md"
+  transcript:
+    min_score: 75
+    criteria_file: "workflows/qa/gate-criteria/transcript-criteria.md"
+  content:
+    min_score: 70
+    criteria_file: "workflows/qa/gate-criteria/content-criteria.md"
+  layout:
+    min_score: 75
+    criteria_file: "workflows/qa/gate-criteria/layout-criteria.md"
+  ffmpeg:
+    min_score: 80
+    criteria_file: "workflows/qa/gate-criteria/ffmpeg-criteria.md"
+  assembly:
+    min_score: 80
+    criteria_file: "workflows/qa/gate-criteria/assembly-criteria.md"

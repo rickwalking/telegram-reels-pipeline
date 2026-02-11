@@ -1,0 +1,4 @@
+# Layout knowledge base — self-expanding via user escalation feedback
+# Schema: layout_name -> {x, y, width, height, description}
+# New entries added automatically when user teaches unknown layouts (FR15)
+strategies: {}

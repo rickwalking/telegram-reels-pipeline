@@ -1,0 +1,88 @@
+# generated: 2026-02-10
+# project: Telegram Reels Pipeline
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-02-10
+project: Telegram Reels Pipeline
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  epic-1: done
+  1-1-project-scaffolding-domain-model: done
+  1-2-pipeline-state-machine-file-persistence: done
+  1-3-agent-execution-engine: done
+  1-4-qa-reflection-loop: done
+  1-5-event-bus-observability: done
+  1-6-queue-management-workspace-isolation: done
+  1-7-recovery-chain-error-handling: done
+  1-8-composition-root-service-bootstrap: done
+  epic-1-retrospective: optional
+
+  epic-2: backlog
+  2-1-telegram-bot-polling-url-validation: backlog
+  2-2-router-agent-elicitation-smart-defaults: backlog
+  2-3-research-agent-episode-metadata-context: backlog
+  2-4-transcript-agent-moment-selection: backlog
+  epic-2-retrospective: optional
+
+  epic-3: backlog
+  3-1-layout-detective-frame-extraction-classification: backlog
+  3-2-ffmpeg-engineer-crop-encode: backlog
+  3-3-unknown-layout-escalation-learning: backlog
+  3-4-final-reel-assembly: backlog
+  epic-3-retrospective: optional
+
+  epic-4: backlog
+  4-1-content-creator-agent-descriptions-hashtags-music: backlog
+  4-2-delivery-agent-telegram-video-content-options: backlog
+  4-3-google-drive-fallback-large-files: backlog
+  4-4-end-to-end-happy-path-integration: backlog
+  epic-4-retrospective: optional
+
+  epic-5: backlog
+  5-1-revision-type-detection-routing: backlog
+  5-2-extend-moment-revision: backlog
+  5-3-fix-framing-revision: backlog
+  5-4-different-moment-revision: backlog
+  5-5-add-context-revision-incremental-re-delivery: backlog
+  epic-5-retrospective: optional
+
+  epic-6: backlog
+  6-1-crash-detection-checkpoint-resume: backlog
+  6-2-systemd-auto-start-watchdog: backlog
+  6-3-resource-monitoring-throttling: backlog
+  6-4-operations-tooling-filesystem-inspection: backlog
+  epic-6-retrospective: optional

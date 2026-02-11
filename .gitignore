@@ -1,0 +1,28 @@
+# BMAD framework (tool, not project code)
+_bmad/
+
+# IDE / AI assistant settings
+.claude/
+.gemini/
+
+# Separate projects with their own repos
+pal-mcp-server/
+
+# Media output files
+reel_output/
+
+# Docker container management
+Dockerfile
+build.sh
+connect.sh
+run.sh
+touch.sh
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS files
+.DS_Store
+Thumbs.db

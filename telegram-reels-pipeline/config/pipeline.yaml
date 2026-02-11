@@ -1,0 +1,22 @@
+# Pipeline configuration — timeframes, thresholds, model routing
+pipeline:
+  execution_timeout_minutes: 45
+  target_segment_seconds_min: 60
+  target_segment_seconds_max: 90
+
+qa:
+  max_attempts: 3
+  minimum_pass_score: 70
+
+model_routing:
+  default_agent: "claude"
+  qa_evaluator: "gemini"
+  light_qa: "o4-mini"
+
+resource_limits:
+  memory_max_gb: 3
+  cpu_quota_percent: 80
+  ffmpeg_threads: 2
+
+cleanup:
+  retention_days: 30
