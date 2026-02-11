@@ -5,7 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from pipeline.domain.models import AgentRequest, AgentResult, CropRegion, QueueItem, RunState, VideoMetadata
+from pipeline.domain.models import (
+    AgentRequest,
+    AgentResult,
+    CropRegion,
+    QueueItem,
+    RunState,
+    SegmentLayout,
+    VideoMetadata,
+)
 from pipeline.domain.types import RunId
 
 
@@ -51,7 +59,7 @@ class VideoProcessingPort(Protocol):
 
     async def extract_frames(self, video: Path, timestamps: list[float]) -> list[Path]: ...
 
-    async def crop_and_encode(self, video: Path, segments: list[CropRegion], output: Path) -> Path: ...
+    async def crop_and_encode(self, video: Path, segments: list[SegmentLayout], output: Path) -> Path: ...
 
 
 @runtime_checkable

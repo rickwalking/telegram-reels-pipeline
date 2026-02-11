@@ -188,6 +188,41 @@ class MomentSelection:
 
 
 @dataclass(frozen=True)
+class LayoutClassification:
+    """Classification of a single video frame's camera layout."""
+
+    timestamp: float
+    layout_name: str
+    confidence: float = 0.0
+
+    def __post_init__(self) -> None:
+        if self.timestamp < 0:
+            raise ValueError(f"timestamp must be non-negative, got {self.timestamp}")
+        if not self.layout_name:
+            raise ValueError("layout_name must not be empty")
+        if not 0.0 <= self.confidence <= 1.0:
+            raise ValueError(f"confidence must be 0.0-1.0, got {self.confidence}")
+
+
+@dataclass(frozen=True)
+class SegmentLayout:
+    """A contiguous video segment with a classified layout and optional crop strategy."""
+
+    start_seconds: float
+    end_seconds: float
+    layout_name: str
+    crop_region: CropRegion | None = None
+
+    def __post_init__(self) -> None:
+        if self.start_seconds < 0:
+            raise ValueError(f"start_seconds must be non-negative, got {self.start_seconds}")
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError(f"end_seconds ({self.end_seconds}) must be > start_seconds ({self.start_seconds})")
+        if not self.layout_name:
+            raise ValueError("layout_name must not be empty")
+
+
+@dataclass(frozen=True)
 class PipelineEvent:
     """Structured event emitted via EventBus for observability."""
 
