@@ -259,6 +259,33 @@ class TestCliBackendDispatch:
             await backend.dispatch("qa_evaluator", "prompt")
 
     @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_dispatch_error_prefers_stderr(
+        self, mock_exec: AsyncMock, backend: CliBackend, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        mock_exec.return_value = _make_mock_proc(returncode=1, stderr=b"real error", stdout=b"some output")
+        with pytest.raises(AgentExecutionError, match="real error"):
+            await backend.dispatch("qa_evaluator", "prompt")
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_dispatch_error_falls_back_to_stdout(
+        self, mock_exec: AsyncMock, backend: CliBackend, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        mock_exec.return_value = _make_mock_proc(returncode=1, stderr=b"", stdout=b"stdout fallback info")
+        with pytest.raises(AgentExecutionError, match="stdout fallback info"):
+            await backend.dispatch("qa_evaluator", "prompt")
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
+    async def test_dispatch_error_whitespace_stderr_falls_back_to_stdout(
+        self, mock_exec: AsyncMock, backend: CliBackend, work_dir: Path
+    ) -> None:
+        work_dir.mkdir(parents=True, exist_ok=True)
+        mock_exec.return_value = _make_mock_proc(returncode=1, stderr=b" \n ", stdout=b"real error in stdout")
+        with pytest.raises(AgentExecutionError, match="real error in stdout"):
+            await backend.dispatch("qa_evaluator", "prompt")
+
+    @patch("pipeline.infrastructure.adapters.claude_cli_backend.asyncio.create_subprocess_exec")
     async def test_dispatch_uses_separate_timeout(
         self, mock_exec: AsyncMock, step_file: Path, agent_def: Path, work_dir: Path
     ) -> None:

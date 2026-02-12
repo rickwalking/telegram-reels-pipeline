@@ -59,6 +59,123 @@ MAX_ELICITATION_ROUNDS: int = 2
 MAX_QUESTIONS_PER_ROUND: int = 5
 INPUT_TIMEOUT_SECONDS: int = 120
 MTIME_TOLERANCE_SECONDS: float = 2.0
+TOTAL_CLI_STAGES: int = len(ALL_STAGES)
+
+# Signature artifacts per stage (1-indexed). A stage is "complete" if at least
+# one of its signature artifacts exists in the workspace.
+STAGE_SIGNATURES: dict[int, tuple[str, ...]] = {
+    1: ("router-output.json",),
+    2: ("research-output.json",),
+    3: ("moment-selection.json",),
+    4: ("content.json",),
+    5: ("layout-analysis.json",),
+    6: ("encoding-plan.json",),
+    7: ("final-reel.mp4",),
+}
+
+
+def _detect_resume_stage(workspace: Path) -> int | None:
+    """Detect the next stage to run by inspecting workspace artifacts.
+
+    Walks stages 1-N checking for signature artifacts. Returns the first
+    stage number whose signature is missing (i.e., the stage that needs to run).
+    Returns None if no completed stages found (empty workspace).
+    """
+    last_completed = 0
+    for stage_num in range(1, TOTAL_CLI_STAGES + 1):
+        signatures = STAGE_SIGNATURES.get(stage_num, ())
+        if any((workspace / name).exists() for name in signatures):
+            last_completed = stage_num
+        else:
+            break
+    return last_completed + 1 if last_completed > 0 else None
+
+
+def _resolve_start_stage(args: argparse.Namespace) -> None:
+    """Auto-detect or default the start stage when not explicitly provided.
+
+    When ``--resume`` is given without ``--start-stage``, inspects workspace
+    artifacts to determine where to resume. Exits with code 0 if all stages
+    are already complete.
+    """
+    if args.start_stage is not None:
+        return  # Explicitly set — nothing to resolve
+
+    if args.resume is not None:
+        detected = _detect_resume_stage(args.resume)
+        if detected is not None:
+            if detected > TOTAL_CLI_STAGES:
+                print(
+                    f"  All {TOTAL_CLI_STAGES} stages already complete in this workspace.",
+                    file=sys.stderr,
+                )
+                sys.exit(0)
+            if detected > 1:
+                args.start_stage = detected
+                print(
+                    f"  Auto-detected resume stage: {detected} " f"(override with --start-stage N)",
+                    file=sys.stderr,
+                )
+                return
+
+    args.start_stage = 1
+
+
+def _validate_cli_args(args: argparse.Namespace, *, arg_parser: argparse.ArgumentParser) -> None:
+    """Validate CLI argument combinations. Exits with error on invalid input.
+
+    Handles ``--start-stage`` default: argparse stores ``None`` when the flag
+    is omitted, allowing us to distinguish "not set" from "explicitly set to 1".
+    """
+    start_stage_explicit = args.start_stage is not None
+
+    if start_stage_explicit and (args.start_stage < 1 or args.start_stage > TOTAL_CLI_STAGES):
+        arg_parser.error(f"--start-stage must be between 1 and {TOTAL_CLI_STAGES}, got {args.start_stage}")
+
+    if args.resume is not None and not args.resume.is_dir():
+        arg_parser.error(
+            f"--resume path is not a valid directory: {args.resume}\n"
+            f"  Hint: use an existing workspace path, e.g.:\n"
+            f"    --resume workspace/runs/20260211-191521-a97fec"
+        )
+
+    if start_stage_explicit and args.start_stage > 1 and args.resume is None:
+        arg_parser.error(
+            f"--start-stage {args.start_stage} requires --resume <workspace_path>\n"
+            f"  Hint: specify the workspace to resume from, e.g.:\n"
+            f"    --resume workspace/runs/<RUN_ID> --start-stage {args.start_stage}"
+        )
+
+    if args.stages < 1 or args.stages > TOTAL_CLI_STAGES:
+        arg_parser.error(f"--stages must be between 1 and {TOTAL_CLI_STAGES}, got {args.stages}")
+
+    _resolve_start_stage(args)
+
+    if args.start_stage > args.stages:
+        arg_parser.error(f"--start-stage ({args.start_stage}) cannot be greater than --stages ({args.stages})")
+
+
+def _stage_name(stage_num: int) -> str:
+    """Return the human-readable display name for a 1-indexed stage number."""
+    if 1 <= stage_num <= TOTAL_CLI_STAGES:
+        return ALL_STAGES[stage_num - 1][0].value.replace("_", "-")
+    return f"stage-{stage_num}"
+
+
+def _print_resume_preflight(workspace: Path, start_stage: int) -> None:
+    """Print a preflight summary of workspace state when resuming."""
+    print("  Workspace artifact check:")
+    for stage_num in range(1, TOTAL_CLI_STAGES + 1):
+        signatures = STAGE_SIGNATURES.get(stage_num, ())
+        found = [name for name in signatures if (workspace / name).exists()]
+        status = "ok" if found else "missing"
+        marker = "  " if stage_num < start_stage else ">>"
+        name = _stage_name(stage_num)
+        if found:
+            print(f"    {marker} Stage {stage_num} ({name}): {status} [{', '.join(found)}]")
+        else:
+            print(f"    {marker} Stage {stage_num} ({name}): {status}")
+    print()
 
 
 def _is_interactive() -> bool:
@@ -424,23 +541,26 @@ async def run_pipeline(
 
     stages = ALL_STAGES[:max_stages]
 
+    start_label = _stage_name(start_stage)
     print(f"\n{'='*60}")
-    print(f"  PIPELINE RUN — {len(stages)} stages (starting at stage {start_stage})")
+    print(f"  PIPELINE RUN — {len(stages)} stages (starting at stage {start_stage}: {start_label})")
     print(f"  URL: {url}")
     if message != url:
         print(f"  Message: {message}")
     print(f"  Timeout: {effective_timeout}s")
     print(f"{'='*60}\n")
 
-    if resume_workspace and resume_workspace.exists():
+    if resume_workspace is not None:
+        if not resume_workspace.is_dir():
+            raise ValueError(f"Resume workspace is not a valid directory: {resume_workspace}")
         workspace = resume_workspace
         print(f"  Resuming workspace: {workspace}")
+        _print_resume_preflight(workspace, start_stage)
     else:
         workspace = workspace_mgr.create_workspace()
-        print(f"  New workspace: {workspace}")
+        print(f"  New workspace: {workspace}\n")
 
     cli_backend.set_workspace(workspace)
-    print()
 
     # Collect existing artifacts from workspace when resuming
     artifacts: tuple[Path, ...] = ()
@@ -491,8 +611,10 @@ def main() -> None:
     parser.add_argument("--stages", "-s", type=int, default=7, help="Max stages to run (default: 7)")
     parser.add_argument("--timeout", "-t", type=float, default=None, help="Agent timeout in seconds")
     parser.add_argument("--resume", type=Path, default=None, help="Resume from existing workspace path")
-    parser.add_argument("--start-stage", type=int, default=1, help="Stage number to start from (1-7, default: 1)")
+    parser.add_argument("--start-stage", type=int, default=None, help="Stage number to start from (1-7, default: 1)")
     args = parser.parse_args()
+
+    _validate_cli_args(args, arg_parser=parser)
 
     message = args.message if args.message else args.url
     asyncio.run(run_pipeline(args.url, message, args.stages, args.timeout, args.resume, args.start_stage))

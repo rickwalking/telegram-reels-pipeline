@@ -1,6 +1,6 @@
 # Story 10.1: CLI Elicitation Loop — Interactive Questions in Terminal
 
-Status: done
+Status: in-progress
 
 ## Problem
 
@@ -72,6 +72,13 @@ so that the pipeline can proceed with my answers instead of failing.
 - [ ] Task 4: Persist elicitation answers to workspace as `elicitation-context.json`
 - [ ] Task 5: Update router QA gate criteria prompt to not hard-fail when `url=null` but valid elicitation questions exist (treat as "interaction-needed" state)
 - [ ] Task 6: Write tests — elicitation loop happy path, max rounds cap, non-interactive mode, empty questions skip
+- [ ] Task 7: Harden `--resume` / `--start-stage` CLI args (validated with Gemini 2.5 Pro + Codex 5.3 consensus)
+  - [ ] 7a: Add `_validate_cli_args()` — hard error if `--resume` path doesn't exist (never silently create new workspace)
+  - [ ] 7b: Hard error if `--start-stage > 1` without `--resume` (flag dependency enforcement)
+  - [ ] 7c: Range validation — `--start-stage` must be 1-7, reject 0, negatives, and > 7
+  - [ ] 7d: Auto-detect resume stage — when `--resume` is used without `--start-stage`, infer last completed stage from workspace artifacts. Reuse `crash_recovery.py` `stages_completed` logic to avoid duplicating heuristics. `--start-stage` remains as explicit override.
+  - [ ] 7e: Clear error messages to stderr with suggested correct usage (e.g., "Did you mean: --resume /path --start-stage N?")
+  - [ ] 7f: Write tests — missing resume path error, start-stage without resume error, range validation, auto-detect happy path, auto-detect with explicit override
 
 ## Edge Cases
 
@@ -80,6 +87,26 @@ so that the pipeline can proceed with my answers instead of failing.
 - User enters empty/invalid answers: treat as skip, apply defaults
 - Conflicting URL sources (CLI arg vs elicited answer): CLI arg takes precedence
 - EOF on stdin: graceful exit with defaults applied
+- `--resume` path doesn't exist: hard error, not silently start fresh (burned 25 min of API calls). Consensus: all 3 reviewers rated this critical.
+- `--start-stage > 1` without `--resume`: hard error (flag dependency). No valid use case for skipping stages without a workspace.
+- `--start-stage` out of range (0, negative, > 7): hard error with valid range shown in message
+- `--resume` without `--start-stage`: auto-detect last completed stage from workspace artifacts via `crash_recovery.py` logic. If detection fails, error with list of found artifacts and ask user to specify `--start-stage` explicitly.
+
+## Task 7 — Consensus Findings (Gemini 2.5 Pro + Codex 5.3)
+
+### Unanimous (implement all)
+- Hard error when `--resume` path doesn't exist — never silently create new workspace
+- Hard error when `--start-stage > 1` without `--resume`
+- Range validation for `--start-stage` (1-7)
+- Clear error messages to stderr with suggested correct usage
+
+### Majority (implement — 2 of 3 agreed)
+- **Auto-detect resume stage**: When `--resume` is used without `--start-stage`, infer from workspace artifacts. Codex 5.3 identified that `crash_recovery.py` already has `stages_completed` logic — reuse it instead of building new heuristics. `--start-stage` remains as explicit override. (Gemini "against" dissented: called it "magic behavior" that's hard to debug when it guesses wrong.)
+
+### Deferred (not in scope)
+- Confirmation gate for new runs — hard errors cover the dangerous cases sufficiently
+- `--dry-run` mode — nice-to-have UX polish, not essential for bug fix
+- Workspace listing/inspection — future enhancement
 
 ## Technical Notes
 

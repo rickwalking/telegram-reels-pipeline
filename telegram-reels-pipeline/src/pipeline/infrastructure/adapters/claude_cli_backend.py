@@ -93,7 +93,7 @@ class CliBackend:
         returncode = proc.returncode if proc.returncode is not None else 0
 
         if returncode != 0:
-            detail = stderr if stderr else stdout[-2000:]
+            detail = stderr.strip() if stderr and stderr.strip() else stdout[-2000:]
             raise AgentExecutionError(f"Agent {request.stage.value} exited with code {returncode}: {detail}")
 
         session_id = _extract_session_id(stdout)
@@ -159,7 +159,7 @@ class CliBackend:
         stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
 
         if returncode != 0:
-            detail = stderr or stdout[-2000:] if stdout else ""
+            detail = stderr.strip() if stderr and stderr.strip() else stdout[-2000:]
             raise AgentExecutionError(f"Model dispatch ({role}) exited with code {returncode}: {detail}")
 
         logger.info(

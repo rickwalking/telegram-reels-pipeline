@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
@@ -580,3 +581,239 @@ class TestRunRouterWithElicitation:
         assert (tmp_path / "elicitation-context.json").exists()
         saved = json.loads((tmp_path / "elicitation-context.json").read_text())
         assert saved == {"What URL?": "https://yt.com"}
+
+
+# ---------------------------------------------------------------------------
+# _detect_resume_stage
+# ---------------------------------------------------------------------------
+
+
+class TestDetectResumeStage:
+    def test_empty_workspace_returns_none(self, tmp_path: Path) -> None:
+        assert run_cli._detect_resume_stage(tmp_path) is None
+
+    def test_detects_stage_2_after_router(self, tmp_path: Path) -> None:
+        (tmp_path / "router-output.json").write_text("{}")
+        assert run_cli._detect_resume_stage(tmp_path) == 2
+
+    def test_detects_stage_4_after_transcript(self, tmp_path: Path) -> None:
+        (tmp_path / "router-output.json").write_text("{}")
+        (tmp_path / "research-output.json").write_text("{}")
+        (tmp_path / "moment-selection.json").write_text("{}")
+        assert run_cli._detect_resume_stage(tmp_path) == 4
+
+    def test_detects_stage_6_after_layout(self, tmp_path: Path) -> None:
+        for name in (
+            "router-output.json",
+            "research-output.json",
+            "moment-selection.json",
+            "content.json",
+            "layout-analysis.json",
+        ):
+            (tmp_path / name).write_text("{}")
+        assert run_cli._detect_resume_stage(tmp_path) == 6
+
+    def test_all_stages_complete_returns_past_last(self, tmp_path: Path) -> None:
+        for name in (
+            "router-output.json",
+            "research-output.json",
+            "moment-selection.json",
+            "content.json",
+            "layout-analysis.json",
+            "encoding-plan.json",
+            "final-reel.mp4",
+        ):
+            (tmp_path / name).write_text("{}")
+        # Returns TOTAL_CLI_STAGES + 1 — caller handles "all complete" case
+        assert run_cli._detect_resume_stage(tmp_path) == run_cli.TOTAL_CLI_STAGES + 1
+
+    def test_gap_in_stages_stops_at_gap(self, tmp_path: Path) -> None:
+        """If stage 1 is complete but stage 2 is missing, returns 2."""
+        (tmp_path / "router-output.json").write_text("{}")
+        # Skip stage 2, add stage 3 artifact
+        (tmp_path / "moment-selection.json").write_text("{}")
+        assert run_cli._detect_resume_stage(tmp_path) == 2
+
+    def test_transcript_clean_alone_does_not_complete_stage_2(self, tmp_path: Path) -> None:
+        """transcript_clean.txt alone does not satisfy Stage 2 — research-output.json is required."""
+        (tmp_path / "router-output.json").write_text("{}")
+        (tmp_path / "transcript_clean.txt").write_text("text")
+        assert run_cli._detect_resume_stage(tmp_path) == 2
+
+
+# ---------------------------------------------------------------------------
+# _validate_cli_args
+# ---------------------------------------------------------------------------
+
+
+class TestValidateCliArgs:
+    def _make_parser(self) -> argparse.ArgumentParser:
+        p = argparse.ArgumentParser()
+        p.add_argument("url", nargs="?", default="http://example.com")
+        p.add_argument("--stages", "-s", type=int, default=7)
+        p.add_argument("--resume", type=Path, default=None)
+        p.add_argument("--start-stage", type=int, default=None)
+        return p
+
+    def test_valid_defaults_pass(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args([])
+        run_cli._validate_cli_args(args, arg_parser=p)  # Should not raise
+        assert args.start_stage == 1  # None resolved to default
+
+    def test_resume_nonexistent_path_exits(self, tmp_path: Path) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path / "nonexistent")])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_resume_existing_path_passes(self, tmp_path: Path) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path)])
+        run_cli._validate_cli_args(args, arg_parser=p)  # Should not raise
+
+    def test_start_stage_without_resume_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--start-stage", "3"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_start_stage_zero_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--start-stage", "0"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_start_stage_too_high_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--start-stage", "99"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_start_stage_negative_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--start-stage", "-1"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_valid_resume_with_start_stage_passes(self, tmp_path: Path) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path), "--start-stage", "5"])
+        run_cli._validate_cli_args(args, arg_parser=p)
+        assert args.start_stage == 5
+
+    def test_auto_detect_sets_start_stage(self, tmp_path: Path) -> None:
+        (tmp_path / "router-output.json").write_text("{}")
+        (tmp_path / "research-output.json").write_text("{}")
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path)])
+        run_cli._validate_cli_args(args, arg_parser=p)
+        assert args.start_stage == 3
+
+    def test_auto_detect_skipped_when_start_stage_explicit(self, tmp_path: Path) -> None:
+        """When --start-stage is explicitly provided, auto-detect doesn't override."""
+        (tmp_path / "router-output.json").write_text("{}")
+        (tmp_path / "research-output.json").write_text("{}")
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path), "--start-stage", "1"])
+        run_cli._validate_cli_args(args, arg_parser=p)
+        assert args.start_stage == 1
+
+    def test_auto_detect_empty_workspace_stays_at_1(self, tmp_path: Path) -> None:
+        """Resume with empty workspace — no artifacts to detect, stays at 1."""
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path)])
+        run_cli._validate_cli_args(args, arg_parser=p)
+        assert args.start_stage == 1
+
+    def test_resume_file_not_dir_exits(self, tmp_path: Path) -> None:
+        """--resume pointing to a file (not directory) should fail."""
+        f = tmp_path / "somefile.txt"
+        f.write_text("not a dir")
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(f)])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_stages_zero_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--stages", "0"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_stages_negative_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--stages", "-1"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_stages_too_high_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--stages", "99"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_start_stage_greater_than_stages_exits(self, tmp_path: Path) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--stages", "3", "--start-stage", "5", "--resume", str(tmp_path)])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_auto_detect_all_complete_exits_zero(self, tmp_path: Path) -> None:
+        """When all stages are complete, exits gracefully with code 0."""
+        for name in (
+            "router-output.json",
+            "research-output.json",
+            "moment-selection.json",
+            "content.json",
+            "layout-analysis.json",
+            "encoding-plan.json",
+            "final-reel.mp4",
+        ):
+            (tmp_path / name).write_text("{}")
+        p = self._make_parser()
+        args = p.parse_args(["--resume", str(tmp_path)])
+        with pytest.raises(SystemExit) as exc_info:
+            run_cli._validate_cli_args(args, arg_parser=p)
+        assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# _stage_name
+# ---------------------------------------------------------------------------
+
+
+class TestStageName:
+    def test_known_stage(self) -> None:
+        assert run_cli._stage_name(1) == "router"
+        assert run_cli._stage_name(5) == "layout-detective"
+        assert run_cli._stage_name(6) == "ffmpeg-engineer"
+        assert run_cli._stage_name(7) == "assembly"
+
+    def test_unknown_stage(self) -> None:
+        assert run_cli._stage_name(99) == "stage-99"
+
+    def test_zero(self) -> None:
+        assert run_cli._stage_name(0) == "stage-0"
+
+
+# ---------------------------------------------------------------------------
+# _print_resume_preflight
+# ---------------------------------------------------------------------------
+
+
+class TestPrintResumePreflight:
+    def test_prints_artifact_status(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        (tmp_path / "router-output.json").write_text("{}")
+        (tmp_path / "research-output.json").write_text("{}")
+        run_cli._print_resume_preflight(tmp_path, start_stage=3)
+        out = capsys.readouterr().out
+        assert "Stage 1 (router): ok" in out
+        assert "Stage 2 (research): ok" in out
+        assert "Stage 3 (transcript): missing" in out
+        assert ">>" in out  # marker for start stage
+
+    def test_empty_workspace(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        run_cli._print_resume_preflight(tmp_path, start_stage=1)
+        out = capsys.readouterr().out
+        assert "Stage 1 (router): missing" in out
