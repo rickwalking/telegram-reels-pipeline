@@ -2,47 +2,124 @@
 
 ## Objective
 
-Extract video frames at regular intervals within the selected moment, classify each frame's camera layout, detect transitions, and produce crop strategies for vertical Reel conversion.
+Extract video frames at regular intervals within the selected moment, run face detection to map all speaker positions, parse VTT for speaker timing, classify each frame's camera layout, detect transitions, and produce face-centered crop strategies for vertical Reel conversion.
 
 ## Inputs
 
 - **Video file**: Downloaded source video (typically 1920x1080)
 - **moment-selection.json**: Contains `start_seconds`, `end_seconds` for frame extraction range
+- **VTT subtitle file**: Raw VTT from YouTube (already downloaded in Stage 2)
 - **Known strategies**: From knowledge base (crop-strategies.yaml) for previously learned layouts
 
 ## Expected Outputs
 
-- **layout-analysis.json**: Frame classifications and segment layout plan
+- **face-position-map.json**: Per-frame face positions and speaker position summary
+- **speaker-timeline.json**: Speaker turn boundaries from VTT markers
+- **layout-analysis.json**: Frame classifications and segment layout plan with face-centered crops
 
 ```json
 {
   "classifications": [
     {"timestamp": 1247.0, "layout_name": "side_by_side", "confidence": 0.95}
   ],
+  "speaker_face_mapping": {
+    "A": "Speaker_Left",
+    "B": "Speaker_Right"
+  },
   "segments": [
     {
-      "start_seconds": 1247.0, "end_seconds": 1325.0,
+      "start_seconds": 1247.0, "end_seconds": 1290.0,
       "layout_name": "side_by_side",
-      "crop_region": {"x": 0, "y": 0, "width": 960, "height": 1080}
+      "representative_frame": "frame_1260.png",
+      "sub_segments": [
+        {
+          "start_seconds": 1247.0, "end_seconds": 1268.0,
+          "crop_region": {"x": 0, "y": 0, "width": 960, "height": 1080},
+          "active_speaker": "A",
+          "face_source": "Speaker_Left"
+        },
+        {
+          "start_seconds": 1268.0, "end_seconds": 1290.0,
+          "crop_region": {"x": 920, "y": 0, "width": 960, "height": 1080},
+          "active_speaker": "B",
+          "face_source": "Speaker_Right"
+        }
+      ]
     }
   ],
-  "escalation_needed": false
+  "escalation_needed": false,
+  "quality_predictions": [
+    {"segment": 0, "sub_segment": 0, "crop_width": 960, "upscale_factor": 1.125, "quality": "good"},
+    {"segment": 0, "sub_segment": 1, "crop_width": 960, "upscale_factor": 1.125, "quality": "good"}
+  ]
 }
 ```
+
+**Note**: `side_by_side` segments MUST contain `sub_segments` with per-speaker crops. Non-side_by_side segments (e.g., `speaker_focus`) use a single `crop_region` at the segment level.
 
 **CRITICAL**: Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`.
 
 ## Instructions
 
 1. **Extract frames** every 5 seconds from `start_seconds` to `end_seconds` using VideoProcessingPort.
-2. **Classify each frame** against known layouts. See `frame-analysis.md`.
-3. **Check confidence** — frames with confidence < 0.7 may need escalation.
-4. **Check knowledge base** before escalating — a previously learned strategy may apply.
-5. **Detect transitions** — consecutive frames with different layouts mark segment boundaries.
-6. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
-7. **Assign crop regions** for each segment per `crop-playbook.md`.
-8. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
-9. **Output valid JSON** as `layout-analysis.json`.
+
+2. **Run face detection** on all extracted frames:
+   ```bash
+   python scripts/detect_faces.py <frames_dir> --output <workspace>/face-position-map.json
+   ```
+   This maps all face positions across every frame BEFORE any crop decisions.
+
+3. **Run VTT speaker parser** on the subtitle file:
+   ```bash
+   python scripts/parse_vtt_speakers.py <vtt_file> --start-s <start> --end-s <end> --output <workspace>/speaker-timeline.json
+   ```
+   This identifies WHO talks WHEN from YouTube's speaker change markers.
+
+4. **Read face-position-map.json summary**. Note `person_count`, `speaker_positions`, and `positions_stable`.
+
+5. **Build speaker-to-face mapping** (required when both artifacts exist):
+   - For each speaker turn in `speaker-timeline.json`, check which face positions are active at that timestamp in `face-position-map.json`
+   - If Speaker A starts at t=1965 and only `Speaker_Left` has a face at nearby frames → `A = Speaker_Left`
+   - Store mapping in `layout-analysis.json` as `speaker_face_mapping: {"A": "Speaker_Left", "B": "Speaker_Right"}`
+   - If mapping is ambiguous (multiple faces at speaker start), note lower confidence but produce best-effort mapping
+
+6. **Classify each frame** against known layouts using face data. See `frame-analysis.md`.
+
+7. **Check confidence** — frames with confidence < 0.7 may need escalation.
+
+8. **Check knowledge base** before escalating — a previously learned strategy may apply.
+
+9. **Detect transitions** — consecutive frames with different layouts OR face count changes mark segment boundaries.
+
+10. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
+
+11. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
+    - For `side_by_side` segments: produce `sub_segments` with per-speaker crops. Use speaker positions from `face-position-map.json` and turn boundaries from `speaker-timeline.json`.
+    - For `speaker_focus`: use the face centroid from `face-position-map.json` as the crop x offset. **Never hardcode x=280**.
+    - For `grid`: map active speaker from timeline to the quadrant containing their face.
+    - **HARD RULE**: A single crop region for an entire `side_by_side` segment > 5 seconds is ALWAYS wrong. Split into `sub_segments`.
+    - Include `representative_frame` path for each segment (used by Stage 6 for post-encode quality checks).
+
+12. **Predict upscale quality** for each proposed crop:
+    ```bash
+    python scripts/check_upscale_quality.py --predict --crop-width <W> --target-width 1080
+    ```
+    Flag segments with `quality: "degraded"` or `"unacceptable"`. Include predictions in `layout-analysis.json`.
+
+13. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
+
+14. **Output valid JSON** as `layout-analysis.json`.
+
+## Fallback Behavior
+
+| Scenario | Action |
+|----------|--------|
+| VTT has `>>` markers | Produce `speaker-timeline.json` with speaker turns. Build speaker-to-face mapping. |
+| VTT has NO `>>` markers | `speaker-timeline.json` has `confidence: "none"`. Use face positions to alternate crops every 3-5 seconds. |
+| No VTT file at all | Skip VTT parsing. Use face-position-based alternation. Note in `layout-analysis.json`. |
+| `person_count: 0` (no faces) | Layout-based heuristic crops. Flag as lower confidence. QA will flag REWORK. |
+| Detector error / no OpenCV | Skip face detection. Use layout defaults. QA will flag missing `face-position-map.json` as REWORK. |
+| One face only | Use that face's position for entire segment. No alternation needed. |
 
 ## Constraints
 
@@ -50,6 +127,8 @@ Extract video frames at regular intervals within the selected moment, classify e
 - Confidence threshold: 0.7 minimum for accepted classification
 - Layout names must match KNOWN_LAYOUTS: `side_by_side`, `speaker_focus`, `grid` (snake_case)
 - Crop regions must be within source video bounds (x + width <= 1920, y + height <= 1080)
+- Maximum 4 crop-switch cuts in any 15-second window
+- Face-centered crops required when face-position-map.json has face data
 
 ## Quality Criteria Reference
 
@@ -64,4 +143,5 @@ See: `workflows/qa/gate-criteria/layout-criteria.md`
 ## Prior Artifact Dependencies
 
 - Source video file from Stage 2 (Research) — downloaded video
+- VTT subtitle file from Stage 2 (Research) — raw VTT with speaker change markers
 - `moment-selection.json` from Stage 3 (Transcript) — timestamp range for frame extraction

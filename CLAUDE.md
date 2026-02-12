@@ -68,8 +68,8 @@ Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4
 | 2 | Research | `research` | `research-output.json`, `transcript_clean.txt` |
 | 3 | Transcript | `transcript` | `moment-selection.json` |
 | 4 | Content | `content-creator` | `content.json` |
-| 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, extracted frames |
-| 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-001.mp4`, `encoding-plan.json` |
+| 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, `face-position-map.json`, `speaker-timeline.json`, extracted frames |
+| 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-001.mp4`, `encoding-plan.json` (with face validation + quality results) |
 | 7 | Assembly | `qa` | `final-reel.mp4`, `assembly-report.json` |
 
 Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fail get retried via the recovery chain.
@@ -98,6 +98,22 @@ Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fa
 
 Story status tracked in `_bmad-output/implementation-artifacts/sprint-status.yaml`. Story files live in the same directory as `<epic>-<story>-<slug>.md`.
 
+## Face Position Intelligence Tools
+
+Standalone CLI scripts in `scripts/` used by Stage 5 and 6 agents:
+
+```bash
+# VTT speaker timeline — parse YouTube subtitles for speaker change markers
+poetry run python scripts/parse_vtt_speakers.py <vtt_file> --start-s N --end-s N --output path
+
+# Face detection — map face positions in extracted frames using YuNet DNN
+poetry run python scripts/detect_faces.py <frames_dir> --output path --min-confidence 0.7
+
+# Quality check — validate upscale factor and sharpness degradation
+poetry run python scripts/check_upscale_quality.py --predict --crop-width N --target-width 1080
+poetry run python scripts/check_upscale_quality.py <segment.mp4> --crop-width N --target-width 1080 --source-frame frame.png
+```
+
 ## Key Patterns
 
 - FSM transition table in `domain/transitions.py` (pure data, no I/O)
@@ -106,3 +122,4 @@ Story status tracked in `_bmad-output/implementation-artifacts/sprint-status.yam
 - EventBus: in-process Observer pattern with failure isolation
 - Queue: FIFO with `fcntl.flock`, inbox/processing/completed lifecycle
 - Settings: Pydantic BaseSettings loading from `.env`
+- Four-Layer Framing: VTT speaker timeline + Face position intelligence + AI agent reasoning + QA safety net
