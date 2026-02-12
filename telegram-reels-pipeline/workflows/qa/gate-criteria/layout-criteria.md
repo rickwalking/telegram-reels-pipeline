@@ -27,10 +27,10 @@
 - **Prescriptive fix template**: "Layout '{name}' is not in KNOWN_LAYOUTS (side_by_side, speaker_focus, grid). Trigger escalation protocol for frame at {timestamp}s."
 
 ### Dimension 5: Segment Structure (weight: 25/100)
-- **Pass**: `side_by_side` segments use appropriate crop strategy based on speaker separation: both-visible centered crop when speakers fit in one crop (`speaker_span <= 880px`), or per-speaker `sub_segments` when speakers are far apart; `speaker_focus` crops use face centroid from face map; `speaker_face_mapping` is present in `layout-analysis.json`; `representative_frame` included per segment; no sub_segment shorter than 5 seconds
+- **Pass**: `side_by_side` segments use appropriate crop strategy based on speaker separation: both-visible centered crop when speakers fit in one crop (`speaker_span <= crop_width - 80`), or per-speaker `sub_segments` when speakers are far apart; `speaker_focus` crops use face centroid from face map; `speaker_face_mapping` is present in `layout-analysis.json`; `representative_frame` included per segment; no sub_segment shorter than 5 seconds
 - **Rework**: Sub-segments exist but some are shorter than 5s; face position map present but speaker_face_mapping missing; side_by_side uses per-speaker isolation when both-visible crop would work
-- **Fail**: side_by_side crop isolates one speaker while completely cutting off the other visible speaker; segments shorter than 3 seconds exist; `face-position-map.json` missing or ignored
-- **Prescriptive fix template**: "Segment at {start}s-{end}s is side_by_side. Speakers are {distance}px apart. {If distance <= 880: 'Both speakers fit in one 960px crop — use a single centered crop instead of sub_segments.' | If distance > 880: 'Speakers too far apart for single crop — use sub_segments with minimum 5s duration each.'}"
+- **Fail**: side_by_side crop isolates one speaker while completely cutting off the other visible speaker; segments shorter than 5 seconds exist; `face-position-map.json` missing or ignored
+- **Prescriptive fix template**: "Segment at {start}s-{end}s is side_by_side. Speakers are {distance}px apart. {If speaker_span <= crop_width - 80: 'Both speakers fit in one crop — use a single centered crop instead of sub_segments.' | If speaker_span > crop_width - 80: 'Speakers too far apart for single crop — use sub_segments with minimum 5s duration each.'}"
 - **Cut Frequency Check**: Penalize if more than 3 crop-switch cuts occur in any 15-second window. Fix: "Merge short sub-segments (< 5s) into preceding segment."
 
 ### Dimension 6: Face Map Coverage (weight: 10/100)

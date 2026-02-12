@@ -59,7 +59,9 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 2. **Read face-position-map.json** to understand scene composition and verify face positions.
 
-3. **For each segment (or sub-segment)**, verify the proposed crop region contains a face by checking `face-position-map.json` at the segment's timestamps. The proposed crop area must overlap with a detected face. If no face in range, adjust the crop to center on the **active speaker's face** (use `speaker_face_mapping` from `layout-analysis.json` to preserve speaker identity — do NOT snap to the nearest arbitrary face).
+3. **For each segment (or sub-segment)**, verify the proposed crop region contains a face by checking `face-position-map.json` at the segment's timestamps. The proposed crop area must overlap with a detected face. If no face in range:
+   - **For both-visible segments** (segment-level `crop_region`, no `sub_segments`): do NOT recenter to a single speaker. Instead, widen the crop or keep the existing both-visible crop — temporary face detection gaps do not justify splitting to per-speaker isolation.
+   - **For per-speaker sub_segments**: adjust the crop to center on the **active speaker's face** (use `speaker_face_mapping` from `layout-analysis.json` to preserve speaker identity — do NOT snap to the nearest arbitrary face).
 
 4. **Build crop filter** for each segment: `crop={width}:{height}:{x}:{y},scale=1080:1920:flags=lanczos`. See `crop-playbook.md`.
    - **Always use `flags=lanczos`** in scale filters (sharper than default bicubic, no performance penalty).

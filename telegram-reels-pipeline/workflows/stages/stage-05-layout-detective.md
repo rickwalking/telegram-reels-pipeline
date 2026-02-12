@@ -31,31 +31,17 @@ Extract video frames at regular intervals within the selected moment, run face d
       "start_seconds": 1247.0, "end_seconds": 1290.0,
       "layout_name": "side_by_side",
       "representative_frame": "frame_1260.png",
-      "sub_segments": [
-        {
-          "start_seconds": 1247.0, "end_seconds": 1268.0,
-          "crop_region": {"x": 0, "y": 0, "width": 960, "height": 1080},
-          "active_speaker": "A",
-          "face_source": "Speaker_Left"
-        },
-        {
-          "start_seconds": 1268.0, "end_seconds": 1290.0,
-          "crop_region": {"x": 920, "y": 0, "width": 960, "height": 1080},
-          "active_speaker": "B",
-          "face_source": "Speaker_Right"
-        }
-      ]
+      "crop_region": {"x": 180, "y": 0, "width": 960, "height": 1080}
     }
   ],
   "escalation_needed": false,
   "quality_predictions": [
-    {"segment": 0, "sub_segment": 0, "crop_width": 960, "upscale_factor": 1.125, "quality": "good"},
-    {"segment": 0, "sub_segment": 1, "crop_width": 960, "upscale_factor": 1.125, "quality": "good"}
+    {"segment": 0, "crop_width": 960, "upscale_factor": 1.125, "quality": "good"}
   ]
 }
 ```
 
-**Note**: `side_by_side` segments use `sub_segments` ONLY when speakers are too far apart for a single crop. When both speakers fit in one crop (`speaker_span <= 880px`), use a single `crop_region` at the segment level — same as `speaker_focus`.
+**Note**: `side_by_side` segments use `sub_segments` ONLY when speakers are too far apart for a single crop. When both speakers fit in one crop (`speaker_span <= crop_width - 80`), use a single `crop_region` at the segment level — same as `speaker_focus`.
 
 **CRITICAL**: Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`.
 
@@ -117,7 +103,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 | Scenario | Action |
 |----------|--------|
 | VTT has `>>` markers | Produce `speaker-timeline.json` with speaker turns. Build speaker-to-face mapping. |
-| VTT has NO `>>` markers | `speaker-timeline.json` has `confidence: "none"`. Use face positions to alternate crops every 3-5 seconds. |
+| VTT has NO `>>` markers | `speaker-timeline.json` has `confidence: "none"`. Use both-visible centered crop if faces fit; otherwise alternate every 5-8 seconds. |
 | No VTT file at all | Skip VTT parsing. Use face-position-based alternation. Note in `layout-analysis.json`. |
 | `person_count: 0` (no faces) | Layout-based heuristic crops. Flag as lower confidence. QA will flag REWORK. |
 | Detector error / no OpenCV | Skip face detection. Use layout defaults. QA will flag missing `face-position-map.json` as REWORK. |

@@ -167,7 +167,7 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 | Scenario | face-position-map.json | speaker-timeline.json | Crop Strategy |
 |----------|----------------------|----------------------|---------------|
 | Both available | Has faces | `confidence: "medium"` | Data-driven: face-centered crops on active speaker per timeline |
-| No speaker data | Has faces | `confidence: "none"` or missing | Alternate between detected face positions every 3-5 seconds |
+| No speaker data | Has faces | `confidence: "none"` or missing | Both-visible centered crop if faces fit; otherwise alternate every 5-8 seconds |
 | No face data | `person_count: 0` | Any | Layout-based heuristic crops (center of layout half). QA flags REWORK |
 | Neither available | Empty/missing | Empty/missing | Layout-based defaults from crop-strategies.yaml. QA flags REWORK |
 | One face only | `person_count: 1` | Any | Use that face's position for entire segment. No alternation |
@@ -177,10 +177,9 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 
 Prevent jittery crop changes from minor movements or brief speaker turns:
 
-1. **Minimum hold time**: Any crop position must be held for at least **5 seconds** before switching. If a speaker turn is shorter than 5s, keep the current crop.
-2. **Movement threshold**: Only change the crop X position if the new position differs by more than **10% of frame width** (192px for 1920-wide source). Small positional jitter is ignored.
-3. **Camera transition debounce**: When the camera switches angle (e.g., wide → close-up), hold the NEW crop for at least 3 seconds before any further crop change. Don't create segments shorter than 3 seconds at transition points.
-4. **Prefer stability over precision**: A slightly off-center crop that holds steady looks better than a perfectly centered crop that jitters every 2 seconds.
+1. **Minimum hold time**: Any crop position must be held for at least **5 seconds** before switching. If a speaker turn is shorter than 5s, keep the current crop. This applies everywhere — including at camera transitions.
+2. **Movement threshold**: Only change the crop X position if the new position differs by more than **15% of the active crop width** (e.g., 144px for a 960px crop, 91px for a 608px crop). Small positional jitter is ignored.
+3. **Prefer stability over precision**: A slightly off-center crop that holds steady looks better than a perfectly centered crop that jitters every 2 seconds.
 
 ## Cut Frequency Limits
 
