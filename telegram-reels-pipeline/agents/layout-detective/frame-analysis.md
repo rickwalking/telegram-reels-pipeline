@@ -25,9 +25,9 @@ For each extracted frame, classify the camera layout by analyzing the visual com
 
 **Crop planning** (data-driven):
 - Read face-position-map.json to get exact positions for `Speaker_Left` and `Speaker_Right`
-- Read speaker-timeline.json to know WHO talks WHEN
-- Produce per-speaker sub-segments: crop centers on the active speaker's face position
-- **NEVER use a single crop for an entire side_by_side segment > 5 seconds**
+- Compute `speaker_span` = distance from leftmost face edge to rightmost face edge
+- **If both speakers fit within a single crop** (`speaker_span <= crop_width - 80`): use ONE centered crop showing both. Do NOT split into sub_segments — the wide shot is meant to show both people.
+- **If speakers are too far apart**: produce per-speaker sub_segments with minimum 5-second duration each. See `crop-playbook.md` for details.
 
 **Confidence scoring**:
 - 0.9-1.0: Two face clusters with clear left/right separation, consistent across frames

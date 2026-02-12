@@ -63,6 +63,8 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 4. **Build crop filter** for each segment: `crop={width}:{height}:{x}:{y},scale=1080:1920:flags=lanczos`. See `crop-playbook.md`.
    - **Always use `flags=lanczos`** in scale filters (sharper than default bicubic, no performance penalty).
+   - **Both-visible preference**: For `side_by_side` segments without sub_segments, the crop should keep BOTH speakers visible. Verify BOTH face positions fall within the crop range. If the Layout Detective provided a single `crop_region` (no sub_segments), do NOT split into per-speaker segments.
+   - **Stability**: Do not create segments shorter than 5 seconds. If a speaker turn is < 5s, keep the current crop and merge that turn into the surrounding segment.
 
 5. **Handle quality degradation** for segments flagged by the Layout Detective:
    - For `quality: "degraded"` (upscale 1.5-2.0x): try widening the crop to include more background around the face while keeping face centered. Recheck upscale factor.

@@ -55,7 +55,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 }
 ```
 
-**Note**: `side_by_side` segments MUST contain `sub_segments` with per-speaker crops. Non-side_by_side segments (e.g., `speaker_focus`) use a single `crop_region` at the segment level.
+**Note**: `side_by_side` segments use `sub_segments` ONLY when speakers are too far apart for a single crop. When both speakers fit in one crop (`speaker_span <= 880px`), use a single `crop_region` at the segment level — same as `speaker_focus`.
 
 **CRITICAL**: Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`.
 
@@ -94,10 +94,12 @@ Extract video frames at regular intervals within the selected moment, run face d
 10. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
 
 11. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
-    - For `side_by_side` segments: produce `sub_segments` with per-speaker crops. Use speaker positions from `face-position-map.json` and turn boundaries from `speaker-timeline.json`.
+    - For `side_by_side` segments: **first check if both speakers fit in a single crop**:
+      - Compute `speaker_span = rightmost_face_edge - leftmost_face_edge` (face x + face width for each speaker)
+      - If `speaker_span <= 960 - 80` (880px): use ONE centered crop covering both speakers. Set `crop_region` at segment level (no `sub_segments`). The wide shot is meant to show both people — do NOT isolate one.
+      - If speakers are too far apart: produce `sub_segments` with minimum 5-second duration. Merge short speaker turns (< 5s) into the preceding sub_segment.
     - For `speaker_focus`: use the face centroid from `face-position-map.json` as the crop x offset. **Never hardcode x=280**.
     - For `grid`: map active speaker from timeline to the quadrant containing their face.
-    - **HARD RULE**: A single crop region for an entire `side_by_side` segment > 5 seconds is ALWAYS wrong. Split into `sub_segments`.
     - Include `representative_frame` path for each segment (used by Stage 6 for post-encode quality checks).
 
 12. **Predict upscale quality** for each proposed crop:
@@ -127,8 +129,10 @@ Extract video frames at regular intervals within the selected moment, run face d
 - Confidence threshold: 0.7 minimum for accepted classification
 - Layout names must match KNOWN_LAYOUTS: `side_by_side`, `speaker_focus`, `grid` (snake_case)
 - Crop regions must be within source video bounds (x + width <= 1920, y + height <= 1080)
-- Maximum 4 crop-switch cuts in any 15-second window
+- Maximum 3 crop-switch cuts in any 15-second window
+- Minimum sub-segment duration: 5 seconds (merge shorter turns into preceding segment)
 - Face-centered crops required when face-position-map.json has face data
+- Prefer both-visible centered crops for side_by_side over per-speaker isolation
 
 ## Quality Criteria Reference
 

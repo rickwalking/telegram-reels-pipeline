@@ -19,37 +19,49 @@ All coordinates assume a **1920x1080 source** video being cropped for **1080x192
 
 Two speakers in roughly equal halves.
 
-**CRITICAL RULE**: A single crop for an entire `side_by_side` segment > 5 seconds is **ALWAYS wrong**. You MUST split the segment into per-speaker sub-segments.
+**BOTH-VISIBLE PREFERENCE**: When the wide camera shows both speakers, prefer a **single centered crop that keeps BOTH speakers visible**. Do NOT isolate one speaker when the wide shot already shows both — that looks unnatural and cuts people off screen.
 
-**Crop Selection (data-driven)**:
+**Decision Logic**:
 1. Read `face-position-map.json` — find exact face positions for `Speaker_Left` and `Speaker_Right`
-2. Read `speaker-timeline.json` — know which speaker (A or B) is active at each time range
-3. Map speakers to faces: if Speaker A starts talking at t=1965 and `Speaker_Left` has a face at that timestamp, then Speaker A = Speaker_Left
-4. For each speaker turn: center crop on the active speaker's face centroid from the face map
+2. Compute `speaker_span = rightmost_face_edge - leftmost_face_edge` (include face widths)
+3. **If `speaker_span <= crop_width - 80` (both fit with 40px padding each side)**: use ONE centered crop for the entire segment. No sub_segments needed.
+4. **If speakers are too far apart to fit**: use per-speaker sub_segments (see below).
 
-**Left speaker crop** (centered on `Speaker_Left` face position):
+**Both-visible crop** (preferred — keeps both speakers in frame):
 ```
-# Use face centroid from face-position-map.json, e.g. avg_x=450
-# Compute: x = max(0, face_center_x - 480), width = 960
-x=0, y=0, width=960, height=1080
-crop_filter: crop=960:1080:0:0,scale=1080:1920:flags=lanczos
+# Compute center between both speakers
+center_x = (Speaker_Left.avg_x + Speaker_Right.avg_x) / 2
+crop_x = clamp(center_x - crop_width/2, 0, source_width - crop_width)
+# Use the widest crop that maintains acceptable quality (upscale <= 1.5x)
+crop_filter: crop={crop_width}:1080:{crop_x}:0,scale=1080:1920:flags=lanczos
 ```
 
-**Right speaker crop** (centered on `Speaker_Right` face position):
+**Per-speaker sub_segments** (only when speakers don't fit in single crop):
 ```
-# Use face centroid from face-position-map.json, e.g. avg_x=1400
-# Compute: x = clamp(face_center_x - 480, 0, 960), width = 960
-# Example: avg_x=1400 → x = clamp(1400-480, 0, 960) = 920
-x=920, y=0, width=960, height=1080
-crop_filter: crop=960:1080:920:0,scale=1080:1920:flags=lanczos
+# Left speaker: center on Speaker_Left face
+x = max(0, face_center_x - 480), width = 960
+crop_filter: crop=960:1080:{x}:0,scale=1080:1920:flags=lanczos
+
+# Right speaker: center on Speaker_Right face
+x = clamp(face_center_x - 480, 0, 960), width = 960
+crop_filter: crop=960:1080:{x}:0,scale=1080:1920:flags=lanczos
 ```
+
+**Sub-segment rules** (when splitting is necessary):
+- Minimum sub_segment duration: **5 seconds**. Merge shorter turns into the preceding sub_segment.
+- Only switch crop when the active speaker changes AND the new speaker's turn is >= 5 seconds.
+- Brief interjections (< 5s) keep the current crop — do NOT switch for short reactions.
 
 **Fallback** (no speaker timeline, `confidence: "none"`):
-- Use face positions from `face-position-map.json` to alternate between detected faces every 3-5 seconds
+- Use the both-visible centered crop if both faces fit in frame
+- If faces are too far apart: alternate between detected face positions every 5-8 seconds
 - If only one face detected in all frames: use that face's position for the entire segment
 
-**Failure Mode Example** (run `20260212-140636-ad0b2d`):
-> Layout Detective assigned `{x:0, y:0, w:960, h:1080}` for the full `side_by_side` segment (1982-2012s). This captured ONLY the left speaker (Will). The right speaker (Pedro) was completely cut off. QA gates scored 98/85/95 because they only checked technical metrics, not face presence. This is the exact failure this playbook prevents.
+**Failure Mode Examples**:
+
+> **Run `20260212-140636-ad0b2d`** — Layout Detective assigned `{x:0, y:0, w:960, h:1080}` for the full `side_by_side` segment (1982-2012s). This captured ONLY the left speaker. The right speaker was completely cut off. Fix: use both-visible centered crop.
+
+> **Run `20260212-185826-1aeee0`** — Side-by-side segment used sub_segments isolating left (x=55) then right (x=960) speakers. When camera showed both speakers in wide shot, one person was completely removed from frame during each sub_segment. Fix: use both-visible centered crop since wide shot is meant to show both people.
 
 ### `speaker_focus`
 
@@ -161,9 +173,18 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 | One face only | `person_count: 1` | Any | Use that face's position for entire segment. No alternation |
 | Detector error | Error/missing file | Any | Proceed without face intelligence. QA flags missing data as REWORK |
 
+## Crop Stability Rules (Hysteresis)
+
+Prevent jittery crop changes from minor movements or brief speaker turns:
+
+1. **Minimum hold time**: Any crop position must be held for at least **5 seconds** before switching. If a speaker turn is shorter than 5s, keep the current crop.
+2. **Movement threshold**: Only change the crop X position if the new position differs by more than **10% of frame width** (192px for 1920-wide source). Small positional jitter is ignored.
+3. **Camera transition debounce**: When the camera switches angle (e.g., wide → close-up), hold the NEW crop for at least 3 seconds before any further crop change. Don't create segments shorter than 3 seconds at transition points.
+4. **Prefer stability over precision**: A slightly off-center crop that holds steady looks better than a perfectly centered crop that jitters every 2 seconds.
+
 ## Cut Frequency Limits
 
-- Maximum 4 crop-switch cuts in any 15-second window
-- After generating all speaker cuts: iterate through them. If any sub-segment is less than 3 seconds long, merge it with the preceding sub-segment by extending the preceding crop's duration
-- If this still produces more than 4 cuts per 15 seconds: extend minimum sub-segment duration to 5 seconds
+- Maximum 3 crop-switch cuts in any 15-second window
+- Minimum sub-segment duration: **5 seconds**. Merge shorter turns into the preceding sub-segment.
+- If this still produces more than 3 cuts per 15 seconds: extend minimum sub-segment duration to 8 seconds
 - Rapid cuts feel robotic/amateurish — prefer smooth, deliberate transitions
