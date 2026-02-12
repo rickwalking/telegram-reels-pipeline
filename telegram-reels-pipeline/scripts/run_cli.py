@@ -12,8 +12,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import contextlib
+import json
 import logging
+import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from types import MappingProxyType
@@ -28,7 +32,7 @@ from pipeline.application.reflection_loop import ReflectionLoop
 from pipeline.application.stage_runner import StageRunner
 from pipeline.application.workspace_manager import WorkspaceManager
 from pipeline.domain.enums import PipelineStage
-from pipeline.domain.models import AgentRequest
+from pipeline.domain.models import AgentRequest, ReflectionResult
 from pipeline.domain.types import GateName
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 
@@ -51,6 +55,337 @@ ALL_STAGES = (
 )
 
 DEFAULT_URL = "https://www.youtube.com/watch?v=jNQXAC9IVRw"
+MAX_ELICITATION_ROUNDS: int = 2
+MAX_QUESTIONS_PER_ROUND: int = 5
+INPUT_TIMEOUT_SECONDS: int = 120
+MTIME_TOLERANCE_SECONDS: float = 2.0
+
+
+def _is_interactive() -> bool:
+    """Check if stdin is an interactive terminal (TTY)."""
+    return hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+
+
+def _find_router_output(
+    artifacts: tuple[Path, ...],
+    workspace: Path,
+    min_mtime: float = 0.0,
+) -> Path | None:
+    """Find router-output.json, preferring stage result artifacts over workspace-global.
+
+    Args:
+        artifacts: Stage result artifact paths (checked first).
+        workspace: Workspace directory (fallback).
+        min_mtime: Minimum file mtime (epoch). Files older than this are skipped
+                   to avoid reading stale output from previous runs.
+    """
+    # Tolerance for filesystem mtime resolution differences (FAT32 = 2s, ext3 = 1s)
+    adjusted_mtime = min_mtime - MTIME_TOLERANCE_SECONDS if min_mtime else 0.0
+    for artifact in artifacts:
+        if artifact.name == "router-output.json":
+            try:
+                mtime = artifact.stat().st_mtime
+            except FileNotFoundError:
+                continue
+            if adjusted_mtime and mtime < adjusted_mtime:
+                continue
+            return artifact
+    fallback = workspace / "router-output.json"
+    try:
+        mtime = fallback.stat().st_mtime
+    except FileNotFoundError:
+        return None
+    if adjusted_mtime and mtime < adjusted_mtime:
+        logger.debug("Skipping stale workspace router-output.json (mtime < stage start)")
+        return None
+    return fallback
+
+
+def _parse_router_output(
+    artifacts: tuple[Path, ...],
+    workspace: Path,
+    min_mtime: float = 0.0,
+) -> dict[str, object] | None:
+    """Parse router-output.json from artifacts or workspace. Returns None if missing/invalid."""
+    output_path = _find_router_output(artifacts, workspace, min_mtime=min_mtime)
+    if output_path is None:
+        return None
+    try:
+        data = json.loads(output_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            return data
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        logger.warning("Failed to parse router output from %s", output_path)
+    return None
+
+
+async def _timed_input(prompt: str, timeout: int = INPUT_TIMEOUT_SECONDS) -> str | None:
+    """Read a line from stdin with a timeout.
+
+    Runs input() in a background thread via asyncio.to_thread so the event loop
+    stays responsive. Uses asyncio.wait_for for timeout enforcement.
+
+    Returns the stripped input string, or None on timeout/EOF/interrupt.
+    """
+    try:
+        raw = await asyncio.wait_for(asyncio.to_thread(input, prompt), timeout=timeout)
+        return raw.strip()
+    except (TimeoutError, EOFError, KeyboardInterrupt):
+        return None
+
+
+def _validate_questions(raw: list[object]) -> list[str]:
+    """Filter and cap elicitation questions. Only keeps non-empty strings."""
+    validated: list[str] = []
+    for item in raw:
+        if isinstance(item, str) and item.strip():
+            validated.append(item.strip())
+        if len(validated) >= MAX_QUESTIONS_PER_ROUND:
+            break
+    return validated
+
+
+async def _collect_elicitation_answers(questions: list[str]) -> dict[str, str]:
+    """Prompt the user for answers to elicitation questions via stdin.
+
+    Each question has a per-input timeout of INPUT_TIMEOUT_SECONDS.
+    Returns a dict mapping question text to user answer.
+    """
+    answers: dict[str, str] = {}
+    print("\n    The router has questions before proceeding:")
+    print(f"    (each question times out after {INPUT_TIMEOUT_SECONDS}s)\n")
+    for i, question in enumerate(questions, 1):
+        print(f"    Q{i}: {question}")
+        answer = await _timed_input("    > ")
+        if answer is None:
+            print("\n    (input cancelled or timed out — using defaults for remaining)")
+            break
+        if answer:
+            answers[question] = answer
+    print()
+    return answers
+
+
+def _save_elicitation_context(workspace: Path, context: dict[str, str]) -> None:
+    """Save elicitation answers to workspace as JSON artifact.
+
+    Uses atomic write (write-to-tmp + rename) to prevent corrupt partial writes.
+    Logs a warning on write failure instead of raising — elicitation persistence
+    is best-effort and must not crash the pipeline.
+    """
+    artifact_path = workspace / "elicitation-context.json"
+    try:
+        fd, tmp_path = tempfile.mkstemp(dir=workspace, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(context, f, indent=2)
+            os.replace(tmp_path, artifact_path)
+        except BaseException:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
+        logger.info("Saved elicitation context to %s", artifact_path.name)
+    except OSError as exc:
+        logger.warning("Failed to save elicitation context: %s", exc)
+
+
+def _extract_elicitation_questions(
+    result: ReflectionResult,
+    artifacts: tuple[Path, ...],
+    workspace: Path,
+    min_mtime: float = 0.0,
+) -> list[str] | None:
+    """Extract validated elicitation questions from router output.
+
+    Returns a list of question strings if found, or None if the router
+    didn't produce actionable questions (genuine failure, missing output, etc.).
+    """
+    if not result.escalation_needed:
+        return None
+    router_output = _parse_router_output(artifacts, workspace, min_mtime=min_mtime)
+    if router_output is None:
+        return None
+    raw_questions = router_output.get("elicitation_questions", [])
+    if not isinstance(raw_questions, list):
+        return None
+    questions = _validate_questions(raw_questions)
+    return questions if questions else None
+
+
+async def _run_router_with_elicitation(
+    elicitation: dict[str, str],
+    step_file: Path,
+    agent_def: Path,
+    artifacts: tuple[Path, ...],
+    stage_runner: StageRunner,
+    gate: GateName,
+    gate_criteria: str,
+    workspace: Path,
+) -> tuple[ReflectionResult, tuple[Path, ...]]:
+    """Run the Router stage with an interactive elicitation loop.
+
+    If the router produces elicitation questions, prompts the user via stdin
+    and re-runs the router with enriched context. Max MAX_ELICITATION_ROUNDS rounds.
+    Falls back to smart defaults in non-interactive environments.
+
+    Always persists accumulated answers on exit (success, escalation, or max rounds).
+    """
+    accumulated_answers: dict[str, str] = {}
+    result: ReflectionResult | None = None
+    new_artifacts = artifacts
+
+    try:
+        for round_num in range(1, MAX_ELICITATION_ROUNDS + 2):  # +2: initial + max rounds
+            context = dict(elicitation)
+            if accumulated_answers:
+                context["elicitation_answers"] = json.dumps(accumulated_answers)
+
+            request = AgentRequest(
+                stage=PipelineStage.ROUTER,
+                step_file=step_file,
+                agent_definition=agent_def,
+                prior_artifacts=new_artifacts,
+                elicitation_context=MappingProxyType(context),
+            )
+
+            round_epoch = time.time()
+            result = await stage_runner.run_stage(request, gate=gate, gate_criteria=gate_criteria)
+            new_artifacts = result.artifacts
+
+            questions = _extract_elicitation_questions(
+                result,
+                new_artifacts,
+                workspace,
+                min_mtime=round_epoch,
+            )
+            if questions is None:
+                return result, new_artifacts
+
+            if round_num > MAX_ELICITATION_ROUNDS:
+                print(f"    Max elicitation rounds ({MAX_ELICITATION_ROUNDS}) reached — using defaults")
+                return result, new_artifacts
+
+            if not _is_interactive():
+                print("    Non-interactive mode — skipping elicitation, using defaults")
+                return result, new_artifacts
+
+            print(f"    Router needs clarification (round {round_num}/{MAX_ELICITATION_ROUNDS}):")
+            answers = await _collect_elicitation_answers(questions)
+            if not answers:
+                print("    No answers provided — using defaults")
+                return result, new_artifacts
+
+            accumulated_answers.update(answers)
+            print("    Re-running router with user answers...")
+
+    finally:
+        if accumulated_answers:
+            _save_elicitation_context(workspace, accumulated_answers)
+
+    # Loop always runs at least once, so result is always set
+    if result is None:
+        raise RuntimeError("Router produced no result after elicitation loop")
+    return result, new_artifacts
+
+
+async def _run_stages(
+    stages: tuple[tuple[PipelineStage, str, str, str], ...],
+    start_stage: int,
+    workflows_dir: Path,
+    agents_dir: Path,
+    url: str,
+    message: str,
+    stage_runner: StageRunner,
+    workspace: Path,
+    artifacts: tuple[Path, ...],
+) -> tuple[Path, ...]:
+    """Execute pipeline stages sequentially with router elicitation support."""
+    for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
+        if stage_idx < start_stage:
+            print(f"  [{stage.value.upper()}] Skipped (resuming)")
+            continue
+        step_file = workflows_dir / "stages" / step_file_name
+        agent_def = agents_dir / agent_dir / "agent.md"
+
+        if not step_file.exists():
+            print(f"  [SKIP] {stage.value}: step file missing ({step_file})")
+            continue
+        if not agent_def.exists():
+            print(f"  [SKIP] {stage.value}: agent definition missing ({agent_def})")
+            continue
+
+        elicitation: dict[str, str] = {}
+        if stage == PipelineStage.ROUTER:
+            if url not in message:
+                elicitation["telegram_message"] = f"{url} {message}"
+            else:
+                elicitation["telegram_message"] = message
+
+        criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
+        gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
+
+        print(f"  [{stage.value.upper()}] Starting...")
+        stage_start = time.monotonic()
+
+        try:
+            if stage == PipelineStage.ROUTER:
+                result, artifacts = await _run_router_with_elicitation(
+                    elicitation=elicitation,
+                    step_file=step_file,
+                    agent_def=agent_def,
+                    artifacts=artifacts,
+                    stage_runner=stage_runner,
+                    gate=GateName(gate_name),
+                    gate_criteria=gate_criteria,
+                    workspace=workspace,
+                )
+            else:
+                request = AgentRequest(
+                    stage=stage,
+                    step_file=step_file,
+                    agent_definition=agent_def,
+                    prior_artifacts=artifacts,
+                    elicitation_context=MappingProxyType(elicitation),
+                )
+                result = await stage_runner.run_stage(
+                    request,
+                    gate=GateName(gate_name),
+                    gate_criteria=gate_criteria,
+                )
+                artifacts = result.artifacts
+
+            elapsed = time.monotonic() - stage_start
+            _print_stage_result(stage, result, artifacts, elapsed)
+
+            if result.escalation_needed:
+                print("    ESCALATION needed — stopping.")
+                break
+
+        except Exception as exc:
+            elapsed = time.monotonic() - stage_start
+            print(f"  [{stage.value.upper()}] FAILED after {elapsed:.1f}s")
+            print(f"    Error: {exc}")
+            break
+
+        print()
+
+    return artifacts
+
+
+def _print_stage_result(
+    stage: PipelineStage,
+    result: ReflectionResult,
+    artifacts: tuple[Path, ...],
+    elapsed: float,
+) -> None:
+    """Print stage completion summary."""
+    print(f"  [{stage.value.upper()}] Done in {elapsed:.1f}s")
+    print(f"    Decision: {result.best_critique.decision.value}")
+    print(f"    Score: {result.best_critique.score}")
+    print(f"    Attempts: {result.attempts}")
+    print(f"    Artifacts: {len(artifacts)}")
+    for a in artifacts:
+        print(f"      - {a.name}")
 
 
 async def run_pipeline(
@@ -120,71 +455,17 @@ async def run_pipeline(
     overall_start = time.monotonic()
 
     try:
-        for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
-            if stage_idx < start_stage:
-                print(f"  [{stage.value.upper()}] Skipped (resuming)")
-                continue
-            step_file = workflows_dir / "stages" / step_file_name
-            agent_def = agents_dir / agent_dir / "agent.md"
-
-            if not step_file.exists():
-                print(f"  [SKIP] {stage.value}: step file missing ({step_file})")
-                continue
-            if not agent_def.exists():
-                print(f"  [SKIP] {stage.value}: agent definition missing ({agent_def})")
-                continue
-
-            elicitation: dict[str, str] = {}
-            if stage == PipelineStage.ROUTER:
-                # Ensure the URL is always present in the message (as it would be in a real Telegram message)
-                if url not in message:
-                    elicitation["telegram_message"] = f"{url} {message}"
-                else:
-                    elicitation["telegram_message"] = message
-
-            request = AgentRequest(
-                stage=stage,
-                step_file=step_file,
-                agent_definition=agent_def,
-                prior_artifacts=artifacts,
-                elicitation_context=MappingProxyType(elicitation),
-            )
-
-            criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
-            gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
-
-            print(f"  [{stage.value.upper()}] Starting...")
-            stage_start = time.monotonic()
-
-            try:
-                result = await stage_runner.run_stage(
-                    request,
-                    gate=GateName(gate_name),
-                    gate_criteria=gate_criteria,
-                )
-                elapsed = time.monotonic() - stage_start
-                artifacts = result.artifacts
-
-                print(f"  [{stage.value.upper()}] Done in {elapsed:.1f}s")
-                print(f"    Decision: {result.best_critique.decision.value}")
-                print(f"    Score: {result.best_critique.score}")
-                print(f"    Attempts: {result.attempts}")
-                print(f"    Artifacts: {len(artifacts)}")
-                for a in artifacts:
-                    print(f"      - {a.name}")
-
-                if result.escalation_needed:
-                    print(f"    ESCALATION needed — stopping.")
-                    break
-
-            except Exception as exc:
-                elapsed = time.monotonic() - stage_start
-                print(f"  [{stage.value.upper()}] FAILED after {elapsed:.1f}s")
-                print(f"    Error: {exc}")
-                break
-
-            print()
-
+        artifacts = await _run_stages(
+            stages,
+            start_stage,
+            workflows_dir,
+            agents_dir,
+            url,
+            message,
+            stage_runner,
+            workspace,
+            artifacts,
+        )
     finally:
         cli_backend.set_workspace(None)
 
@@ -208,7 +489,7 @@ def main() -> None:
     parser.add_argument("url", nargs="?", default=DEFAULT_URL, help="YouTube URL")
     parser.add_argument("--message", "-m", default=None, help="Simulated Telegram message")
     parser.add_argument("--stages", "-s", type=int, default=7, help="Max stages to run (default: 7)")
-    parser.add_argument("--timeout", "-t", type=float, default=None, help="Agent timeout in seconds (default: from settings)")
+    parser.add_argument("--timeout", "-t", type=float, default=None, help="Agent timeout in seconds")
     parser.add_argument("--resume", type=Path, default=None, help="Resume from existing workspace path")
     parser.add_argument("--start-stage", type=int, default=1, help="Stage number to start from (1-7, default: 1)")
     args = parser.parse_args()

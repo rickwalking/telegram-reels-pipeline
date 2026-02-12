@@ -93,7 +93,8 @@ class CliBackend:
         returncode = proc.returncode if proc.returncode is not None else 0
 
         if returncode != 0:
-            raise AgentExecutionError(f"Agent {request.stage.value} exited with code {returncode}: {stderr}")
+            detail = stderr if stderr else stdout[-2000:]
+            raise AgentExecutionError(f"Agent {request.stage.value} exited with code {returncode}: {detail}")
 
         session_id = _extract_session_id(stdout)
         artifacts = collect_artifacts(cwd)
@@ -154,12 +155,13 @@ class CliBackend:
             raise AgentExecutionError(f"Model dispatch ({role}) failed to start: {exc}") from exc
 
         returncode = proc.returncode if proc.returncode is not None else 0
+        stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
         stderr = stderr_bytes.decode(errors="replace") if stderr_bytes else ""
 
         if returncode != 0:
-            raise AgentExecutionError(f"Model dispatch ({role}) exited with code {returncode}: {stderr}")
+            detail = stderr or stdout[-2000:] if stdout else ""
+            raise AgentExecutionError(f"Model dispatch ({role}) exited with code {returncode}: {detail}")
 
-        stdout = stdout_bytes.decode(errors="replace") if stdout_bytes else ""
         logger.info(
             "Model dispatch (%s) completed: stdout=%d bytes, stderr=%d bytes",
             role,

@@ -112,3 +112,9 @@ development_status:
   9-5-mocked-end-to-end-integration-tests: done
   9-6-smoke-test-real-services: done
   epic-9-retrospective: optional
+
+  epic-10: in-progress
+  10-1-cli-elicitation-loop-interactive-questions: done
+
+  epic-11: in-progress
+  11-1-publishing-assets-localization-veo3-prompts: ready-for-dev
