@@ -11,10 +11,14 @@ from pipeline.domain.models import (
     AgentRequest,
     AgentResult,
     CropRegion,
+    LocalizedDescription,
     PipelineEvent,
+    PublishingAssets,
     QACritique,
     QueueItem,
     RunState,
+    Veo3Prompt,
+    Veo3PromptVariant,
     VideoMetadata,
 )
 from pipeline.domain.types import GateName, RunId, SessionId
@@ -254,3 +258,172 @@ class TestPipelineEvent:
     def test_empty_event_name_raises(self) -> None:
         with pytest.raises(ValueError, match="event_name must not be empty"):
             PipelineEvent(timestamp="2026-02-10T14:00:00Z", event_name="")
+
+
+class TestVeo3Prompt:
+    def test_construction(self) -> None:
+        prompt = Veo3Prompt(variant="broll", prompt="Cinematic slow-motion shot")
+        assert prompt.variant == "broll"
+        assert prompt.prompt == "Cinematic slow-motion shot"
+
+    def test_invalid_variant_raises(self) -> None:
+        with pytest.raises(ValueError, match="variant must be one of"):
+            Veo3Prompt(variant="invalid", prompt="Some prompt")
+
+    def test_empty_prompt_raises(self) -> None:
+        with pytest.raises(ValueError, match="prompt must not be empty"):
+            Veo3Prompt(variant="broll", prompt="")
+
+    def test_whitespace_only_prompt_raises(self) -> None:
+        with pytest.raises(ValueError, match="prompt must not be empty"):
+            Veo3Prompt(variant="broll", prompt="   ")
+
+    def test_all_variant_types(self) -> None:
+        for variant in Veo3PromptVariant:
+            prompt = Veo3Prompt(variant=variant.value, prompt="test prompt")
+            assert prompt.variant == variant.value
+
+
+class TestLocalizedDescription:
+    def test_construction(self) -> None:
+        desc = LocalizedDescription(language="pt-BR", text="Descricao do video")
+        assert desc.language == "pt-BR"
+        assert desc.text == "Descricao do video"
+
+    def test_empty_language_raises(self) -> None:
+        with pytest.raises(ValueError, match="language must not be empty"):
+            LocalizedDescription(language="", text="Some text")
+
+    def test_empty_text_raises(self) -> None:
+        with pytest.raises(ValueError, match="text must not be empty"):
+            LocalizedDescription(language="pt-BR", text="")
+
+    def test_whitespace_only_language_raises(self) -> None:
+        with pytest.raises(ValueError, match="language must not be empty"):
+            LocalizedDescription(language="   ", text="Some text")
+
+    def test_whitespace_only_text_raises(self) -> None:
+        with pytest.raises(ValueError, match="text must not be empty"):
+            LocalizedDescription(language="pt-BR", text="   ")
+
+
+class TestPublishingAssets:
+    @pytest.fixture
+    def valid_assets(self) -> PublishingAssets:
+        return PublishingAssets(
+            descriptions=(LocalizedDescription(language="pt-BR", text="Descricao 1"),),
+            hashtags=("#podcast",),
+            veo3_prompts=(Veo3Prompt(variant="broll", prompt="Cinematic shot"),),
+        )
+
+    def test_construction(self, valid_assets: PublishingAssets) -> None:
+        assert len(valid_assets.descriptions) == 1
+        assert len(valid_assets.hashtags) == 1
+        assert len(valid_assets.veo3_prompts) == 1
+
+    def test_frozen_immutability(self, valid_assets: PublishingAssets) -> None:
+        with pytest.raises(AttributeError):
+            valid_assets.descriptions = ()  # type: ignore[misc]
+
+    def test_empty_descriptions_raises(self) -> None:
+        with pytest.raises(ValueError, match="descriptions must not be empty"):
+            PublishingAssets(
+                descriptions=(),
+                hashtags=("#test",),
+                veo3_prompts=(Veo3Prompt(variant="broll", prompt="test"),),
+            )
+
+    def test_empty_hashtags_raises(self) -> None:
+        with pytest.raises(ValueError, match="hashtags must not be empty"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=(),
+                veo3_prompts=(Veo3Prompt(variant="broll", prompt="test"),),
+            )
+
+    def test_empty_veo3_prompts_raises(self) -> None:
+        with pytest.raises(ValueError, match="veo3_prompts must not be empty"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("#test",),
+                veo3_prompts=(),
+            )
+
+    def test_more_than_four_prompts_raises(self) -> None:
+        five_prompts = (
+            Veo3Prompt(variant="broll", prompt="p1"),
+            Veo3Prompt(variant="intro", prompt="p2"),
+            Veo3Prompt(variant="outro", prompt="p3"),
+            Veo3Prompt(variant="transition", prompt="p4"),
+            Veo3Prompt(variant="broll", prompt="p5"),
+        )
+        with pytest.raises(ValueError, match="1-4 items"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("#test",),
+                veo3_prompts=five_prompts,
+            )
+
+    def test_duplicate_variants_raises(self) -> None:
+        with pytest.raises(ValueError, match="unique variants"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("#test",),
+                veo3_prompts=(
+                    Veo3Prompt(variant="broll", prompt="p1"),
+                    Veo3Prompt(variant="broll", prompt="p2"),
+                ),
+            )
+
+    def test_missing_broll_raises(self) -> None:
+        with pytest.raises(ValueError, match="broll"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("#test",),
+                veo3_prompts=(Veo3Prompt(variant="intro", prompt="test"),),
+            )
+
+    def test_four_unique_variants_valid(self) -> None:
+        assets = PublishingAssets(
+            descriptions=(LocalizedDescription(language="pt-BR", text="text"),),
+            hashtags=("#podcast",),
+            veo3_prompts=(
+                Veo3Prompt(variant="intro", prompt="p1"),
+                Veo3Prompt(variant="broll", prompt="p2"),
+                Veo3Prompt(variant="outro", prompt="p3"),
+                Veo3Prompt(variant="transition", prompt="p4"),
+            ),
+        )
+        assert len(assets.veo3_prompts) == 4
+
+    def test_hashtag_missing_hash_prefix_raises(self) -> None:
+        with pytest.raises(ValueError, match="must start with '#'"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("podcast",),
+                veo3_prompts=(Veo3Prompt(variant="broll", prompt="test"),),
+            )
+
+    def test_hashtag_whitespace_only_raises(self) -> None:
+        with pytest.raises(ValueError, match="non-empty string"):
+            PublishingAssets(
+                descriptions=(LocalizedDescription(language="en", text="text"),),
+                hashtags=("   ",),
+                veo3_prompts=(Veo3Prompt(variant="broll", prompt="test"),),
+            )
+
+    def test_whitespace_stripped_on_construction(self) -> None:
+        prompt = Veo3Prompt(variant="  broll  ", prompt="  cinematic shot  ")
+        assert prompt.variant == "broll"
+        assert prompt.prompt == "cinematic shot"
+
+        desc = LocalizedDescription(language="  pt-BR  ", text="  descricao  ")
+        assert desc.language == "pt-BR"
+        assert desc.text == "descricao"
+
+        assets = PublishingAssets(
+            descriptions=(desc,),
+            hashtags=("  #podcast  ", "  #tech  "),
+            veo3_prompts=(prompt,),
+        )
+        assert assets.hashtags == ("#podcast", "#tech")

@@ -187,6 +187,29 @@ class TestReflectionLoopEvaluate:
         with pytest.raises(QAError):
             await loop.evaluate((), gate, "criteria", 1)
 
+    async def test_evaluate_includes_evaluation_context(self, gate: GateName) -> None:
+        model_port = AsyncMock()
+        model_port.dispatch.return_value = _make_qa_json(decision="PASS", score=90)
+        agent_port = AsyncMock()
+
+        loop = ReflectionLoop(agent_port=agent_port, model_port=model_port)
+        await loop.evaluate((), gate, "criteria", 1, evaluation_context={"publishing_language": "pt-BR"})
+
+        prompt = model_port.dispatch.call_args[0][1]
+        assert "### Evaluation Context" in prompt
+        assert "publishing_language: pt-BR" in prompt
+
+    async def test_evaluate_no_context_section_when_none(self, gate: GateName) -> None:
+        model_port = AsyncMock()
+        model_port.dispatch.return_value = _make_qa_json(decision="PASS", score=90)
+        agent_port = AsyncMock()
+
+        loop = ReflectionLoop(agent_port=agent_port, model_port=model_port)
+        await loop.evaluate((), gate, "criteria", 1)
+
+        prompt = model_port.dispatch.call_args[0][1]
+        assert "### Evaluation Context" not in prompt
+
 
 class TestReflectionLoopRun:
     async def test_pass_on_first_attempt(self, request_: AgentRequest, gate: GateName, gate_criteria: str) -> None:
@@ -320,6 +343,70 @@ class TestReflectionLoopRun:
 
     async def test_max_attempts_constant_is_three(self) -> None:
         assert MAX_QA_ATTEMPTS == 3
+
+    async def test_run_propagates_evaluation_context_from_elicitation(
+        self, step_file: Path, agent_def: Path, gate: GateName, gate_criteria: str
+    ) -> None:
+        from types import MappingProxyType
+
+        request_with_lang = AgentRequest(
+            stage=PipelineStage.CONTENT,
+            step_file=step_file,
+            agent_definition=agent_def,
+            elicitation_context=MappingProxyType({"publishing_language": "pt-BR"}),
+        )
+        agent_port = AsyncMock()
+        agent_port.execute.return_value = _make_agent_result()
+        model_port = AsyncMock()
+        model_port.dispatch.return_value = _make_qa_json(decision="PASS", score=95)
+
+        loop = ReflectionLoop(agent_port=agent_port, model_port=model_port)
+        await loop.run(request_with_lang, gate, gate_criteria)
+
+        prompt = model_port.dispatch.call_args[0][1]
+        assert "publishing_language: pt-BR" in prompt
+
+    async def test_run_propagates_publishing_description_variants(
+        self, step_file: Path, agent_def: Path, gate: GateName, gate_criteria: str
+    ) -> None:
+        from types import MappingProxyType
+
+        request_with_variants = AgentRequest(
+            stage=PipelineStage.CONTENT,
+            step_file=step_file,
+            agent_definition=agent_def,
+            elicitation_context=MappingProxyType(
+                {
+                    "publishing_language": "pt-BR",
+                    "publishing_description_variants": "3",
+                }
+            ),
+        )
+        agent_port = AsyncMock()
+        agent_port.execute.return_value = _make_agent_result()
+        model_port = AsyncMock()
+        model_port.dispatch.return_value = _make_qa_json(decision="PASS", score=95)
+
+        loop = ReflectionLoop(agent_port=agent_port, model_port=model_port)
+        await loop.run(request_with_variants, gate, gate_criteria)
+
+        prompt = model_port.dispatch.call_args[0][1]
+        assert "publishing_language: pt-BR" in prompt
+        assert "publishing_description_variants: 3" in prompt
+
+    async def test_run_no_evaluation_context_when_no_publishing_language(
+        self, request_: AgentRequest, gate: GateName, gate_criteria: str
+    ) -> None:
+        agent_port = AsyncMock()
+        agent_port.execute.return_value = _make_agent_result()
+        model_port = AsyncMock()
+        model_port.dispatch.return_value = _make_qa_json(decision="PASS", score=95)
+
+        loop = ReflectionLoop(agent_port=agent_port, model_port=model_port)
+        await loop.run(request_, gate, gate_criteria)
+
+        prompt = model_port.dispatch.call_args[0][1]
+        assert "### Evaluation Context" not in prompt
 
 
 class TestExtractJsonObject:

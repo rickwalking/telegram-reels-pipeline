@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum, unique
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any
@@ -237,6 +238,78 @@ class ContentPackage:
             raise ValueError("descriptions must not be empty")
         if not self.music_suggestion:
             raise ValueError("music_suggestion must not be empty")
+
+
+@unique
+class Veo3PromptVariant(StrEnum):
+    """Allowed Veo 3 prompt variant types."""
+
+    INTRO = "intro"
+    BROLL = "broll"
+    OUTRO = "outro"
+    TRANSITION = "transition"
+
+
+@dataclass(frozen=True)
+class Veo3Prompt:
+    """A single Veo 3 video generation prompt with its variant type."""
+
+    variant: str
+    prompt: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "variant", self.variant.strip())
+        object.__setattr__(self, "prompt", self.prompt.strip())
+        if self.variant not in {v.value for v in Veo3PromptVariant}:
+            raise ValueError(f"variant must be one of {[v.value for v in Veo3PromptVariant]}, got '{self.variant}'")
+        if not self.prompt:
+            raise ValueError("prompt must not be empty")
+
+
+@dataclass(frozen=True)
+class LocalizedDescription:
+    """A localized description for publishing."""
+
+    language: str
+    text: str
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "language", self.language.strip())
+        object.__setattr__(self, "text", self.text.strip())
+        if not self.language:
+            raise ValueError("language must not be empty")
+        if not self.text:
+            raise ValueError("text must not be empty")
+
+
+@dataclass(frozen=True)
+class PublishingAssets:
+    """Publishing assets — localized descriptions, hashtags, and Veo 3 prompts."""
+
+    descriptions: tuple[LocalizedDescription, ...]
+    hashtags: tuple[str, ...]
+    veo3_prompts: tuple[Veo3Prompt, ...]
+
+    def __post_init__(self) -> None:
+        if not self.descriptions:
+            raise ValueError("descriptions must not be empty")
+        if not self.hashtags:
+            raise ValueError("hashtags must not be empty")
+        for tag in self.hashtags:
+            if not isinstance(tag, str) or not tag.strip():
+                raise ValueError("each hashtag must be a non-empty string")
+            if not tag.strip().startswith("#"):
+                raise ValueError(f"each hashtag must start with '#', got '{tag}'")
+        object.__setattr__(self, "hashtags", tuple(t.strip() for t in self.hashtags))
+        if not self.veo3_prompts:
+            raise ValueError("veo3_prompts must not be empty")
+        if len(self.veo3_prompts) > 4:
+            raise ValueError(f"veo3_prompts must have 1-4 items, got {len(self.veo3_prompts)}")
+        variants = [p.variant for p in self.veo3_prompts]
+        if len(variants) != len(set(variants)):
+            raise ValueError("veo3_prompts must have unique variants")
+        if Veo3PromptVariant.BROLL.value not in variants:
+            raise ValueError("veo3_prompts must include a 'broll' variant")
 
 
 @dataclass(frozen=True)

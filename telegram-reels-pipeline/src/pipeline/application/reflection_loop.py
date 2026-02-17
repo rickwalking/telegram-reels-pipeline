@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -52,16 +53,26 @@ class ReflectionLoop:
         gate: GateName,
         gate_criteria: str,
         attempt: int,
+        evaluation_context: Mapping[str, str] | None = None,
     ) -> QACritique:
         """Evaluate artifacts against QA gate criteria via the model dispatch port.
 
         Inlines text artifact contents so the QA model can evaluate without tool access.
+        If evaluation_context is provided, it is included in the prompt so the QA model
+        knows about conditional criteria (e.g. publishing_language for publishing assets).
         Raises QAError if the model response cannot be parsed into a valid QACritique.
         """
         artifacts_text = _build_artifact_section(artifacts)
+
+        context_section = ""
+        if evaluation_context:
+            context_lines = "\n".join(f"{k}: {v}" for k, v in evaluation_context.items())
+            context_section = f"### Evaluation Context\n\n{context_lines}\n\n"
+
         prompt = (
             f"## QA Gate Evaluation: {gate}\n\n"
             f"### Gate Criteria\n\n{gate_criteria}\n\n"
+            f"{context_section}"
             f"### Artifacts to Evaluate\n\n{artifacts_text}\n\n"
             f"### Attempt: {attempt}\n\n"
             "Evaluate the artifacts against the gate criteria. "
@@ -88,12 +99,18 @@ class ReflectionLoop:
         attempts: list[tuple[QACritique, AgentResult]] = []
         current_request = request
 
+        # Forward non-empty elicitation context entries to QA evaluation
+        eval_ctx = {k: v for k, v in request.elicitation_context.items() if v}
+        evaluation_context: Mapping[str, str] | None = eval_ctx if eval_ctx else None
+
         for attempt_num in range(1, MAX_QA_ATTEMPTS + 1):
             # Execute the agent
             result: AgentResult = await self._agent_port.execute(current_request)
 
             # Evaluate artifacts
-            critique = await self.evaluate(result.artifacts, gate, gate_criteria, attempt_num)
+            critique = await self.evaluate(
+                result.artifacts, gate, gate_criteria, attempt_num, evaluation_context=evaluation_context
+            )
             attempts.append((critique, result))
 
             logger.info(
