@@ -15,36 +15,42 @@ All coordinates assume a **1920x1080 source** video being cropped for **1080x192
 
 **All scale filters MUST use lanczos**: `scale=W:H:flags=lanczos` (sharper than default bicubic, no performance penalty).
 
+### 9:16 Compliance (CRITICAL)
+
+Every segment MUST have `SAR 1:1` (square pixels) and true 9:16 pixel dimensions (1080x1920). Instagram and other platforms read SAR metadata — a wrong SAR causes cropping or misframing on upload.
+
+**Rules**:
+1. **Always append `setsar=1`** as the LAST filter in every chain
+2. **All crops** (any width): `crop={W}:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1`
+3. This works for both native 9:16 crops (608px) and wider crops (960px, 1150px, etc.). FFmpeg scales the cropped region to fill the full 1080x1920 frame.
+4. **Never** omit `setsar=1` — without it, FFmpeg sets SAR metadata to compensate for the aspect ratio difference, causing Instagram to crop/misframe the video on upload
+
 ### `side_by_side`
 
 Two speakers in roughly equal halves.
 
-**BOTH-VISIBLE PREFERENCE**: When the wide camera shows both speakers, prefer a **single centered crop that keeps BOTH speakers visible**. Do NOT isolate one speaker when the wide shot already shows both — that looks unnatural and cuts people off screen.
-
 **Decision Logic**:
 1. Read `face-position-map.json` — find exact face positions for `Speaker_Left` and `Speaker_Right`
 2. Compute `speaker_span = rightmost_face_edge - leftmost_face_edge` (include face widths)
-3. **If `speaker_span <= crop_width - 80` (both fit with 40px padding each side)**: use ONE centered crop for the entire segment. No sub_segments needed.
-4. **If speakers are too far apart to fit**: use per-speaker sub_segments (see below).
-
-**Both-visible crop** (preferred — keeps both speakers in frame):
-```
-# Compute center between both speakers
-center_x = (Speaker_Left.avg_x + Speaker_Right.avg_x) / 2
-crop_x = clamp(center_x - crop_width/2, 0, source_width - crop_width)
-# Use the widest crop that maintains acceptable quality (upscale <= 1.5x)
-crop_filter: crop={crop_width}:1080:{crop_x}:0,scale=1080:1920:flags=lanczos
-```
+3. **Both-visible crop** (preferred — keeps both speakers in frame): compute a centered crop that covers both speakers. Choose the crop width that fits both with 40px padding each side (`speaker_span + 80`). Center on speakers:
+   ```
+   center_x = (Speaker_Left.avg_x + Speaker_Right.avg_x) / 2
+   crop_x = clamp(center_x - crop_width/2, 0, source_width - crop_width)
+   ```
+   ```
+   crop_filter: crop={crop_width}:1080:{crop_x}:0,scale=1080:1920:flags=lanczos,setsar=1
+   ```
+4. **Per-speaker switching** (fallback — only when speakers are too far apart for a single crop with acceptable quality): alternate between speakers using face-centered crops based on `speaker-timeline.json`.
 
 **Per-speaker sub_segments** (only when speakers don't fit in single crop):
 ```
-# Left speaker: center on Speaker_Left face
-x = max(0, face_center_x - 480), width = 960
-crop_filter: crop=960:1080:{x}:0,scale=1080:1920:flags=lanczos
+# Left speaker: center on Speaker_Left face (608px = native 9:16)
+x = max(0, face_center_x - 304), width = 608
+crop_filter: crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1
 
-# Right speaker: center on Speaker_Right face
-x = clamp(face_center_x - 480, 0, 960), width = 960
-crop_filter: crop=960:1080:{x}:0,scale=1080:1920:flags=lanczos
+# Right speaker: center on Speaker_Right face (608px = native 9:16)
+x = clamp(face_center_x - 304, 0, 1312), width = 608
+crop_filter: crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1
 ```
 
 **Sub-segment rules** (when splitting is necessary):
@@ -57,11 +63,7 @@ crop_filter: crop=960:1080:{x}:0,scale=1080:1920:flags=lanczos
 - If faces are too far apart: alternate between detected face positions every 5-8 seconds
 - If only one face detected in all frames: use that face's position for the entire segment
 
-**Failure Mode Examples**:
-
-> **Run `20260212-140636-ad0b2d`** — Layout Detective assigned `{x:0, y:0, w:960, h:1080}` for the full `side_by_side` segment (1982-2012s). This captured ONLY the left speaker. The right speaker was completely cut off. Fix: use both-visible centered crop.
-
-> **Run `20260212-185826-1aeee0`** — Side-by-side segment used sub_segments isolating left (x=55) then right (x=960) speakers. When camera showed both speakers in wide shot, one person was completely removed from frame during each sub_segment. Fix: use both-visible centered crop since wide shot is meant to show both people.
+**Failure Mode Examples**: See `crop-failure-modes.md` for documented failure patterns (FM-1 through FM-3) with root causes and fixes.
 
 ### `speaker_focus`
 
@@ -74,7 +76,7 @@ One speaker dominates the frame.
 # Compute: x = max(0, min(1312, face_center_x - 304))
 # width=608 gives approximately 9:16 before scaling
 x={computed}, y=0, width=608, height=1080
-crop_filter: crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos
+crop_filter: crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1
 ```
 
 **IMPORTANT**: Never use `x=280` as a fixed offset. Always compute from the face centroid in `face-position-map.json`. The formula is:
@@ -84,16 +86,19 @@ crop_x = clamp(face_center_x - (crop_width / 2), 0, source_width - crop_width)
 
 ### `grid`
 
-Four speakers in a 2x2 grid.
+Four speakers in a 2x2 grid. Each quadrant is 960x540 (16:9).
 
 **Active speaker quadrant crops**:
+```
+crop_filter: crop=960:540:{qx}:{qy},scale=1080:1920:flags=lanczos,setsar=1
+```
 
-| Quadrant | Position | Crop |
-|----------|----------|------|
-| Top-left | x=0, y=0, w=960, h=540 | `crop=960:540:0:0,scale=1080:1920:flags=lanczos` |
-| Top-right | x=960, y=0, w=960, h=540 | `crop=960:540:960:0,scale=1080:1920:flags=lanczos` |
-| Bottom-left | x=0, y=540, w=960, h=540 | `crop=960:540:0:540,scale=1080:1920:flags=lanczos` |
-| Bottom-right | x=960, y=540, w=960, h=540 | `crop=960:540:960:540,scale=1080:1920:flags=lanczos` |
+| Quadrant | qx | qy |
+|----------|----|----|
+| Top-left | 0 | 0 |
+| Top-right | 960 | 0 |
+| Bottom-left | 0 | 540 |
+| Bottom-right | 960 | 540 |
 
 **Selection rule**: Use `speaker-timeline.json` to determine the active speaker. Map to the quadrant containing that speaker's face from `face-position-map.json`. If multiple speakers are active, prefer the quadrant with the most recent speaker change.
 
@@ -101,7 +106,7 @@ Four speakers in a 2x2 grid.
 
 For layouts stored via LayoutEscalationHandler:
 - Load crop region from `crop-strategies.yaml` via KnowledgeBasePort
-- Apply the stored `CropRegion` coordinates: `crop={width}:{height}:{x}:{y},scale=1080:1920:flags=lanczos`
+- Apply the stored `CropRegion` coordinates: `crop={W}:{H}:{x}:{y},scale=1080:1920:flags=lanczos,setsar=1`
 
 ## Quality Degradation Rules
 
@@ -116,13 +121,7 @@ upscale_factor = target_width / crop_width
 | <= 1.2 | Good | Proceed normally |
 | 1.2 - 1.5 | Acceptable | Proceed, minor softness |
 | 1.5 - 2.0 | Degraded | Try widening crop to include more background around face |
-| > 2.0 | Unacceptable | **Must use pillarbox mode** |
-
-**Pillarbox mode** (for upscale > 2.0x):
-```
-# Scale to fit height, pad with black bars to fill 1080 width
-scale=-1:1920:flags=lanczos,pad=1080:1920:(1080-iw)/2:0:black
-```
+| > 2.0 | Unacceptable | Must widen crop or accept quality loss |
 
 **Pre-encode quality prediction**:
 ```bash
@@ -154,13 +153,19 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 
 1. **Split the segment** at the transition boundary timestamp
 2. **Encode each sub-segment separately** with its own crop filter
-3. **The Assembly stage** will concatenate the encoded sub-segments
-4. **Add 0.5s overlap** at transition points for smooth concatenation
+3. **Use exact boundary timestamps** — `next.start_seconds == prev.end_seconds` (no overlap, no gap). The Assembly stage concatenates segments directly with `-c copy`.
 
 **Camera angle changes** (detected by face count changes in `face-position-map.json`):
-- If face count changes between frames (e.g., 2 → 1): camera switched to single speaker view
-- Split segment at the transition frame
+- Check face count at ALL extracted frames in `face-position-map.json` within the segment's time range
+- If face count changes between consecutive frames (e.g., 2 → 1 or 1 → 2): camera switched angle
+- Use the precise transition timestamp from `layout-analysis.json` `camera_transitions` array. If only coarse frames are available, split at the midpoint between the last frame with old count and first frame with new count
 - Apply appropriate crop for each sub-segment based on the faces visible in that range
+- Common pattern: close-up (1 face) → wide shot (2 faces). The wide shot portion MUST use a both-visible crop, not the narrow speaker_focus crop from the close-up portion
+
+**Transition boundary safety** — when transition timing is uncertain (coarse frames only, no fine-pass data):
+- **Bias toward the wider crop**: if transitioning between `speaker_focus` (narrow) and `side_by_side` (wide), extend the wide crop 1-2 seconds into the narrow segment's time range. A wide crop on a close-up looks fine; a narrow crop on a wide shot cuts people off.
+- **Verify with source frames**: before encoding, extract a frame at the exact transition timestamp and check face count. If the frame shows the wrong layout for the assigned crop, adjust the boundary.
+- A wide shot with a narrow crop is **always worse** than a close-up with a wide crop. When in doubt, use the wider crop.
 
 ## Fallback Matrix
 
@@ -177,7 +182,7 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 
 Prevent jittery crop changes from minor movements or brief speaker turns:
 
-1. **Minimum hold time**: Any crop position must be held for at least **5 seconds** before switching. If a speaker turn is shorter than 5s, keep the current crop. This applies everywhere — including at camera transitions.
+1. **Minimum hold time**: Any crop position must be held for at least **5 seconds** before switching. If a speaker turn is shorter than 5s, keep the current crop. **Exception**: camera angle changes (detected by face count changing in `face-position-map.json`, e.g., 1 face → 2 faces or vice versa) override this rule — split at the camera transition regardless of sub-segment duration.
 2. **Movement threshold**: Only change the crop X position if the new position differs by more than **15% of the active crop width** (e.g., 144px for a 960px crop, 91px for a 608px crop). Small positional jitter is ignored.
 3. **Prefer stability over precision**: A slightly off-center crop that holds steady looks better than a perfectly centered crop that jitters every 2 seconds.
 
@@ -187,3 +192,4 @@ Prevent jittery crop changes from minor movements or brief speaker turns:
 - Minimum sub-segment duration: **5 seconds**. Merge shorter turns into the preceding sub-segment.
 - If this still produces more than 3 cuts per 15 seconds: extend minimum sub-segment duration to 8 seconds
 - Rapid cuts feel robotic/amateurish — prefer smooth, deliberate transitions
+- **Exception**: camera angle changes (face count change) are structural transitions, not crop switches. They do not count toward the 3-cut limit and are exempt from the 5s minimum.

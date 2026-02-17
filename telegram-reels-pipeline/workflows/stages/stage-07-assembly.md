@@ -37,7 +37,7 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 1. **Verify all segments exist** and are readable. List any missing segments.
 2. **Validate each segment**: check dimensions (1080x1920), codec (H.264), audio (AAC).
 3. **Determine concatenation order** — sequential by segment number.
-4. **Plan transitions** — default to "cut" (instant). Use crossfade only if segments have overlapping content.
+4. **Plan transitions** — use "cut" (instant) for all transitions. The ReelAssembler uses `-c copy` concat which does not support crossfades.
 5. **Execute concatenation** via ReelAssembler adapter (FFmpeg concat demuxer).
 6. **Validate final output**: dimensions, duration, file size, codec.
 7. **Check duration tolerance**: final duration should be within 5% of expected.

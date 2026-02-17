@@ -8,11 +8,11 @@
 - **Fail**: No segments encoded or all encoding attempts failed
 - **Prescriptive fix template**: "Segment {segment_number} failed to encode. Re-encode with correct parameters. Check input path exists and crop filter is valid: {crop_filter}"
 
-### Dimension 2: Output Dimensions (weight: 15/100)
-- **Pass**: All encoded segments are exactly 1080x1920
-- **Rework**: Segments have close but incorrect dimensions (e.g., 1078x1918)
+### Dimension 2: Output Dimensions and SAR (weight: 15/100)
+- **Pass**: All encoded segments are exactly 1080x1920 with SAR 1:1 (square pixels). Verify with `ffprobe -show_entries stream=width,height,sample_aspect_ratio`.
+- **Rework**: Dimensions correct but SAR is not 1:1 (e.g., SAR 472:243). This means `setsar=1` was missing from the filter chain. Instagram will crop/misframe the video on upload.
 - **Fail**: Segments have completely wrong dimensions (e.g., 1280x720)
-- **Prescriptive fix template**: "Segment {n} is {actual_w}x{actual_h} instead of 1080x1920. Re-encode with correct scale filter: scale=1080:1920:flags=lanczos"
+- **Prescriptive fix template**: "Segment {n} has SAR {actual_sar} instead of 1:1. Append setsar=1 to the filter chain. For any crop width: crop={W}:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1"
 
 ### Dimension 3: Codec Compliance (weight: 10/100)
 - **Pass**: All segments use H.264 video codec and AAC audio codec
@@ -29,14 +29,16 @@
 ### Dimension 5: Face Validation (weight: 20/100)
 - **Pass**: All segments reference `face-position-map.json`; crop regions overlap with detected faces at segment timestamps; `encoding-plan.json` includes `validation` results per command with `face_in_crop: true`
 - **Rework**: Most segments valid but one has marginal result (face near crop edge, < 40px padding)
-- **Fail**: Any segment has no face in its crop region at the segment's timestamps and was not flagged for rework
-- **Prescriptive fix template**: "Segment {n} crop at x={x}, w={w} has no face overlap at t={timestamp}s. Nearest face is at x={face_x}. Adjust crop to center on face: x = {corrected_x}."
+- **Rework** (people cut off): If `face-position-map.json` shows 2+ faces at any frame timestamp within a segment's time range AND those faces fit within one crop (`speaker_span <= crop_width - 80px`), but the segment's crop region only covers 1 face — the crop is cutting someone off. Split the segment at the camera transition point and apply appropriate crops for each sub-segment. This rule does NOT apply when speakers are too far apart to fit in a single crop (legitimate per-speaker sub-segments).
+- **Fail**: Any segment has no face in its crop region at the segment's timestamps and was not flagged for rework. Any segment shows 2+ faces that fit in one crop but crops all but one face out for more than 5 seconds (matching the minimum hold rule).
+- **Prescriptive fix template** (no face): "Segment {n} crop at x={x}, w={w} has no face overlap at t={timestamp}s. Nearest face is at x={face_x}. Adjust crop to center on face: x = {corrected_x}."
+- **Prescriptive fix template** (people cut off): "Segment {n} crop at x={x}, w={w} covers only 1 of {face_count} faces at t={timestamp}s. Faces fit in one crop (span={span}px < crop_width-80={limit}px). Split segment at camera transition and use both-visible crop for the wide-shot portion."
 
 ### Dimension 6: Output Quality (weight: 15/100)
 - **Pass**: All segments have upscale factor <= 1.5 AND (sharpness ratio >= 0.6 when baseline available); `encoding-plan.json` includes `quality` results per command
-- **Rework**: Any segment has upscale factor 1.5-2.0 WITHOUT pillarbox applied, OR sharpness ratio between 0.4-0.6
-- **Fail**: Any segment has upscale factor > 2.0 without pillarbox applied, OR sharpness ratio < 0.4
-- **Prescriptive fix template**: "Segment {n} upscale factor is {factor}x (crop_width={crop_w}, target=1080). Apply pillarbox: scale=-1:1920:flags=lanczos,pad=1080:1920:(1080-iw)/2:0:black"
+- **Rework**: Any segment has upscale factor 1.5-2.0 OR sharpness ratio between 0.4-0.6
+- **Fail**: Any segment has upscale factor > 2.0, OR sharpness ratio < 0.4
+- **Prescriptive fix template**: "Segment {n} upscale factor is {factor}x (crop_width={crop_w}, target=1080). Widen crop to reduce upscale factor below 1.5x. Use: crop={wider_W}:1080:{adjusted_x}:0,scale=1080:1920:flags=lanczos,setsar=1"
 - **Visual Consistency Check**: Flag if sharpness variance between adjacent segments > 30%. Fix: "Adjacent segments {n} and {n+1} have sharpness {s1} vs {s2} (>30% variance). Consider matching encoding approach (both pillarbox or both full-bleed)."
 - **Scaler Check**: All segments must use `flags=lanczos`. Fix: "Segment {n} uses default bicubic scaler. Re-encode with: scale=1080:1920:flags=lanczos"
 

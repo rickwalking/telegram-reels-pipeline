@@ -116,6 +116,7 @@ development_status:
   epic-10: in-progress
   10-1-cli-elicitation-loop-interactive-questions: in-progress
   10-2-crop-framing-quality-side-by-side-qa-visual-composition: in-progress
+  10-3-segment-overlap-crop-camera-transition-fix: in-progress
 
   epic-11: in-progress
-  11-1-publishing-assets-localization-veo3-prompts: ready-for-dev
+  11-1-publishing-assets-localization-veo3-prompts: in-progress

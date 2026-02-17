@@ -60,39 +60,44 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 2. **Read face-position-map.json** to understand scene composition and verify face positions.
 
 3. **For each segment (or sub-segment)**, verify the proposed crop region contains a face by checking `face-position-map.json` at the segment's timestamps. The proposed crop area must overlap with a detected face. If no face in range:
-   - **For both-visible segments** (segment-level `crop_region`, no `sub_segments`): do NOT recenter to a single speaker. Instead, widen the crop or keep the existing both-visible crop — temporary face detection gaps do not justify splitting to per-speaker isolation.
-   - **For per-speaker sub_segments**: adjust the crop to center on the **active speaker's face** (use `speaker_face_mapping` from `layout-analysis.json` to preserve speaker identity — do NOT snap to the nearest arbitrary face).
+   - Adjust the crop to center on the **active speaker's face** (use `speaker_face_mapping` from `layout-analysis.json` to preserve speaker identity — do NOT snap to the nearest arbitrary face).
 
-4. **Build crop filter** for each segment: `crop={width}:{height}:{x}:{y},scale=1080:1920:flags=lanczos`. See `crop-playbook.md`.
-   - **Always use `flags=lanczos`** in scale filters (sharper than default bicubic, no performance penalty).
+4. **Build crop filter** for each segment following `crop-playbook.md` **9:16 Compliance** rules. Every segment MUST output SAR 1:1 square pixels at 1080x1920.
+   - **All crops**: `crop={W}:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1` — this works for any crop width (608px, 960px, 1150px, etc.)
+   - **Always append `setsar=1`** as the last filter in every chain — without it, FFmpeg sets SAR metadata that causes Instagram to crop/misframe the video
    - **Both-visible preference**: For `side_by_side` segments without sub_segments, the crop should keep BOTH speakers visible. Verify BOTH face positions fall within the crop range. If the Layout Detective provided a single `crop_region` (no sub_segments), do NOT split into per-speaker segments.
    - **Stability**: Do not create segments shorter than 5 seconds. If a speaker turn is < 5s, keep the current crop and merge that turn into the surrounding segment.
 
 5. **Handle quality degradation** for segments flagged by the Layout Detective:
    - For `quality: "degraded"` (upscale 1.5-2.0x): try widening the crop to include more background around the face while keeping face centered. Recheck upscale factor.
-   - For `quality: "unacceptable"` (upscale > 2.0x): **use pillarbox mode**: `scale=-1:1920:flags=lanczos,pad=1080:1920:(1080-iw)/2:0:black`
+   - For `quality: "unacceptable"` (upscale > 2.0x): widen the crop further or accept quality loss. Log the upscale factor in encoding-plan.json.
 
 6. **Set encoding parameters** per `encoding-params.md`: H.264 Main, CRF 23, preset medium.
 
-7. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Add **0.5s overlap** at transition points for smooth concatenation (the Assembly stage trims the overlap).
+7. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Use **exact boundary timestamps** with no overlap between segments (the Assembly stage concatenates them directly with `-c copy`).
 
-8. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
+8. **Verify segment boundary integrity** — Stage 5 is authoritative for transition timestamps. Before encoding, validate:
+   - For each pair of adjacent segments, confirm `next.start_seconds == prev.end_seconds` (no overlap, no gap)
+   - If any boundary mismatch is found, align both segments to the same timestamp (update BOTH `prev.end_seconds` AND `next.start_seconds` atomically)
+   - **Bias toward wider crops at uncertain boundaries**: if unsure which side a boundary frame belongs to, assign it to the segment with the wider crop — a wide crop on a close-up is acceptable, but a narrow crop on a wide shot cuts people off
 
-9. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc. Output `encoding-plan.json`.
+9. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
+
+10. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc. Output `encoding-plan.json`.
 
 ### Validation Phase (after FFmpegAdapter executes)
 
-10. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
+11. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
     ```bash
     python scripts/check_upscale_quality.py <segment.mp4> --crop-width <W> --target-width 1080 --source-frame <representative_frame.png>
     ```
     Update `encoding-plan.json` with quality results under the `quality` key per command.
 
-11. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
+12. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
 
-12. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
+13. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
 
-13. **Update `encoding-plan.json`** with final validation and quality data.
+14. **Update `encoding-plan.json`** with final validation and quality data.
 
 ## Constraints
 
@@ -103,7 +108,7 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 - Encoding time: < 5 minutes per 90s segment on Pi ARM (NFR-P2)
 - File size target: < 50MB per segment
 - Crop coordinates must be within source bounds
-- Pillarbox required when upscale factor > 2.0x
+- Widen crop when upscale factor > 2.0x to reduce quality loss
 - All segments must have face validation results in encoding-plan.json
 
 ## Quality Criteria Reference

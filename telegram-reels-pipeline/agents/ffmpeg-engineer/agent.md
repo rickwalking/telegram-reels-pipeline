@@ -70,6 +70,7 @@ Output valid JSON written to `encoding-plan.json`:
 ## Knowledge Files
 
 - `crop-playbook.md` — Per-layout crop coordinates for known layouts
+- `crop-failure-modes.md` — Documented crop failure patterns with root causes and fixes
 - `encoding-params.md` — Pi-optimized encoding specifications
 
 ## Crop Filter Construction

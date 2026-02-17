@@ -47,7 +47,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 
 ## Instructions
 
-1. **Extract frames** every 5 seconds from `start_seconds` to `end_seconds` using VideoProcessingPort.
+1. **Extract frames** every 5 seconds from `start_seconds` to `end_seconds` using VideoProcessingPort. This is the **coarse pass** — it identifies approximate layout transition zones.
 
 2. **Run face detection** on all extracted frames:
    ```bash
@@ -75,28 +75,36 @@ Extract video frames at regular intervals within the selected moment, run face d
 
 8. **Check knowledge base** before escalating — a previously learned strategy may apply.
 
-9. **Detect transitions** — consecutive frames with different layouts OR face count changes mark segment boundaries.
+9. **Detect transitions** — consecutive frames with different layouts OR face count changes mark candidate transition zones.
 
-10. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
+10. **Refine transition boundaries** (fine pass) — for each candidate transition between frames at `T1` and `T2`:
+    - Extract additional frames at 1-second intervals within `[T1, T2]` (e.g., if coarse frames at t=1776 and t=1781 differ, extract frames at t=1777, t=1778, t=1779, t=1780).
+    - Run face detection on these new frames.
+    - Identify the **first frame** that matches the new layout. Its timestamp is `T_precise`.
+    - Use `T_precise` as the segment boundary instead of the midpoint `(T1 + T2) / 2`.
+    - This eliminates the 1-3 second misalignment that causes wrong crops at camera cuts.
 
-11. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
+11. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
+
+12. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
     - For `side_by_side` segments: **first check if both speakers fit in a single crop**:
       - Compute `speaker_span = rightmost_face_edge - leftmost_face_edge` (face x + face width for each speaker)
       - If `speaker_span <= 960 - 80` (880px): use ONE centered crop covering both speakers. Set `crop_region` at segment level (no `sub_segments`). The wide shot is meant to show both people — do NOT isolate one.
+      - **Center the crop on the speakers**: `crop_x = speaker_center - crop_width / 2`. Do NOT offset the crop toward one side. Both speakers should have roughly equal margin.
       - If speakers are too far apart: produce `sub_segments` with minimum 5-second duration. Merge short speaker turns (< 5s) into the preceding sub_segment.
     - For `speaker_focus`: use the face centroid from `face-position-map.json` as the crop x offset. **Never hardcode x=280**.
     - For `grid`: map active speaker from timeline to the quadrant containing their face.
     - Include `representative_frame` path for each segment (used by Stage 6 for post-encode quality checks).
 
-12. **Predict upscale quality** for each proposed crop:
+13. **Predict upscale quality** for each proposed crop:
     ```bash
     python scripts/check_upscale_quality.py --predict --crop-width <W> --target-width 1080
     ```
     Flag segments with `quality: "degraded"` or `"unacceptable"`. Include predictions in `layout-analysis.json`.
 
-13. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
+14. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
 
-14. **Output valid JSON** as `layout-analysis.json`.
+15. **Output valid JSON** as `layout-analysis.json`.
 
 ## Fallback Behavior
 
