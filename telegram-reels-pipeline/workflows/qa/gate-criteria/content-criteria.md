@@ -2,19 +2,19 @@
 
 ## Evaluation Dimensions
 
-### Dimension 1: Description Count and Quality (weight: 30/100)
+### Dimension 1: Description Count and Quality (weight: 25/100)
 - **Pass**: Exactly 3 descriptions, each under 2200 characters, each with distinct tone
 - **Rework**: Wrong number of descriptions (not exactly 3), or descriptions exceed 2200 chars
 - **Fail**: No descriptions or descriptions are empty strings
 - **Prescriptive fix template**: "Produce exactly 3 descriptions. Current count: {count}. Each must be under 2200 characters. Description {n} is {length} chars (over limit by {excess})."
 
-### Dimension 2: Hashtag Compliance (weight: 25/100)
+### Dimension 2: Hashtag Compliance (weight: 20/100)
 - **Pass**: 10-15 hashtags, all starting with #, mix of broad and niche
 - **Rework**: Hashtag count outside 10-15 range, or some hashtags missing # prefix
 - **Fail**: No hashtags or fewer than 5
 - **Prescriptive fix template**: "Add {needed} more hashtags to reach minimum of 10. Current count: {count}. Ensure all hashtags start with #. Missing # on: {invalid_tags}"
 
-### Dimension 3: Music Suggestion (weight: 20/100)
+### Dimension 3: Music Suggestion (weight: 15/100)
 - **Pass**: `music_suggestion` field present as a non-empty singular string describing mood and genre
 - **Rework**: Field is empty, or uses wrong field name (`music_suggestions` plural)
 - **Fail**: Field is missing entirely or is an array instead of string
@@ -31,6 +31,17 @@
 - **Rework**: Content is generic and could apply to any podcast clip
 - **Fail**: Content is about a completely different topic than the selected moment
 - **Prescriptive fix template**: "Descriptions must reference the specific content of the selected moment. Current descriptions are too generic. Reference key quotes or themes from the transcript."
+
+### Dimension 6: Publishing Assets (weight: 15/100)
+
+**Only evaluated when `publishing_language` is provided in evaluation context.** If not provided, this dimension scores 100% automatically.
+
+**CRITICAL**: When `publishing_language` IS provided, this dimension is strictly enforced. A missing `publishing-assets.json` file is an automatic FAIL — not a minor issue, not a rework. The entire purpose of this dimension is to ensure the agent produces the localized output file.
+
+- **Pass**: `publishing-assets.json` exists as a SEPARATE file (not inside content.json) with: descriptions matching `publishing_language` (each with `language` and `text` fields), localized hashtags (10-15, each starting with #), and 1-4 Veo 3 prompts with unique variants from allowed set (intro/broll/outro/transition) including a required `broll` variant. Number of description variants matches `publishing_description_variants` from evaluation context.
+- **Rework**: File exists but has issues: language mismatch in descriptions, fewer description variants than requested, missing non-broll variants that would enhance the package, hashtag count outside 10-15 range
+- **Fail**: `publishing-assets.json` MISSING when `publishing_language` is configured, OR wrong JSON structure, OR no `broll` variant, OR variant not from allowed set, OR empty descriptions/hashtags. **Score this dimension 0 and set overall decision to FAIL.**
+- **Prescriptive fix template**: "MANDATORY: publishing_language is '{lang}'. You MUST create publishing-assets.json (separate file, not inside content.json) with: (1) {n} descriptions in {lang} with language/text fields, (2) 10-15 localized hashtags starting with #, (3) 1-4 Veo 3 prompts (broll required, variants from intro/broll/outro/transition). Use the Write tool to create this file."
 
 ## Critical Field Validation
 

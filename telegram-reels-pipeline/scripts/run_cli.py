@@ -415,6 +415,7 @@ async def _run_stages(
     stage_runner: StageRunner,
     workspace: Path,
     artifacts: tuple[Path, ...],
+    settings: PipelineSettings,
 ) -> tuple[Path, ...]:
     """Execute pipeline stages sequentially with router elicitation support."""
     for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
@@ -437,6 +438,10 @@ async def _run_stages(
                 elicitation["telegram_message"] = f"{url} {message}"
             else:
                 elicitation["telegram_message"] = message
+        elif stage == PipelineStage.CONTENT:
+            if settings.publishing_language:
+                elicitation["publishing_language"] = settings.publishing_language
+                elicitation["publishing_description_variants"] = str(settings.publishing_description_variants)
 
         criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
         gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
@@ -585,6 +590,7 @@ async def run_pipeline(
             stage_runner,
             workspace,
             artifacts,
+            settings,
         )
     finally:
         cli_backend.set_workspace(None)

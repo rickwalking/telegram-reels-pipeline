@@ -35,4 +35,10 @@ class PipelineSettings(BaseSettings):
     default_topic_focus: str = Field(default="", description="Default topic focus when user skips elicitation")
     default_duration_preference: str = Field(default="60-90s", description="Default clip duration preference")
 
+    # Publishing
+    publishing_language: str = Field(
+        default="", description="Target language for descriptions/hashtags (e.g., pt-BR). Empty = skip"
+    )
+    publishing_description_variants: int = Field(default=3, ge=1, le=10, description="Number of description variants")
+
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

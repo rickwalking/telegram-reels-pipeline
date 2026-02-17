@@ -15,6 +15,7 @@ from pipeline.domain.models import AgentRequest, ContentPackage, PipelineEvent, 
 from pipeline.domain.types import GateName, RunId
 
 if TYPE_CHECKING:
+    from pipeline.app.settings import PipelineSettings
     from pipeline.application.delivery_handler import DeliveryHandler
     from pipeline.application.event_bus import EventBus
     from pipeline.application.stage_runner import StageRunner
@@ -70,6 +71,7 @@ class PipelineRunner:
         delivery_handler: DeliveryHandler | None,
         workflows_dir: Path,
         cli_backend: CliBackend | None = None,
+        settings: PipelineSettings | None = None,
     ) -> None:
         self._stage_runner = stage_runner
         self._state_store = state_store
@@ -77,6 +79,7 @@ class PipelineRunner:
         self._delivery_handler = delivery_handler
         self._workflows_dir = workflows_dir
         self._cli_backend = cli_backend
+        self._settings = settings
 
     async def run(self, item: QueueItem, workspace: Path) -> RunState:
         """Execute a full pipeline run for a queue item.
@@ -411,6 +414,10 @@ class PipelineRunner:
         elicitation: dict[str, str] = {}
         if item.topic_focus:
             elicitation["topic_focus"] = item.topic_focus
+
+        if stage == PipelineStage.CONTENT and self._settings is not None and self._settings.publishing_language:
+            elicitation["publishing_language"] = self._settings.publishing_language
+            elicitation["publishing_description_variants"] = str(self._settings.publishing_description_variants)
 
         return AgentRequest(
             stage=stage,

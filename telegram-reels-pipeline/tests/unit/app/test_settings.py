@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+from pydantic import ValidationError
+
 from pipeline.app.settings import PipelineSettings
 
 
@@ -35,3 +38,30 @@ class TestPipelineSettings:
         settings = PipelineSettings()
         assert settings.telegram_token == ""
         assert settings.telegram_chat_id == ""
+
+    def test_publishing_defaults(self) -> None:
+        settings = PipelineSettings()
+        assert settings.publishing_language == ""
+        assert settings.publishing_description_variants == 3
+
+    def test_publishing_custom_values(self) -> None:
+        settings = PipelineSettings(
+            publishing_language="pt-BR",
+            publishing_description_variants=5,
+        )
+        assert settings.publishing_language == "pt-BR"
+        assert settings.publishing_description_variants == 5
+
+    def test_publishing_variants_min_max(self) -> None:
+        settings_min = PipelineSettings(publishing_description_variants=1)
+        assert settings_min.publishing_description_variants == 1
+        settings_max = PipelineSettings(publishing_description_variants=10)
+        assert settings_max.publishing_description_variants == 10
+
+    def test_publishing_variants_below_min_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            PipelineSettings(publishing_description_variants=0)
+
+    def test_publishing_variants_above_max_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            PipelineSettings(publishing_description_variants=11)

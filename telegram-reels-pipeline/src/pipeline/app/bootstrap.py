@@ -133,6 +133,7 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
         delivery_handler=delivery_handler,
         workflows_dir=settings.workflows_dir,
         cli_backend=cli_backend,
+        settings=settings,
     )
 
     # Revision handling
