@@ -51,7 +51,9 @@ Output valid JSON written to `encoding-plan.json`:
 |-------|------|-------------|
 | `commands` | array | FFmpeg command specifications for each segment |
 | `commands[].input` | string | Path to source video |
-| `commands[].crop_filter` | string | FFmpeg filter string: `crop=W:H:X:Y,scale=1080:1920` |
+| `commands[].crop_filter` | string | FFmpeg filter string: `crop=W:H:X:Y,scale=1080:1920` (for single-chain crops) |
+| `commands[].filter_type` | string | `"crop"` (default single-chain) or `"filter_complex"` (split-screen, PiP) |
+| `commands[].filter_complex` | string or null | Full filter_complex graph (used when `filter_type` is `"filter_complex"`) |
 | `commands[].output` | string | Path for the encoded segment output |
 | `commands[].start_seconds` | float | Segment start timestamp |
 | `commands[].end_seconds` | float | Segment end timestamp |
@@ -66,6 +68,7 @@ Output valid JSON written to `encoding-plan.json`:
 4. **Verify crop coordinates are within bounds**. Crop region (x + width) must not exceed source width, (y + height) must not exceed source height.
 5. **Handle layout transitions** by splitting into separate segments at transition boundaries.
 6. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
+7. **Use `filter_complex` for multi-stream layouts**. When `framing_style` is `split_horizontal` or `pip` (from elicitation context), use `filter_type: "filter_complex"` with the full filter graph from `crop-playbook.md`. For standard single-crop layouts, use `filter_type: "crop"` with the existing `crop_filter` field.
 
 ## Knowledge Files
 

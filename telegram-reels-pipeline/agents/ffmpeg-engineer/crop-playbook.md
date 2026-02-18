@@ -102,6 +102,37 @@ crop_filter: crop=960:540:{qx}:{qy},scale=1080:1920:flags=lanczos,setsar=1
 
 **Selection rule**: Use `speaker-timeline.json` to determine the active speaker. Map to the quadrant containing that speaker's face from `face-position-map.json`. If multiple speakers are active, prefer the quadrant with the most recent speaker change.
 
+### `split_horizontal` (framing style)
+
+Two-speaker horizontal split: each speaker gets their own 1080x960 half, stacked vertically into a 1080x1920 output.
+
+**When to use**: `framing_style=split_horizontal` is set in elicitation context (from CLI `--style split` or router keyword detection).
+
+**Filter template (single-pass filter_complex)**:
+```
+split=2[top][bot];
+[top]crop={W}:1080:{x_top}:0,scale=1080:960:flags=lanczos[t];
+[bot]crop={W}:1080:{x_bot}:0,scale=1080:960:flags=lanczos[b];
+[t][b]vstack,setsar=1
+```
+
+**Coordinate computation**:
+- `x_top`: center on `Speaker_Left` face from `face-position-map.json` → `clamp(face_center_x - W/2, 0, source_width - W)`
+- `x_bot`: center on `Speaker_Right` face from `face-position-map.json` → `clamp(face_center_x - W/2, 0, source_width - W)`
+- Independent crop per half normalizes vertical face positions — each speaker is centered in their own half
+- Crop width `W`: use 960px for a balanced view (upscale factor 1.125x), or 608px for a tight face crop (upscale factor 1.776x). Prefer 960px unless quality check flags degradation.
+
+**Speaker switching in split-screen**:
+- Split-screen shows BOTH speakers simultaneously — no crop switching needed within a segment
+- Use `speaker-timeline.json` to optionally highlight the active speaker (brightness/dim effect in 13-1b)
+
+**Fallback rules**:
+- **1 speaker only**: cinematic solo crop instead of split-screen (608px face-centered, `crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1`)
+- **3+ speakers**: wide crop fallback — use the standard `side_by_side` both-visible crop. Log: `"split_horizontal fallback: 3+ speakers, using wide crop"`
+- **No face data**: use center-frame crops for each half (top: `x=0`, bottom: `x=960`). QA flags REWORK.
+
+**Output dimensions**: The final `vstack` output is 1080x1920 with SAR 1:1 — compliant with 9:16 requirements.
+
 ### Unknown Layouts (from Knowledge Base)
 
 For layouts stored via LayoutEscalationHandler:
