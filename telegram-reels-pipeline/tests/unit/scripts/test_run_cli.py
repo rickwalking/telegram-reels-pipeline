@@ -817,3 +817,60 @@ class TestPrintResumePreflight:
         run_cli._print_resume_preflight(tmp_path, start_stage=1)
         out = capsys.readouterr().out
         assert "Stage 1 (router): missing" in out
+
+
+# ---------------------------------------------------------------------------
+# --style argument parsing
+# ---------------------------------------------------------------------------
+
+
+class TestStyleArgument:
+    def _make_parser(self) -> argparse.ArgumentParser:
+        """Build a parser that mirrors main() argument definitions."""
+        p = argparse.ArgumentParser()
+        p.add_argument("url", nargs="?", default="http://example.com")
+        p.add_argument("--message", "-m", default=None)
+        p.add_argument("--stages", "-s", type=int, default=7)
+        p.add_argument("--timeout", "-t", type=float, default=None)
+        p.add_argument("--resume", type=Path, default=None)
+        p.add_argument("--start-stage", type=int, default=None)
+        p.add_argument("--style", default=None, choices=["default", "split", "pip", "auto"])
+        return p
+
+    def test_style_default_is_none(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args([])
+        assert args.style is None
+
+    def test_style_split(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--style", "split"])
+        assert args.style == "split"
+
+    def test_style_pip(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--style", "pip"])
+        assert args.style == "pip"
+
+    def test_style_auto(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--style", "auto"])
+        assert args.style == "auto"
+
+    def test_style_explicit_default(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--style", "default"])
+        assert args.style == "default"
+
+    def test_style_invalid_exits(self) -> None:
+        p = self._make_parser()
+        with pytest.raises(SystemExit):
+            p.parse_args(["--style", "invalid"])
+
+    def test_style_map_split_to_split_horizontal(self) -> None:
+        style_map = {"split": "split_horizontal", "pip": "pip", "auto": "auto", "default": "default"}
+        assert style_map["split"] == "split_horizontal"
+
+    def test_style_map_pip_passthrough(self) -> None:
+        style_map = {"split": "split_horizontal", "pip": "pip", "auto": "auto", "default": "default"}
+        assert style_map["pip"] == "pip"

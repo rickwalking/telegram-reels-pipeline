@@ -39,6 +39,18 @@ class TestPipelineSettings:
         assert settings.telegram_token == ""
         assert settings.telegram_chat_id == ""
 
+    def test_framing_style_default(self) -> None:
+        settings = PipelineSettings()
+        assert settings.default_framing_style == "default"
+
+    def test_framing_style_custom(self) -> None:
+        settings = PipelineSettings(default_framing_style="split_horizontal")
+        assert settings.default_framing_style == "split_horizontal"
+
+    def test_framing_style_invalid_raises(self) -> None:
+        with pytest.raises(ValidationError):
+            PipelineSettings(default_framing_style="invalid_style")
+
     def test_publishing_defaults(self) -> None:
         settings = PipelineSettings()
         assert settings.publishing_language == ""

@@ -25,6 +25,7 @@ You MUST output valid JSON. Two schemas depending on request type:
   "url": "https://youtube.com/watch?v=...",
   "topic_focus": "AI safety debate",
   "duration_preference": 75,
+  "framing_style": "default",
   "revision_type": null,
   "routing_target": null,
   "elicitation_questions": []
@@ -51,6 +52,7 @@ Note: `revision_type` uses lowercase snake_case enum **values** (e.g., `extend_m
 | `url` | string or null | Valid YouTube URL extracted from message |
 | `topic_focus` | string or null | User-specified topic focus, or null for auto-detect |
 | `duration_preference` | int | Preferred segment length in seconds (default: 75) |
+| `framing_style` | string | Framing style for the reel: `default`, `split_horizontal`, `pip`, `auto` (default: `default`) |
 | `revision_type` | string or null | One of: `extend_moment`, `fix_framing`, `different_moment`, `add_context` (lowercase enum values) |
 | `routing_target` | string or null | Pipeline stage to re-execute for revisions |
 | `revision_context` | string or null | Interpreted description of what the user wants changed |
@@ -63,6 +65,7 @@ Note: `revision_type` uses lowercase snake_case enum **values** (e.g., `extend_m
 3. **Use defaults after 60 seconds** of no user response to elicitation questions.
 4. **Classify revision requests** by matching natural language to RevisionType enum values. See `revision-interpretation.md` for mapping rules.
 5. **Keep output concise**. Do not include explanatory text outside the JSON block.
+6. **Parse style keywords** from the user message. Map "split screen", "split", "side by side" → `split_horizontal`; "pip", "picture in picture", "overlay" → `pip`; "auto style", "auto", "smart" → `auto`. If `framing_style` is provided in elicitation context, use that value directly (CLI override). Default: `default`.
 
 ## Smart Defaults
 

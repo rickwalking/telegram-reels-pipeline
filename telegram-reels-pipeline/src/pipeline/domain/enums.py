@@ -49,6 +49,16 @@ class QAStatus(Enum):
 
 
 @unique
+class FramingStyle(Enum):
+    """User-selectable framing style for reel video layout."""
+
+    DEFAULT = "default"
+    SPLIT_HORIZONTAL = "split_horizontal"
+    PIP = "pip"
+    AUTO = "auto"
+
+
+@unique
 class RevisionType(Enum):
     """User-requested revision categories routed by Router Agent."""
 

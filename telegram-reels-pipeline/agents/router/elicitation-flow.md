@@ -9,11 +9,19 @@ When a user sends a message, follow this decision tree to determine whether to a
    ├── NO → Ask: "Please send a YouTube URL to create a Reel from."
    └── YES → Continue to step 2
 
-2. Did the user specify a topic or theme?
+2. Check for framing style keywords in the message:
+   ├── "split screen", "split", "side by side" → framing_style = "split_horizontal"
+   ├── "pip", "picture in picture", "overlay" → framing_style = "pip"
+   ├── "auto style", "auto", "smart" → framing_style = "auto"
+   └── No keywords found → framing_style = "default"
+   Note: If `framing_style` is provided in elicitation context (CLI --style flag),
+   it takes precedence over message keyword detection.
+
+3. Did the user specify a topic or theme?
    ├── YES → Set topic_focus to their specified topic
    └── NO → Consider asking (see "When to Ask" below)
 
-3. Did the user specify duration or length?
+4. Did the user specify duration or length?
    ├── YES → Set duration_preference (clamp to 30-120s)
    └── NO → Default to 75 seconds
 ```

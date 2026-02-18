@@ -121,16 +121,19 @@ development_status:
   epic-11: in-progress
   11-1-publishing-assets-localization-veo3-prompts: in-progress
 
-  epic-12: backlog
-  12-1-style-selection-passthrough: backlog
+  epic-12: in-progress
+  12-1-style-selection-passthrough: in-progress
   12-2-horizontal-split-screen: backlog
   12-3-pip-overlay: backlog
   12-4-pi-performance-benchmark-gate: backlog
   12-5-screen-share-detection: backlog
 
   epic-13: backlog
-  13-1-dynamic-style-switching-fsm: backlog
+  13-1a-dynamic-style-fsm: backlog
+  13-1b-dynamic-visual-effects: backlog
   13-2-style-transitions-journal: backlog
   13-3-auto-style-intelligence: backlog
-  13-4-advanced-visual-effects: backlog
+  13-4a-animated-transitions-xfade: backlog
+  13-4b-content-overlays: backlog
+  13-4c-screen-share-ocr-waveform: backlog
   13-5-style-gallery-preview: backlog

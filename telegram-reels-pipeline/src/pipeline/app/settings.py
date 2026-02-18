@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -34,6 +35,12 @@ class PipelineSettings(BaseSettings):
     # Elicitation defaults
     default_topic_focus: str = Field(default="", description="Default topic focus when user skips elicitation")
     default_duration_preference: str = Field(default="60-90s", description="Default clip duration preference")
+
+    # Framing
+    default_framing_style: Literal["default", "split_horizontal", "pip", "auto"] = Field(
+        default="default",
+        description="Default framing style (default, split_horizontal, pip, auto)",
+    )
 
     # Publishing
     publishing_language: str = Field(

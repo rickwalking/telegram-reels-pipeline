@@ -11,13 +11,14 @@ Parse the user's Telegram message to extract a YouTube URL, determine if elicita
 
 ## Expected Outputs
 
-- **router-output.json**: Structured JSON with extracted URL, topic focus, and routing decisions
+- **router-output.json**: Structured JSON with extracted URL, topic focus, framing style, and routing decisions
 
 ```json
 {
   "url": "https://youtube.com/watch?v=...",
   "topic_focus": "AI safety debate",
   "duration_preference": 75,
+  "framing_style": "default",
   "revision_type": null,
   "routing_target": null,
   "elicitation_questions": []
@@ -28,9 +29,10 @@ Parse the user's Telegram message to extract a YouTube URL, determine if elicita
 
 1. **Extract the YouTube URL** from the user's message. Validate it is a proper YouTube URL (youtube.com/watch, youtu.be, etc.).
 2. **Check if this is a revision request**. If prior run context exists and the message matches revision patterns, classify the RevisionType and set routing_target. See `revision-interpretation.md`.
-3. **Determine elicitation needs**. If the URL is from a long video (> 60 min) and no topic focus is specified, consider asking a topic question. See `elicitation-flow.md`.
-4. **Apply smart defaults** for any unspecified fields: topic_focus=null, duration_preference=75.
-5. **Output valid JSON** matching the schema above.
+3. **Extract framing style**. Check the user's message for style keywords ("split screen", "pip", "picture in picture", "auto", etc.) and set `framing_style` accordingly. If `framing_style` is provided in elicitation context (from CLI `--style` flag), use that value as an override. See `elicitation-flow.md` step 2.
+4. **Determine elicitation needs**. If the URL is from a long video (> 60 min) and no topic focus is specified, consider asking a topic question. See `elicitation-flow.md`.
+5. **Apply smart defaults** for any unspecified fields: topic_focus=null, duration_preference=75, framing_style="default".
+6. **Output valid JSON** matching the schema above.
 
 ## Constraints
 

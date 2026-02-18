@@ -416,6 +416,7 @@ async def _run_stages(
     workspace: Path,
     artifacts: tuple[Path, ...],
     settings: PipelineSettings,
+    framing_style: str | None = None,
 ) -> tuple[Path, ...]:
     """Execute pipeline stages sequentially with router elicitation support."""
     for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
@@ -442,6 +443,9 @@ async def _run_stages(
             if settings.publishing_language:
                 elicitation["publishing_language"] = settings.publishing_language
                 elicitation["publishing_description_variants"] = str(settings.publishing_description_variants)
+
+        if framing_style:
+            elicitation["framing_style"] = framing_style
 
         criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
         gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
@@ -517,6 +521,7 @@ async def run_pipeline(
     timeout_seconds: float | None = None,
     resume_workspace: Path | None = None,
     start_stage: int = 1,
+    framing_style: str | None = None,
 ) -> None:
     settings = PipelineSettings()
     project_root = Path(__file__).resolve().parent.parent
@@ -525,6 +530,8 @@ async def run_pipeline(
     agents_dir = project_root / "agents"
 
     effective_timeout = timeout_seconds or settings.agent_timeout_seconds
+    settings_style = settings.default_framing_style if settings.default_framing_style != "default" else None
+    effective_style = framing_style or settings_style
 
     cli_backend = CliBackend(
         work_dir=project_root,
@@ -591,6 +598,7 @@ async def run_pipeline(
             workspace,
             artifacts,
             settings,
+            framing_style=effective_style,
         )
     finally:
         cli_backend.set_workspace(None)
@@ -618,12 +626,21 @@ def main() -> None:
     parser.add_argument("--timeout", "-t", type=float, default=None, help="Agent timeout in seconds")
     parser.add_argument("--resume", type=Path, default=None, help="Resume from existing workspace path")
     parser.add_argument("--start-stage", type=int, default=None, help="Stage number to start from (1-7, default: 1)")
+    parser.add_argument(
+        "--style", default=None, choices=["default", "split", "pip", "auto"], help="Framing style for the reel"
+    )
     args = parser.parse_args()
 
     _validate_cli_args(args, arg_parser=parser)
 
+    # Map CLI shorthand to domain enum values
+    style_map = {"split": "split_horizontal", "pip": "pip", "auto": "auto", "default": "default"}
+    framing_style = style_map.get(args.style) if args.style else None
+
     message = args.message if args.message else args.url
-    asyncio.run(run_pipeline(args.url, message, args.stages, args.timeout, args.resume, args.start_stage))
+    asyncio.run(
+        run_pipeline(args.url, message, args.stages, args.timeout, args.resume, args.start_stage, framing_style)
+    )
 
 
 if __name__ == "__main__":

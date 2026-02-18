@@ -1,6 +1,6 @@
 """Tests for domain enums — member coverage and stage ordering."""
 
-from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus, RevisionType
+from pipeline.domain.enums import EscalationState, FramingStyle, PipelineStage, QADecision, QAStatus, RevisionType
 
 
 class TestPipelineStage:
@@ -62,6 +62,21 @@ class TestEscalationState:
 
     def test_member_count(self) -> None:
         assert len(EscalationState) == 4
+
+
+class TestFramingStyle:
+    def test_has_all_expected_members(self) -> None:
+        expected = {"DEFAULT", "SPLIT_HORIZONTAL", "PIP", "AUTO"}
+        actual = {member.name for member in FramingStyle}
+        assert actual == expected
+
+    def test_member_count(self) -> None:
+        assert len(FramingStyle) == 4
+
+    def test_values_are_snake_case(self) -> None:
+        for member in FramingStyle:
+            assert member.value == member.value.lower(), f"{member.name} value should be lowercase"
+            assert " " not in member.value, f"{member.name} value should not contain spaces"
 
 
 class TestRevisionType:

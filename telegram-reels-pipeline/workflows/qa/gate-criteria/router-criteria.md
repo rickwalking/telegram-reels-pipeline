@@ -9,10 +9,10 @@
 - **Prescriptive fix template**: "Ensure output contains 'url' field with a valid YouTube URL matching pattern: youtube.com/watch?v= or youtu.be/"
 
 ### Dimension 2: Output Structure (weight: 25/100)
-- **Pass**: Output JSON is valid and contains all required fields (url, topic_focus, duration_preference)
+- **Pass**: Output JSON is valid and contains all required fields (url, topic_focus, duration_preference, framing_style)
 - **Rework**: JSON is valid but missing optional fields or has extra unexpected fields
 - **Fail**: Output is not valid JSON
-- **Prescriptive fix template**: "Output must be valid JSON with required fields: url, topic_focus, duration_preference. Current output is missing: {missing_fields}"
+- **Prescriptive fix template**: "Output must be valid JSON with required fields: url, topic_focus, duration_preference, framing_style. Current output is missing: {missing_fields}"
 
 ### Dimension 3: Elicitation Quality (weight: 20/100)
 - **Pass**: 0-2 relevant elicitation questions, or smart defaults applied correctly
@@ -40,6 +40,7 @@ Output JSON must contain:
 - `url`: string or null (valid YouTube URL for new requests)
 - `topic_focus`: string or null
 - `duration_preference`: integer (30-120)
+- `framing_style`: string (one of: `default`, `split_horizontal`, `pip`, `auto`)
 - `revision_type`: string or null (one of: `extend_moment`, `fix_framing`, `different_moment`, `add_context` — lowercase enum values)
 - `routing_target`: string or null
 - `elicitation_questions`: array (0-2 items)
