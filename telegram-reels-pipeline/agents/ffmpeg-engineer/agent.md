@@ -55,6 +55,7 @@ Output valid JSON written to `encoding-plan.json`:
 | `commands[].filter_type` | string | `"crop"` (default single-chain) or `"filter_complex"` (split-screen, PiP) |
 | `commands[].filter_complex` | string or null | Full filter_complex graph (used when `filter_type` is `"filter_complex"`) |
 | `commands[].output` | string | Path for the encoded segment output |
+| `commands[].framing_style_state` | string or null | Active framing FSM state for this segment (`solo`, `duo_split`, `duo_pip`, `screen_share`, `cinematic_solo`). Set when `framing_style` is `auto`. |
 | `commands[].start_seconds` | float | Segment start timestamp |
 | `commands[].end_seconds` | float | Segment end timestamp |
 | `segment_paths` | array | Ordered list of all output segment paths |
@@ -69,6 +70,7 @@ Output valid JSON written to `encoding-plan.json`:
 5. **Handle layout transitions** by splitting into separate segments at transition boundaries.
 6. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
 7. **Use `filter_complex` for multi-stream layouts**. When `framing_style` is `split_horizontal` or `pip` (from elicitation context), use `filter_type: "filter_complex"` with the full filter graph from `crop-playbook.md`. For standard single-crop layouts, use `filter_type: "crop"` with the existing `crop_filter` field.
+8. **Dynamic style switching (`framing_style: auto`)**. When `framing_style` is `auto`, apply the Framing Style FSM to determine the active style per segment. Walk segments in order and emit FSM events based on face-count changes (`face_count_increase`, `face_count_decrease`) and layout type (`screen_share_detected`, `screen_share_ended`). Record the resolved `framing_style_state` on each command in `encoding-plan.json`. Use the corresponding filter template from `crop-playbook.md` for each state: `solo`/`cinematic_solo` → standard crop, `duo_split` → split-screen, `duo_pip` → PiP, `screen_share` → content-top/speaker-bottom split.
 
 ## Knowledge Files
 

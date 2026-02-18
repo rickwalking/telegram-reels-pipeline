@@ -1,6 +1,6 @@
 """FSM transition table and guard definitions — pure data, no I/O."""
 
-from pipeline.domain.enums import PipelineStage
+from pipeline.domain.enums import FramingStyleState, PipelineStage
 
 # Transition table: (current_stage, event) -> next_stage
 # Events: qa_pass, qa_rework, qa_fail, stage_complete, escalation_requested, escalation_resolved
@@ -43,6 +43,53 @@ TRANSITIONS: dict[tuple[PipelineStage, str], PipelineStage] = {
     (PipelineStage.ASSEMBLY, "unrecoverable_error"): PipelineStage.FAILED,
     (PipelineStage.DELIVERY, "unrecoverable_error"): PipelineStage.FAILED,
 }
+
+# Framing style FSM — transitions driven by face-count changes and user requests.
+# Events: face_count_increase, face_count_decrease, pip_requested, split_requested,
+#         screen_share_detected, screen_share_ended
+FRAMING_TRANSITIONS: dict[tuple[FramingStyleState, str], FramingStyleState] = {
+    # Solo ↔ Duo transitions
+    (FramingStyleState.SOLO, "face_count_increase"): FramingStyleState.DUO_SPLIT,
+    (FramingStyleState.DUO_SPLIT, "face_count_decrease"): FramingStyleState.SOLO,
+    (FramingStyleState.DUO_PIP, "face_count_decrease"): FramingStyleState.SOLO,
+    # Duo mode switching
+    (FramingStyleState.DUO_SPLIT, "pip_requested"): FramingStyleState.DUO_PIP,
+    (FramingStyleState.DUO_PIP, "split_requested"): FramingStyleState.DUO_SPLIT,
+    # Screen share transitions
+    (FramingStyleState.SOLO, "screen_share_detected"): FramingStyleState.SCREEN_SHARE,
+    (FramingStyleState.DUO_SPLIT, "screen_share_detected"): FramingStyleState.SCREEN_SHARE,
+    (FramingStyleState.DUO_PIP, "screen_share_detected"): FramingStyleState.SCREEN_SHARE,
+    (FramingStyleState.SCREEN_SHARE, "face_count_increase"): FramingStyleState.DUO_SPLIT,
+    (FramingStyleState.SCREEN_SHARE, "screen_share_ended"): FramingStyleState.SOLO,
+    # Cinematic solo (single speaker, high-quality close-up)
+    (FramingStyleState.SOLO, "cinematic_requested"): FramingStyleState.CINEMATIC_SOLO,
+    (FramingStyleState.CINEMATIC_SOLO, "face_count_increase"): FramingStyleState.DUO_SPLIT,
+    (FramingStyleState.CINEMATIC_SOLO, "screen_share_detected"): FramingStyleState.SCREEN_SHARE,
+}
+
+# Valid framing events
+FRAMING_EVENTS: frozenset[str] = frozenset(
+    {
+        "face_count_increase",
+        "face_count_decrease",
+        "pip_requested",
+        "split_requested",
+        "screen_share_detected",
+        "screen_share_ended",
+        "cinematic_requested",
+    }
+)
+
+
+def get_framing_state(current: FramingStyleState, event: str) -> FramingStyleState | None:
+    """Look up the next framing state for a given (current, event) pair. Returns None if invalid."""
+    return FRAMING_TRANSITIONS.get((current, event))
+
+
+def is_valid_framing_transition(current: FramingStyleState, event: str) -> bool:
+    """Check whether a framing transition is defined in the table."""
+    return (current, event) in FRAMING_TRANSITIONS
+
 
 # Ordered list of processing stages (excludes terminal states)
 STAGE_ORDER: list[PipelineStage] = [

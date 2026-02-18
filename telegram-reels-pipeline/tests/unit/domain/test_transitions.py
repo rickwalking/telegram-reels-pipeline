@@ -1,13 +1,17 @@
 """Tests for FSM transition table — completeness, reachability, and guard logic."""
 
-from pipeline.domain.enums import PipelineStage
+from pipeline.domain.enums import FramingStyleState, PipelineStage
 from pipeline.domain.transitions import (
+    FRAMING_EVENTS,
+    FRAMING_TRANSITIONS,
     MAX_QA_ATTEMPTS,
     STAGE_ORDER,
     TERMINAL_STAGES,
     TRANSITIONS,
+    get_framing_state,
     get_next_stage,
     is_terminal,
+    is_valid_framing_transition,
     is_valid_transition,
 )
 
@@ -115,6 +119,114 @@ class TestHelperFunctions:
 
     def test_get_next_stage_invalid_returns_none(self) -> None:
         assert get_next_stage(PipelineStage.COMPLETED, "qa_pass") is None
+
+
+class TestFramingTransitions:
+    def test_solo_to_duo_split_on_face_increase(self) -> None:
+        assert get_framing_state(FramingStyleState.SOLO, "face_count_increase") == FramingStyleState.DUO_SPLIT
+
+    def test_duo_split_to_solo_on_face_decrease(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_SPLIT, "face_count_decrease") == FramingStyleState.SOLO
+
+    def test_duo_pip_to_solo_on_face_decrease(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_PIP, "face_count_decrease") == FramingStyleState.SOLO
+
+    def test_duo_split_to_pip_on_request(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_SPLIT, "pip_requested") == FramingStyleState.DUO_PIP
+
+    def test_duo_pip_to_split_on_request(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_PIP, "split_requested") == FramingStyleState.DUO_SPLIT
+
+    def test_solo_to_screen_share(self) -> None:
+        assert get_framing_state(FramingStyleState.SOLO, "screen_share_detected") == FramingStyleState.SCREEN_SHARE
+
+    def test_duo_split_to_screen_share(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_SPLIT, "screen_share_detected") == FramingStyleState.SCREEN_SHARE
+
+    def test_duo_pip_to_screen_share(self) -> None:
+        assert get_framing_state(FramingStyleState.DUO_PIP, "screen_share_detected") == FramingStyleState.SCREEN_SHARE
+
+    def test_screen_share_to_duo_split_on_face_increase(self) -> None:
+        assert get_framing_state(FramingStyleState.SCREEN_SHARE, "face_count_increase") == FramingStyleState.DUO_SPLIT
+
+    def test_screen_share_to_solo_on_end(self) -> None:
+        assert get_framing_state(FramingStyleState.SCREEN_SHARE, "screen_share_ended") == FramingStyleState.SOLO
+
+    def test_solo_to_cinematic_on_request(self) -> None:
+        assert get_framing_state(FramingStyleState.SOLO, "cinematic_requested") == FramingStyleState.CINEMATIC_SOLO
+
+    def test_cinematic_to_duo_split_on_face_increase(self) -> None:
+        assert get_framing_state(FramingStyleState.CINEMATIC_SOLO, "face_count_increase") == FramingStyleState.DUO_SPLIT
+
+    def test_cinematic_to_screen_share(self) -> None:
+        result = get_framing_state(FramingStyleState.CINEMATIC_SOLO, "screen_share_detected")
+        assert result == FramingStyleState.SCREEN_SHARE
+
+    def test_invalid_transition_returns_none(self) -> None:
+        assert get_framing_state(FramingStyleState.SOLO, "pip_requested") is None
+
+    def test_is_valid_framing_transition_true(self) -> None:
+        assert is_valid_framing_transition(FramingStyleState.SOLO, "face_count_increase")
+
+    def test_is_valid_framing_transition_false(self) -> None:
+        assert not is_valid_framing_transition(FramingStyleState.SOLO, "nonexistent_event")
+
+    def test_all_transition_keys_use_valid_events(self) -> None:
+        for _state, event in FRAMING_TRANSITIONS:
+            assert event in FRAMING_EVENTS, f"Event '{event}' not in FRAMING_EVENTS"
+
+    def test_all_transition_values_are_framing_states(self) -> None:
+        for target in FRAMING_TRANSITIONS.values():
+            assert isinstance(target, FramingStyleState)
+
+    def test_framing_events_count(self) -> None:
+        assert len(FRAMING_EVENTS) == 7
+
+    def test_round_trip_solo_duo_solo(self) -> None:
+        """Solo -> face increase -> DUO_SPLIT -> face decrease -> Solo."""
+        state = FramingStyleState.SOLO
+        state = get_framing_state(state, "face_count_increase")
+        assert state == FramingStyleState.DUO_SPLIT
+        state = get_framing_state(state, "face_count_decrease")
+        assert state == FramingStyleState.SOLO
+
+    def test_round_trip_duo_modes(self) -> None:
+        """DUO_SPLIT -> pip -> DUO_PIP -> split -> DUO_SPLIT."""
+        state = FramingStyleState.DUO_SPLIT
+        state = get_framing_state(state, "pip_requested")
+        assert state == FramingStyleState.DUO_PIP
+        state = get_framing_state(state, "split_requested")
+        assert state == FramingStyleState.DUO_SPLIT
+
+    def test_screen_share_to_duo_via_two_events(self) -> None:
+        """0→2 boundary: screen_share_ended then face_count_increase."""
+        state = FramingStyleState.SCREEN_SHARE
+        state = get_framing_state(state, "screen_share_ended")
+        assert state == FramingStyleState.SOLO
+        state = get_framing_state(state, "face_count_increase")
+        assert state == FramingStyleState.DUO_SPLIT
+
+    def test_screen_share_to_duo_via_direct_face_increase(self) -> None:
+        """0→2 boundary: face_count_increase directly from SCREEN_SHARE."""
+        state = FramingStyleState.SCREEN_SHARE
+        state = get_framing_state(state, "face_count_increase")
+        assert state == FramingStyleState.DUO_SPLIT
+
+    def test_auto_mode_full_scenario(self) -> None:
+        """Simulate auto-mode: solo -> duo -> screen_share -> duo -> solo."""
+        state = FramingStyleState.SOLO
+        # 1 face -> 2 faces
+        state = get_framing_state(state, "face_count_increase")
+        assert state == FramingStyleState.DUO_SPLIT
+        # 2 faces -> 0 faces (screen share)
+        state = get_framing_state(state, "screen_share_detected")
+        assert state == FramingStyleState.SCREEN_SHARE
+        # 0 faces -> 2 faces (direct)
+        state = get_framing_state(state, "face_count_increase")
+        assert state == FramingStyleState.DUO_SPLIT
+        # 2 faces -> 1 face
+        state = get_framing_state(state, "face_count_decrease")
+        assert state == FramingStyleState.SOLO
 
 
 class TestConstants:

@@ -47,9 +47,9 @@ Plan FFmpeg crop and encode operations to convert source video segments into ver
 
 The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** them. After execution, the FFmpeg Engineer **validates** results.
 
-- **Planning phase** (steps 1-9): Produce `encoding-plan.json` with all FFmpeg command specifications.
+- **Planning phase** (steps 1-12): Produce `encoding-plan.json` with all FFmpeg command specifications.
 - **Execution phase**: FFmpegAdapter runs the planned commands.
-- **Validation phase** (steps 10-13): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
+- **Validation phase** (steps 13-16): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
 
 ## Instructions
 
@@ -62,44 +62,57 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 3. **For each segment (or sub-segment)**, verify the proposed crop region contains a face by checking `face-position-map.json` at the segment's timestamps. The proposed crop area must overlap with a detected face. If no face in range:
    - Adjust the crop to center on the **active speaker's face** (use `speaker_face_mapping` from `layout-analysis.json` to preserve speaker identity — do NOT snap to the nearest arbitrary face).
 
-4. **Check `framing_style`** from elicitation context. If `framing_style` is `split_horizontal`, use the split-screen `filter_complex` template from `crop-playbook.md` § `split_horizontal`. If `pip`, use the PiP `filter_complex` template. Otherwise proceed with standard single-chain crop filters.
+4. **Check `framing_style`** from elicitation context. If `framing_style` is `split_horizontal`, use the split-screen `filter_complex` template from `crop-playbook.md` § `split_horizontal`. If `pip`, use the PiP `filter_complex` template. If `auto`, proceed to step 5 for dynamic FSM switching. Otherwise proceed with standard single-chain crop filters.
 
-5. **Build crop filter** for each segment following `crop-playbook.md` **9:16 Compliance** rules. Every segment MUST output SAR 1:1 square pixels at 1080x1920.
+5. **Apply dynamic style FSM** (only when `framing_style` is `auto`). Walk segments in order and track the Framing Style FSM state:
+   - **Start state**: `solo` (1 face), `duo_split` (2+ faces), or `screen_share` (0 faces) based on the first segment's face count from `face-position-map.json`.
+   - For each segment boundary, check if face count changed and emit events:
+     - 1→2+: `face_count_increase`
+     - 2→1: `face_count_decrease`
+     - any→0: `screen_share_detected`
+     - 0→1: `screen_share_ended`
+     - 0→2+: `screen_share_ended` followed by `face_count_increase` (two events in sequence)
+   - Apply each event to the FSM (see `transitions.py` `FRAMING_TRANSITIONS` table) to determine the new state.
+   - Record `framing_style_state` on each command in `encoding-plan.json`.
+   - Select the filter template based on the resolved state: `solo`/`cinematic_solo` → standard single crop, `duo_split` → split-screen filter_complex, `duo_pip` → PiP filter_complex, `screen_share` → content-top/speaker-bottom split.
+   - **Note**: `duo_pip` and `cinematic_solo` are only reachable via explicit user requests (`pip_requested`, `cinematic_requested`), not auto-emitted events. Auto mode cycles between `solo`, `duo_split`, and `screen_share`.
+
+6. **Build crop filter** for each segment following `crop-playbook.md` **9:16 Compliance** rules. Every segment MUST output SAR 1:1 square pixels at 1080x1920.
    - **All crops**: `crop={W}:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1` — this works for any crop width (608px, 960px, 1150px, etc.)
    - **Always append `setsar=1`** as the last filter in every chain — without it, FFmpeg sets SAR metadata that causes Instagram to crop/misframe the video
    - **Both-visible preference**: For `side_by_side` segments without sub_segments, the crop should keep BOTH speakers visible. Verify BOTH face positions fall within the crop range. If the Layout Detective provided a single `crop_region` (no sub_segments), do NOT split into per-speaker segments.
    - **Stability**: Do not create segments shorter than 5 seconds. If a speaker turn is < 5s, keep the current crop and merge that turn into the surrounding segment.
 
-6. **Handle quality degradation** for segments flagged by the Layout Detective:
+7. **Handle quality degradation** for segments flagged by the Layout Detective:
    - For `quality: "degraded"` (upscale 1.5-2.0x): try widening the crop to include more background around the face while keeping face centered. Recheck upscale factor.
    - For `quality: "unacceptable"` (upscale > 2.0x): widen the crop further or accept quality loss. Log the upscale factor in encoding-plan.json.
 
-7. **Set encoding parameters** per `encoding-params.md`: H.264 Main, CRF 23, preset medium.
+8. **Set encoding parameters** per `encoding-params.md`: H.264 Main, CRF 23, preset medium.
 
-8. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Use **exact boundary timestamps** with no overlap between segments (the Assembly stage concatenates them directly with `-c copy`).
+9. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Use **exact boundary timestamps** with no overlap between segments (the Assembly stage concatenates them directly with `-c copy`).
 
-9. **Verify segment boundary integrity** — Stage 5 is authoritative for transition timestamps. Before encoding, validate:
-   - For each pair of adjacent segments, confirm `next.start_seconds == prev.end_seconds` (no overlap, no gap)
-   - If any boundary mismatch is found, align both segments to the same timestamp (update BOTH `prev.end_seconds` AND `next.start_seconds` atomically)
-   - **Bias toward wider crops at uncertain boundaries**: if unsure which side a boundary frame belongs to, assign it to the segment with the wider crop — a wide crop on a close-up is acceptable, but a narrow crop on a wide shot cuts people off
+10. **Verify segment boundary integrity** — Stage 5 is authoritative for transition timestamps. Before encoding, validate:
+    - For each pair of adjacent segments, confirm `next.start_seconds == prev.end_seconds` (no overlap, no gap)
+    - If any boundary mismatch is found, align both segments to the same timestamp (update BOTH `prev.end_seconds` AND `next.start_seconds` atomically)
+    - **Bias toward wider crops at uncertain boundaries**: if unsure which side a boundary frame belongs to, assign it to the segment with the wider crop — a wide crop on a close-up is acceptable, but a narrow crop on a wide shot cuts people off
 
-10. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
+11. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
 
-11. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc. Output `encoding-plan.json`.
+12. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc. Output `encoding-plan.json`.
 
 ### Validation Phase (after FFmpegAdapter executes)
 
-12. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
+13. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
     ```bash
     python scripts/check_upscale_quality.py <segment.mp4> --crop-width <W> --target-width 1080 --source-frame <representative_frame.png>
     ```
     Update `encoding-plan.json` with quality results under the `quality` key per command.
 
-13. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
+14. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
 
-14. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
+15. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
 
-15. **Update `encoding-plan.json`** with final validation and quality data.
+16. **Update `encoding-plan.json`** with final validation and quality data.
 
 ## Constraints
 

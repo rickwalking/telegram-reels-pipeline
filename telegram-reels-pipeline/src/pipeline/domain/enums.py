@@ -59,6 +59,17 @@ class FramingStyle(Enum):
 
 
 @unique
+class FramingStyleState(Enum):
+    """Runtime framing state for dynamic style switching FSM."""
+
+    SOLO = "solo"
+    DUO_SPLIT = "duo_split"
+    DUO_PIP = "duo_pip"
+    SCREEN_SHARE = "screen_share"
+    CINEMATIC_SOLO = "cinematic_solo"
+
+
+@unique
 class RevisionType(Enum):
     """User-requested revision categories routed by Router Agent."""
 
