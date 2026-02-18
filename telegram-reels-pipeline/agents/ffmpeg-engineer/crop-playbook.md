@@ -133,6 +133,44 @@ split=2[top][bot];
 
 **Output dimensions**: The final `vstack` output is 1080x1920 with SAR 1:1 — compliant with 9:16 requirements.
 
+### `pip` (framing style)
+
+Active speaker fills the frame; inactive speaker appears in a corner overlay (280x500).
+
+**When to use**: `framing_style=pip` is set in elicitation context (from CLI `--style pip` or router keyword detection).
+
+**Filter template (single-pass filter_complex)**:
+```
+split=2[main][pip];
+[main]crop={W_main}:1080:{x_main}:0,scale=1080:1920:flags=lanczos[m];
+[pip]crop={W_pip}:1080:{x_pip}:0,scale=280:500:flags=lanczos[p];
+[m][p]overlay={ox}:{oy},setsar=1
+```
+
+**Coordinate computation**:
+- `x_main`: center on **active speaker** face (from `speaker-timeline.json` + `face-position-map.json`)
+- `x_pip`: center on **inactive speaker** face
+- `W_main`: 608px for tight crop, or wider if quality check flags degradation
+- `W_pip`: 608px (crops to face region, then scales down to 280x500)
+
+**PiP overlay position**:
+- Default: bottom-right (`ox=760, oy=1380`) — places the 280x500 overlay with 40px margin from edges
+- Smart corner selection: if the active speaker's face is in the right half of the main frame, move PiP to bottom-left (`ox=40, oy=1380`) to avoid overlap
+- Top positions available if bottom is occupied by captions: top-right (`ox=760, oy=40`), top-left (`ox=40, oy=40`)
+
+**Speaker switching in PiP**:
+- When the active speaker changes (from `speaker-timeline.json`), swap which speaker is main and which is PiP
+- Apply the 5-second minimum hold rule: only swap if the new active speaker's turn is >= 5 seconds
+- Each swap requires a new segment with a different filter_complex (main/pip faces switch)
+
+**Fallback rules**:
+- **1 speaker only**: cinematic solo crop, no PiP overlay (`crop=608:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1`)
+- **Face detection failure**: hold last known PiP position for up to 10 seconds, then fall back to full-frame cinematic solo
+- **3+ speakers**: use the active speaker as main, most recent previous speaker as PiP, ignore others
+- **No face data**: fall back to center crop. QA flags REWORK.
+
+**Output dimensions**: The final `overlay` output is 1080x1920 with SAR 1:1 — compliant with 9:16 requirements.
+
 ### Unknown Layouts (from Knowledge Base)
 
 For layouts stored via LayoutEscalationHandler:

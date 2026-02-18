@@ -11,6 +11,7 @@
 ### Dimension 2: Output Dimensions and SAR (weight: 15/100)
 - **Pass**: All encoded segments are exactly 1080x1920 with SAR 1:1 (square pixels). Verify with `ffprobe -show_entries stream=width,height,sample_aspect_ratio`.
 - **Pass (split-screen)**: For `framing_style=split_horizontal`, output is 1080x1920 composed of two 1080x960 halves via `vstack`, SAR 1:1. Verify each half contains a face.
+- **Pass (PiP)**: For `framing_style=pip`, output is 1080x1920 with a 280x500 overlay positioned within frame bounds, SAR 1:1. Verify main frame contains active speaker face and overlay contains inactive speaker.
 - **Rework**: Dimensions correct but SAR is not 1:1 (e.g., SAR 472:243). This means `setsar=1` was missing from the filter chain. Instagram will crop/misframe the video on upload.
 - **Fail**: Segments have completely wrong dimensions (e.g., 1280x720)
 - **Prescriptive fix template**: "Segment {n} has SAR {actual_sar} instead of 1:1. Append setsar=1 to the filter chain. For any crop width: crop={W}:1080:{x}:0,scale=1080:1920:flags=lanczos,setsar=1"
