@@ -356,7 +356,7 @@ split=2[top][bot];
 
 ## Style Transitions (xfade)
 
-When `style-transitions.json` contains transitions (from auto mode or explicit style changes), the Assembly stage can use FFmpeg `xfade` instead of hard cuts for smoother visual transitions between segments.
+When `encoding-plan.json` contains `style_transitions` (from auto mode or explicit style changes), the Assembly stage can use FFmpeg `xfade` instead of hard cuts for smoother visual transitions between segments.
 
 ### Supported xfade Effects
 
@@ -382,7 +382,7 @@ When `style-transitions.json` contains transitions (from auto mode or explicit s
 
 ### Rules
 
-- Only apply xfade when `style-transitions.json` exists AND has `effect` entries
+- Only apply xfade when `encoding-plan.json` has `style_transitions` with `effect` entries
 - Hard cuts (`-c copy` concat) remain the default when no transitions are present
 - xfade requires re-encoding — uses same parameters as segment encoding (H.264 Main, CRF 23, medium preset)
 - Maximum 3 xfade transitions per reel — more than that causes visual fatigue
@@ -509,7 +509,7 @@ For each segment:
 2. Sum scores per candidate style: `solo`, `duo_split`, `duo_pip`, `screen_share`, `cinematic_solo`
 3. Select the style with the highest total score
 4. Apply FSM transition rules — if the selected style is not reachable from the current FSM state, use the closest reachable alternative
-5. Record the scoring breakdown in `style-transitions.json` under the `scoring` key
+5. Record the scoring breakdown in `encoding-plan.json` under `style_transitions[].scoring`
 
 ### User Preference Multiplier
 

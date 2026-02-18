@@ -45,21 +45,28 @@ class ReelAssembler:
     ) -> str:
         """Build an xfade filter_complex graph for N segments with transition specs.
 
-        Each transition applies between consecutive segments. The filter graph chains
-        xfade operations sequentially: [0][1]xfade -> [tmp1][2]xfade -> [tmp2][3]xfade...
+        Builds parallel video (xfade) and audio (acrossfade) chains.
+        Video: [0:v][1:v]xfade -> [tmp1][2:v]xfade -> ... -> [v]
+        Audio: [0:a][1:a]acrossfade -> [atmp1][2:a]acrossfade -> ... -> [a]
         """
         if len(transitions) != segment_count - 1:
             raise AssemblyError(f"Expected {segment_count - 1} transitions, got {len(transitions)}")
 
-        parts: list[str] = []
+        video_parts: list[str] = []
+        audio_parts: list[str] = []
         for i, tr in enumerate(transitions):
-            src = "[0:v][1:v]" if i == 0 else f"[tmp{i}][{i + 1}:v]"
-            out_label = "[v]" if i == len(transitions) - 1 else f"[tmp{i + 1}]"
-            parts.append(
-                f"{src}xfade=transition={tr.effect}:duration={tr.duration}:offset={tr.offset_seconds}{out_label}"
+            # Video chain
+            v_src = "[0:v][1:v]" if i == 0 else f"[vtmp{i}][{i + 1}:v]"
+            v_out = "[v]" if i == len(transitions) - 1 else f"[vtmp{i + 1}]"
+            video_parts.append(
+                f"{v_src}xfade=transition={tr.effect}:duration={tr.duration}:offset={tr.offset_seconds}{v_out}"
             )
+            # Audio chain
+            a_src = "[0:a][1:a]" if i == 0 else f"[atmp{i}][{i + 1}:a]"
+            a_out = "[a]" if i == len(transitions) - 1 else f"[atmp{i + 1}]"
+            audio_parts.append(f"{a_src}acrossfade=d={tr.duration}{a_out}")
 
-        return ";".join(parts)
+        return ";".join(video_parts + audio_parts)
 
     async def assemble(
         self,
@@ -89,7 +96,11 @@ class ReelAssembler:
             return output
 
         if transitions:
-            return await self._assemble_xfade(segments, output, transitions)
+            try:
+                return await self._assemble_xfade(segments, output, transitions)
+            except AssemblyError:
+                logger.warning("xfade assembly failed, falling back to concat")
+                return await self._assemble_concat(segments, output)
 
         return await self._assemble_concat(segments, output)
 
@@ -116,7 +127,7 @@ class ReelAssembler:
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
-                raise AssemblyError(f"FFmpeg concat failed (exit {proc.returncode}): {stderr.decode()}") from None
+                raise AssemblyError(f"FFmpeg concat failed (exit {proc.returncode}): {stderr.decode()}")
         finally:
             list_file.unlink(missing_ok=True)
 
@@ -141,6 +152,8 @@ class ReelAssembler:
                 filter_graph,
                 "-map",
                 "[v]",
+                "-map",
+                "[a]",
                 "-c:v",
                 "libx264",
                 "-crf",
@@ -161,7 +174,7 @@ class ReelAssembler:
         )
         stdout, stderr = await proc.communicate()
         if proc.returncode != 0:
-            raise AssemblyError(f"FFmpeg xfade failed (exit {proc.returncode}): {stderr.decode()}") from None
+            raise AssemblyError(f"FFmpeg xfade failed (exit {proc.returncode}): {stderr.decode()}")
 
         logger.info("Assembled %d segments (xfade) into %s", len(segments), output.name)
         return output

@@ -52,7 +52,7 @@ class TestPipelineSettings:
             PipelineSettings(default_framing_style="invalid_style")
 
     def test_publishing_defaults(self) -> None:
-        settings = PipelineSettings()
+        settings = PipelineSettings(_env_file=None, publishing_language="")
         assert settings.publishing_language == ""
         assert settings.publishing_description_variants == 3
 

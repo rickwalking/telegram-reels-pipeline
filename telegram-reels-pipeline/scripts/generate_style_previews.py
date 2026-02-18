@@ -39,7 +39,7 @@ STYLE_PREVIEWS: dict[str, dict[str, str]] = {
             "split=2[top][bot];"
             "[top]crop=960:1080:{x_left}:0,scale=1080:960:flags=lanczos[t];"
             "[bot]crop=960:1080:{x_right}:0,scale=1080:960:flags=lanczos[b];"
-            "[t][b]vstack,setsar=1"
+            "[t][b]vstack,setsar=1[v]"
         ),
     },
     "pip": {
@@ -48,7 +48,7 @@ STYLE_PREVIEWS: dict[str, dict[str, str]] = {
             "split=2[main][pip];"
             "[main]crop=608:1080:{x_left}:0,scale=1080:1920:flags=lanczos[m];"
             "[pip]crop=608:1080:{x_right}:0,scale=280:500:flags=lanczos[p];"
-            "[m][p]overlay=760:1380,setsar=1"
+            "[m][p]overlay=760:1380,setsar=1[v]"
         ),
     },
 }

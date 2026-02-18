@@ -58,6 +58,11 @@ class TestStylePreviewsDefinitions:
         for name, defn in STYLE_PREVIEWS.items():
             assert "label" in defn, f"{name} missing label"
 
+    def test_filter_complex_styles_end_with_v_label(self) -> None:
+        for name, defn in STYLE_PREVIEWS.items():
+            if "filter_complex" in defn:
+                assert defn["filter_complex"].endswith("[v]"), f"{name} filter_complex must end with [v] for -map [v]"
+
 
 def _mock_process(returncode: int = 0, stderr: bytes = b"") -> MagicMock:
     proc = MagicMock()
