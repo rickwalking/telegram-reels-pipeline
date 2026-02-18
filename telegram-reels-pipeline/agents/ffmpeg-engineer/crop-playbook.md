@@ -353,3 +353,47 @@ split=2[top][bot];
 | Spotlight dim | No | Yes (optional) | No | Yes (in duo_split state) |
 
 **Pi performance note**: All effects add minimal overhead (single filter in chain). If benchmark gate (12-4) flags degradation, disable effects by omitting the additional filters — the pipeline works identically without them.
+
+## Auto-Style Scoring
+
+When `framing_style` is `auto`, the FFmpeg Engineer uses a multi-signal scoring engine to select the optimal style per segment. This replaces rigid rules with weighted signal evaluation.
+
+### Signals
+
+| Signal | Source | Description |
+|--------|--------|-------------|
+| `face_count` | `face-position-map.json` | Number of detected faces in segment (0, 1, 2+) |
+| `speaker_activity` | `speaker-timeline.json` | Speaker turn frequency — high activity favors PiP for rapid switching |
+| `speaker_separation` | `face-position-map.json` | Distance between speakers — wide separation favors split-screen |
+| `motion_level` | Frame diff between consecutive extracted frames | High motion favors wider crops; low motion allows tighter crops |
+| `content_mood` | `content.json` `mood` field | Conversational → split, dramatic → solo/cinematic, educational → screen_share |
+
+### Scoring Weights
+
+| Signal | Weight | Scoring |
+|--------|--------|---------|
+| `face_count` | 40 | 0 faces → `screen_share` (+40). 1 face → `solo` (+40). 2+ faces → `duo_split` (+20) or `duo_pip` (+20) |
+| `speaker_activity` | 20 | Turns per minute > 8 → `duo_pip` (+20). Turns per minute 4-8 → `duo_split` (+15). < 4 → `solo` (+10) |
+| `speaker_separation` | 15 | Span > 880px → `duo_split` (+15). Span <= 880px → `both_visible` crop (+10) |
+| `motion_level` | 10 | High (avg frame diff > 30%) → wider crop (+10). Low → tighter crop (+5) |
+| `content_mood` | 15 | Matched mood → preferred style (+15). Neutral → no bonus |
+
+### Style Selection Algorithm
+
+For each segment:
+1. Compute all signal scores based on available data (skip unavailable signals, redistribute weight)
+2. Sum scores per candidate style: `solo`, `duo_split`, `duo_pip`, `screen_share`, `cinematic_solo`
+3. Select the style with the highest total score
+4. Apply FSM transition rules — if the selected style is not reachable from the current FSM state, use the closest reachable alternative
+5. Record the scoring breakdown in `style-transitions.json` under the `scoring` key
+
+### User Preference Multiplier
+
+If the user expressed a preference (e.g., "I prefer split screen" in the original message), apply a 1.5x weight multiplier to the preferred style's total score. This is parsed by the Router agent and available in elicitation context as `style_preference`.
+
+### Fallback Behavior
+
+- If no face data is available: fall back to `face_count` = 0 (screen_share or layout-default)
+- If no speaker timeline: skip `speaker_activity` signal, redistribute weight to `face_count` and `speaker_separation`
+- If no content.json mood: skip `content_mood`, redistribute weight evenly
+- If all signals are unavailable: use the FSM default (`solo` for 1 face, `duo_split` for 2 faces)
