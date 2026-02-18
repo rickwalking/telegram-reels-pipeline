@@ -129,8 +129,8 @@ development_status:
   12-5-screen-share-detection: done
 
   epic-13: in-progress
-  13-1a-dynamic-style-fsm: in-progress
-  13-1b-dynamic-visual-effects: backlog
+  13-1a-dynamic-style-fsm: done
+  13-1b-dynamic-visual-effects: done
   13-2-style-transitions-journal: backlog
   13-3-auto-style-intelligence: backlog
   13-4a-animated-transitions-xfade: backlog

@@ -285,3 +285,71 @@ Prevent jittery crop changes from minor movements or brief speaker turns:
 - If this still produces more than 3 cuts per 15 seconds: extend minimum sub-segment duration to 8 seconds
 - Rapid cuts feel robotic/amateurish — prefer smooth, deliberate transitions
 - **Exception**: camera angle changes (face count change) are structural transitions, not crop switches. They do not count toward the 3-cut limit and are exempt from the 5s minimum.
+
+## Dynamic Visual Effects
+
+Optional effects applied when `framing_style` is `auto` or explicitly requested. These enhance style transitions and speaker activity without adding new streams — they modify existing filter chains.
+
+### Focus Pull (Style Transition)
+
+Animate the crop width over 0.5 seconds at style transition boundaries to create a smooth expand/collapse effect.
+
+**Expand** (e.g., `solo` → `duo_split` — narrow crop widens to both-visible):
+```
+# Transition segment: 0.5s duration at boundary timestamp
+# Animate crop width from 608 to 960 over 0.5s using zoompan
+zoompan=z='if(lte(on,12),1.776-((1.776-1.125)*(on/12)),1.125)':d=1:s=1080x1920:fps=25
+```
+
+**Collapse** (e.g., `duo_split` → `solo` — wide crop narrows to single speaker):
+```
+zoompan=z='if(lte(on,12),1.125+((1.776-1.125)*(on/12)),1.776)':d=1:s=1080x1920:fps=25
+```
+
+**Rules**:
+- Duration: 0.5 seconds (12-13 frames at 25fps)
+- Apply as a separate 0.5s micro-segment at the transition boundary
+- If the transition segment would be shorter than 0.5s, skip the effect and hard-cut instead
+- The micro-segment is encoded separately and concatenated between the main segments
+
+### Pulse Zoom (Speaker Change)
+
+Brief 5% zoom-in on the active speaker at the moment of a speaker change, then ease back to normal over 0.3 seconds.
+
+```
+# Apply to the first 0.3s of a new speaker's segment
+zoompan=z='if(lte(on,7),1.0+(0.05*(1-on/7)),1.0)':d=1:s=1080x1920:fps=25
+```
+
+**Rules**:
+- Scale: 5% zoom (z=1.05 → 1.0 over 0.3s)
+- Only apply when the active speaker changes AND the new turn is >= 5 seconds
+- Do not apply on camera angle changes (structural transitions)
+- Skip if the segment uses `filter_complex` (split-screen/PiP) — zoom would affect both halves
+
+### Spotlight Dim (Inactive Speaker)
+
+In `duo_split` (split-screen) mode, reduce brightness on the inactive speaker's half to 70% to visually indicate who is speaking.
+
+```
+# Modified split-screen filter with brightness adjustment:
+split=2[top][bot];
+[top]crop={W}:1080:{x_top}:0,scale=1080:960:flags=lanczos,eq=brightness=-0.1[t];
+[bot]crop={W}:1080:{x_bot}:0,scale=1080:960:flags=lanczos[b];
+[t][b]vstack,setsar=1
+```
+
+- Apply `eq=brightness=-0.1` (approximately 70% brightness) to the **inactive** speaker's half
+- Swap which half is dimmed when the active speaker changes (from `speaker-timeline.json`)
+- If no speaker timeline is available (`confidence: "none"`), do not dim either half
+- The `eq` filter must come BEFORE `vstack` and AFTER `scale` in the chain
+
+### Effect Applicability Matrix
+
+| Effect | `default` | `split_horizontal` | `pip` | `auto` |
+|--------|-----------|---------------------|-------|--------|
+| Focus pull | No | No | No | Yes (at FSM transitions) |
+| Pulse zoom | No | No | No | Yes (at speaker changes) |
+| Spotlight dim | No | Yes (optional) | No | Yes (in duo_split state) |
+
+**Pi performance note**: All effects add minimal overhead (single filter in chain). If benchmark gate (12-4) flags degradation, disable effects by omitting the additional filters — the pipeline works identically without them.
