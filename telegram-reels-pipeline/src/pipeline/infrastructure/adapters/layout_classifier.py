@@ -14,6 +14,7 @@ KNOWN_LAYOUTS: frozenset[str] = frozenset({
     "side_by_side",
     "speaker_focus",
     "grid",
+    "screen_share",
 })
 
 

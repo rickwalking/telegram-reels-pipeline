@@ -160,6 +160,13 @@ class TestHasUnknownLayouts:
         assert "side_by_side" in KNOWN_LAYOUTS
         assert "speaker_focus" in KNOWN_LAYOUTS
         assert "grid" in KNOWN_LAYOUTS
+        assert "screen_share" in KNOWN_LAYOUTS
+
+    def test_screen_share_is_known(self) -> None:
+        segs = (
+            SegmentLayout(start_seconds=0, end_seconds=30, layout_name="screen_share"),
+        )
+        assert not has_unknown_layouts(segs)
 
 
 class TestUnknownSegments:

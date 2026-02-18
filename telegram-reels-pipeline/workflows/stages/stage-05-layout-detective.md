@@ -43,7 +43,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 
 **Note**: `side_by_side` segments use `sub_segments` ONLY when speakers are too far apart for a single crop. When both speakers fit in one crop (`speaker_span <= crop_width - 80`), use a single `crop_region` at the segment level — same as `speaker_focus`.
 
-**CRITICAL**: Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`.
+**CRITICAL**: Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`, `screen_share`.
 
 ## Instructions
 
@@ -69,24 +69,26 @@ Extract video frames at regular intervals within the selected moment, run face d
    - Store mapping in `layout-analysis.json` as `speaker_face_mapping: {"A": "Speaker_Left", "B": "Speaker_Right"}`
    - If mapping is ambiguous (multiple faces at speaker start), note lower confidence but produce best-effort mapping
 
-6. **Classify each frame** against known layouts using face data. See `frame-analysis.md`.
+6. **Detect screen share segments** — if `face-position-map.json` shows `person_count: 0` for 3+ consecutive frames (15+ seconds), classify those frames as `screen_share`. See `frame-analysis.md` § `screen_share`.
 
-7. **Check confidence** — frames with confidence < 0.7 may need escalation.
+7. **Classify each frame** against known layouts using face data. See `frame-analysis.md`.
 
-8. **Check knowledge base** before escalating — a previously learned strategy may apply.
+8. **Check confidence** — frames with confidence < 0.7 may need escalation.
 
-9. **Detect transitions** — consecutive frames with different layouts OR face count changes mark candidate transition zones.
+9. **Check knowledge base** before escalating — a previously learned strategy may apply.
 
-10. **Refine transition boundaries** (fine pass) — for each candidate transition between frames at `T1` and `T2`:
+10. **Detect transitions** — consecutive frames with different layouts OR face count changes mark candidate transition zones.
+
+11. **Refine transition boundaries** (fine pass) — for each candidate transition between frames at `T1` and `T2`:
     - Extract additional frames at 1-second intervals within `[T1, T2]` (e.g., if coarse frames at t=1776 and t=1781 differ, extract frames at t=1777, t=1778, t=1779, t=1780).
     - Run face detection on these new frames.
     - Identify the **first frame** that matches the new layout. Its timestamp is `T_precise`.
     - Use `T_precise` as the segment boundary instead of the midpoint `(T1 + T2) / 2`.
     - This eliminates the 1-3 second misalignment that causes wrong crops at camera cuts.
 
-11. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
+12. **Group into segments** — contiguous same-layout frames become SegmentLayout entries.
 
-12. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
+13. **Assign face-centered crop regions** for each segment per `crop-playbook.md`:
     - For `side_by_side` segments: **first check if both speakers fit in a single crop**:
       - Compute `speaker_span = rightmost_face_edge - leftmost_face_edge` (face x + face width for each speaker)
       - If `speaker_span <= 960 - 80` (880px): use ONE centered crop covering both speakers. Set `crop_region` at segment level (no `sub_segments`). The wide shot is meant to show both people — do NOT isolate one.
@@ -96,15 +98,15 @@ Extract video frames at regular intervals within the selected moment, run face d
     - For `grid`: map active speaker from timeline to the quadrant containing their face.
     - Include `representative_frame` path for each segment (used by Stage 6 for post-encode quality checks).
 
-13. **Predict upscale quality** for each proposed crop:
+14. **Predict upscale quality** for each proposed crop:
     ```bash
     python scripts/check_upscale_quality.py --predict --crop-width <W> --target-width 1080
     ```
     Flag segments with `quality: "degraded"` or `"unacceptable"`. Include predictions in `layout-analysis.json`.
 
-14. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
+15. **Escalate unknown layouts** per `escalation-protocol.md` if needed.
 
-15. **Output valid JSON** as `layout-analysis.json`.
+16. **Output valid JSON** as `layout-analysis.json`.
 
 ## Fallback Behavior
 
@@ -121,7 +123,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 
 - Frame extraction interval: every 5 seconds within the moment
 - Confidence threshold: 0.7 minimum for accepted classification
-- Layout names must match KNOWN_LAYOUTS: `side_by_side`, `speaker_focus`, `grid` (snake_case)
+- Layout names must match KNOWN_LAYOUTS: `side_by_side`, `speaker_focus`, `grid`, `screen_share` (snake_case)
 - Crop regions must be within source video bounds (x + width <= 1920, y + height <= 1080)
 - Maximum 3 crop-switch cuts in any 15-second window
 - Minimum sub-segment duration: 5 seconds (merge shorter turns into preceding segment)

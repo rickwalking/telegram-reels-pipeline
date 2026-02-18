@@ -171,6 +171,29 @@ split=2[main][pip];
 
 **Output dimensions**: The final `overlay` output is 1080x1920 with SAR 1:1 — compliant with 9:16 requirements.
 
+### `screen_share`
+
+Content-dominant segments where no speaker faces are visible (slides, code, demos).
+
+**Crop strategy — content-top / speaker-bottom split**:
+```
+split=2[content][speaker];
+[content]crop=1920:756:0:0,scale=1080:1344:flags=lanczos[c];
+[speaker]crop=608:1080:{x_speaker}:0,scale=1080:576:flags=lanczos[s];
+[c][s]vstack,setsar=1
+```
+
+- Content-top (70% = 1344px): full-width screen content, scaled to fit 1080px wide
+- Speaker-bottom (30% = 576px): speaker face from the last known face position before screen share started
+- `x_speaker`: use the last known face centroid from `face-position-map.json` before the 0-face segment began
+
+**Fallback rules**:
+- **No speaker face available**: use full-frame content scaled to fill 1080x1920 (`crop=1920:1080:0:0,scale=1080:1920:flags=lanczos,setsar=1`)
+- **Brief screen share (< 15 seconds)**: may not warrant a split — use full-frame content
+- **Mixed content + faces**: if some frames have faces and some don't, split at the face-count transition boundary
+
+**Output dimensions**: 1080x1920 with SAR 1:1 via `vstack`.
+
 ### Unknown Layouts (from Knowledge Base)
 
 For layouts stored via LayoutEscalationHandler:

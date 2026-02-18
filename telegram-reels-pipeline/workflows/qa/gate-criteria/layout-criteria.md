@@ -3,7 +3,7 @@
 ## Evaluation Dimensions
 
 ### Dimension 1: Frame Classification (weight: 20/100)
-- **Pass**: All frames classified with layout names matching KNOWN_LAYOUTS (snake_case: `side_by_side`, `speaker_focus`, `grid`), confidence >= 0.7
+- **Pass**: All frames classified with layout names matching KNOWN_LAYOUTS (snake_case: `side_by_side`, `speaker_focus`, `grid`, `screen_share`), confidence >= 0.7
 - **Rework**: Some frames have confidence between 0.5-0.69, or layout names not in KNOWN_LAYOUTS without escalation
 - **Fail**: Frames with confidence < 0.5 and no escalation triggered, or invalid layout names
 - **Prescriptive fix template**: "Frame at {timestamp}s has confidence {confidence}. Re-analyze or trigger escalation. Layout names must be snake_case matching KNOWN_LAYOUTS: side_by_side, speaker_focus, grid."
@@ -41,7 +41,7 @@
 
 ## Critical Validation
 
-- Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`
+- Layout names MUST be snake_case: `side_by_side`, `speaker_focus`, `grid`, `screen_share`
 - Using kebab-case (e.g., `side-by-side`) causes `has_unknown_layouts()` to return True → false escalation
 - Confidence values are float 0.0-1.0 (validated by LayoutClassification.__post_init__)
 - `side_by_side` segments use `sub_segments` ONLY when speakers are too far apart for a single crop. Both-visible centered crop (single `crop_region`) is preferred when both speakers fit.

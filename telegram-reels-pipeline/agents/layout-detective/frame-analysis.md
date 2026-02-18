@@ -73,9 +73,34 @@ For each extracted frame, classify the camera layout by analyzing the visual com
 - 0.7-0.89: Grid structure present but some quadrants may be empty or uneven
 - < 0.7: Ambiguous grid-like structure, might be a different layout
 
+### `screen_share`
+
+**Characteristics**:
+- No faces visible in the frame — content dominates (slides, code editor, demo, browser)
+- High text/edge density compared to typical speaker frames
+- Static or slowly-changing content (low inter-frame motion compared to speaker gestures)
+
+**Detection signals** (from `face-position-map.json`):
+- `person_count: 0` in summary for 3+ consecutive frames (15+ seconds at 5s extraction)
+- Zero face clusters detected across the segment
+- Optional: high edge density in the frame (many sharp lines from text/UI elements)
+
+**Detection threshold**: 3+ consecutive frames with 0 faces → classify as `screen_share`. If only 1-2 frames have 0 faces, it may be a brief camera obstruction — do not classify as screen_share.
+
+**Crop planning**:
+- Use full-frame content crop at the top: `crop=1920:756:0:0,scale=1080:1344:flags=lanczos` (content-top 70%)
+- If speaker data is available from before/after the screen share segment, include a speaker strip at the bottom: `crop=608:1080:{x}:0,scale=1080:576:flags=lanczos` (speaker-bottom 30%)
+- Combine with `vstack,setsar=1` for final 1080x1920 output
+- If no speaker face available: use full-frame content as-is, scaled to fill 1080x1920
+
+**Confidence scoring**:
+- 0.9-1.0: Zero faces for 5+ consecutive frames, high edge density
+- 0.7-0.89: Zero faces for 3-4 consecutive frames
+- < 0.7: Only 1-2 frames with zero faces — may not be a genuine screen share
+
 ### Unknown Layouts
 
-Any frame that does not match the three known layouts is classified as **unknown**. Examples:
+Any frame that does not match the four known layouts is classified as **unknown**. Examples:
 - `single_camera`: One person, full-screen, no split
 - `picture_in_picture`: Main content with small overlay
 - `three_way_split`: Three panels instead of two or four

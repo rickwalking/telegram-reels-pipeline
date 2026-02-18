@@ -53,6 +53,7 @@ These names MUST match `KNOWN_LAYOUTS` in `layout_classifier.py`:
 | `side_by_side` | Two speakers in roughly equal halves | 1920x1080, split at x=960 |
 | `speaker_focus` | One speaker large, other small or absent | 1920x1080, primary speaker centered |
 | `grid` | Four equal quadrants with speakers | 1920x1080, 2x2 grid |
+| `screen_share` | No faces visible, content dominates (slides, code, demo) | 1920x1080, full frame |
 
 **CRITICAL**: Layout names MUST be snake_case. Using kebab-case (e.g., `side-by-side`) will cause `has_unknown_layouts()` to return True and trigger false escalation.
 

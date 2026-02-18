@@ -125,8 +125,8 @@ development_status:
   12-1-style-selection-passthrough: done
   12-2-horizontal-split-screen: done
   12-3-pip-overlay: done
-  12-4-pi-performance-benchmark-gate: in-progress
-  12-5-screen-share-detection: backlog
+  12-4-pi-performance-benchmark-gate: done
+  12-5-screen-share-detection: in-progress
 
   epic-13: backlog
   13-1a-dynamic-style-fsm: backlog
