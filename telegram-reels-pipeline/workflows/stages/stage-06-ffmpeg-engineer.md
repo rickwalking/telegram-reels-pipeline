@@ -53,6 +53,10 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 ## Instructions
 
+### Preview Phase (optional)
+
+0. **Generate style previews** — if `preview: true` is set in elicitation context, run `scripts/generate_style_previews.py` with the source video, a representative 5-second segment, and face positions from `face-position-map.json`. Output preview clips to the workspace and generate `preview-manifest.json`. Skip the rest of the planning phase until the user selects a style via the Delivery agent's gallery response. If no preview is requested, proceed to step 1.
+
 ### Planning Phase
 
 1. **Read layout analysis** to get segment boundaries, sub-segments, crop regions, and `speaker_face_mapping`.

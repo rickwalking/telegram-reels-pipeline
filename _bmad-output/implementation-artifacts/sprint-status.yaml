@@ -128,7 +128,7 @@ development_status:
   12-4-pi-performance-benchmark-gate: done
   12-5-screen-share-detection: done
 
-  epic-13: in-progress
+  epic-13: done
   13-1a-dynamic-style-fsm: done
   13-1b-dynamic-visual-effects: done
   13-2-style-transitions-journal: done
@@ -136,4 +136,4 @@ development_status:
   13-4a-animated-transitions-xfade: done
   13-4b-content-overlays: done
   13-4c-screen-share-ocr-waveform: done
-  13-5-style-gallery-preview: backlog
+  13-5-style-gallery-preview: done

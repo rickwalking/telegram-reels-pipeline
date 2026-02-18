@@ -78,6 +78,10 @@ Output valid JSON written to `encoding-plan.json`:
 7. **Use `filter_complex` for multi-stream layouts**. When `framing_style` is `split_horizontal` or `pip` (from elicitation context), use `filter_type: "filter_complex"` with the full filter graph from `crop-playbook.md`. For standard single-crop layouts, use `filter_type: "crop"` with the existing `crop_filter` field.
 8. **Dynamic style switching (`framing_style: auto`)**. When `framing_style` is `auto`, apply the Framing Style FSM to determine the active style per segment. Walk segments in order and emit FSM events based on face-count changes (`face_count_increase`, `face_count_decrease`) and layout type (`screen_share_detected`, `screen_share_ended`). Record the resolved `framing_style_state` on each command in `encoding-plan.json`. Use the corresponding filter template from `crop-playbook.md` for each state: `solo`/`cinematic_solo` → standard crop, `duo_split` → split-screen, `duo_pip` → PiP, `screen_share` → content-top/speaker-bottom split.
 
+## Preview Mode
+
+When the pipeline runs with `--preview` (or `preview: true` in elicitation), generate 5-second preview clips for each available style **before** full encoding. Use `scripts/generate_style_previews.py` with face positions from `face-position-map.json`. Output `preview-manifest.json` and individual `preview-{style}.mp4` files. The Delivery agent sends these as a Telegram media group for user selection.
+
 ## Knowledge Files
 
 - `crop-playbook.md` — Per-layout crop coordinates for known layouts
