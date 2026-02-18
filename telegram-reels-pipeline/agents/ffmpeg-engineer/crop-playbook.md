@@ -388,6 +388,70 @@ When `style-transitions.json` contains transitions (from auto mode or explicit s
 - Maximum 3 xfade transitions per reel — more than that causes visual fatigue
 - If xfade fails (encoding error), fall back to hard-cut concat and log warning
 
+## Content Overlays
+
+Optional visual overlays that add context to the reel — speaker labels, quote cards, and borders/dividers. Applied as FFmpeg `drawtext` and `drawbox` filters appended to the existing filter chain.
+
+### Speaker Name Labels
+
+Display the active speaker's name in the lower third of the frame.
+
+```
+# Append to crop/scale chain before setsar=1:
+drawtext=text='{speaker_name}':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:fontsize=36:fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-80
+```
+
+**Data source**: Speaker names from `research-output.json` `speakers` array, mapped via `speaker_face_mapping` from `layout-analysis.json`.
+
+**Rules**:
+- Display for the first 3 seconds of each speaker's turn (fade out after)
+- Font: DejaVuSans-Bold (available on Pi via `fonts-dejavu-core` package)
+- Position: horizontally centered, 80px from bottom
+- Only show when speaker identity is known (skip if `speaker_face_mapping` is missing)
+
+### Quote Cards
+
+Highlight a notable quote from the transcript as a text overlay with a semi-transparent background box.
+
+```
+# Full filter chain with quote card:
+drawbox=x=40:y=h-300:w=w-80:h=200:color=black@0.6:t=fill,drawtext=text='{quote_text}':fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:fontsize=28:fontcolor=white:x=60:y=h-280:line_spacing=8
+```
+
+**Data source**: `content.json` `highlight_quote` field (set by Content Creator agent).
+
+**Rules**:
+- Display during the quote's timestamp range (from transcript alignment)
+- Maximum 2 quote cards per reel to avoid visual clutter
+- Background box: 60% opacity black, 40px margin from edges
+- Text wraps within the box width (FFmpeg `drawtext` handles wrapping with `line_spacing`)
+
+### Border / Divider (Split-Screen)
+
+Add a horizontal divider line between the two halves of a split-screen layout.
+
+```
+# Append after vstack, before setsar=1:
+drawbox=x=0:y=957:w=1080:h=6:color=white@0.8:t=fill
+```
+
+**Rules**:
+- Width: full frame (1080px)
+- Height: 6px
+- Position: y=957 (centered at the 960px boundary between top and bottom halves)
+- Color: white at 80% opacity (visible on most backgrounds without being distracting)
+- Only apply in `split_horizontal` and `duo_split` modes
+
+### Overlay Applicability
+
+| Overlay | `default` | `split_horizontal` | `pip` | `auto` |
+|---------|-----------|---------------------|-------|--------|
+| Speaker name | Yes (optional) | Yes | Yes (main speaker only) | Yes |
+| Quote card | Yes (optional) | No (too cluttered) | No | Yes (in solo/cinematic states) |
+| Border/divider | No | Yes | No | Yes (in duo_split state) |
+
+**Pi performance note**: `drawtext` and `drawbox` are lightweight filters. If benchmark gate flags issues, disable overlays first (they are cosmetic, not structural).
+
 ## Auto-Style Scoring
 
 When `framing_style` is `auto`, the FFmpeg Engineer uses a multi-signal scoring engine to select the optimal style per segment. This replaces rigid rules with weighted signal evaluation.
