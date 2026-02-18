@@ -354,6 +354,40 @@ split=2[top][bot];
 
 **Pi performance note**: All effects add minimal overhead (single filter in chain). If benchmark gate (12-4) flags degradation, disable effects by omitting the additional filters — the pipeline works identically without them.
 
+## Style Transitions (xfade)
+
+When `style-transitions.json` contains transitions (from auto mode or explicit style changes), the Assembly stage can use FFmpeg `xfade` instead of hard cuts for smoother visual transitions between segments.
+
+### Supported xfade Effects
+
+| Effect | Use Case | Duration |
+|--------|----------|----------|
+| `fade` | Default — smooth opacity crossfade | 0.5s |
+| `slideright` | Solo → duo_split (expand to show second speaker) | 0.5s |
+| `slideleft` | Duo_split → solo (collapse to single speaker) | 0.5s |
+| `dissolve` | Screen share → speaker (content dissolves to face) | 0.5s |
+
+### Filter Template
+
+```
+# Two segments with xfade at offset T (seconds from start of first segment)
+[0:v][1:v]xfade=transition=fade:duration=0.5:offset={T}[v]
+
+# Three segments chained
+[0:v][1:v]xfade=transition=fade:duration=0.5:offset={T1}[tmp1];
+[tmp1][2:v]xfade=transition=fade:duration=0.5:offset={T2}[v]
+```
+
+**Offset calculation**: `offset = segment_duration - xfade_duration`. For a 20s first segment with 0.5s fade: `offset = 19.5`.
+
+### Rules
+
+- Only apply xfade when `style-transitions.json` exists AND has `effect` entries
+- Hard cuts (`-c copy` concat) remain the default when no transitions are present
+- xfade requires re-encoding — uses same parameters as segment encoding (H.264 Main, CRF 23, medium preset)
+- Maximum 3 xfade transitions per reel — more than that causes visual fatigue
+- If xfade fails (encoding error), fall back to hard-cut concat and log warning
+
 ## Auto-Style Scoring
 
 When `framing_style` is `auto`, the FFmpeg Engineer uses a multi-signal scoring engine to select the optimal style per segment. This replaces rigid rules with weighted signal evaluation.

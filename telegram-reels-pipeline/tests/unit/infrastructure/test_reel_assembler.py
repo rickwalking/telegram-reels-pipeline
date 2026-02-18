@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.infrastructure.adapters.reel_assembler import AssemblyError, ReelAssembler
+from pipeline.infrastructure.adapters.reel_assembler import AssemblyError, ReelAssembler, TransitionSpec
 
 
 def _mock_process(returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> MagicMock:
@@ -100,12 +100,99 @@ class TestReelAssemblerAssemble:
         assert len(txt_files) == 0
 
 
+class TestTransitionSpec:
+    def test_frozen(self) -> None:
+        spec = TransitionSpec(offset_seconds=19.5)
+        with pytest.raises(AttributeError):
+            spec.offset_seconds = 10.0  # type: ignore[misc]
+
+    def test_defaults(self) -> None:
+        spec = TransitionSpec(offset_seconds=5.0)
+        assert spec.effect == "fade"
+        assert spec.duration == 0.5
+
+    def test_custom_values(self) -> None:
+        spec = TransitionSpec(offset_seconds=10.0, effect="slideright", duration=1.0)
+        assert spec.effect == "slideright"
+        assert spec.duration == 1.0
+
+
+class TestBuildXfadeFilter:
+    def test_two_segments_one_transition(self) -> None:
+        transitions = (TransitionSpec(offset_seconds=19.5),)
+        result = ReelAssembler._build_xfade_filter(2, transitions)
+        assert result == "[0:v][1:v]xfade=transition=fade:duration=0.5:offset=19.5[v]"
+
+    def test_three_segments_two_transitions(self) -> None:
+        transitions = (
+            TransitionSpec(offset_seconds=19.5, effect="fade"),
+            TransitionSpec(offset_seconds=38.5, effect="slideright"),
+        )
+        result = ReelAssembler._build_xfade_filter(3, transitions)
+        assert "[0:v][1:v]xfade" in result
+        assert "[tmp1][2:v]xfade" in result
+        assert result.endswith("[v]")
+
+    def test_mismatched_count_raises(self) -> None:
+        with pytest.raises(AssemblyError, match="Expected 2 transitions"):
+            ReelAssembler._build_xfade_filter(3, (TransitionSpec(offset_seconds=10.0),))
+
+
+class TestReelAssemblerXfade:
+    async def test_xfade_calls_ffmpeg_with_filter_complex(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg2 = tmp_path / "seg2.mp4"
+        seg1.write_bytes(b"v1")
+        seg2.write_bytes(b"v2")
+        output = tmp_path / "reel.mp4"
+        transitions = (TransitionSpec(offset_seconds=19.5),)
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            await assembler.assemble([seg1, seg2], output, transitions=transitions)
+
+        call_args = mock_aio.create_subprocess_exec.call_args[0]
+        assert "ffmpeg" in call_args
+        assert "-filter_complex" in call_args
+
+    async def test_xfade_failure_raises(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg2 = tmp_path / "seg2.mp4"
+        seg1.write_bytes(b"v1")
+        seg2.write_bytes(b"v2")
+        transitions = (TransitionSpec(offset_seconds=19.5),)
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(returncode=1, stderr=b"xfade error"))
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            with pytest.raises(AssemblyError, match="FFmpeg xfade failed"):
+                await assembler.assemble([seg1, seg2], tmp_path / "out.mp4", transitions=transitions)
+
+    async def test_no_transitions_uses_concat(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg2 = tmp_path / "seg2.mp4"
+        seg1.write_bytes(b"v1")
+        seg2.write_bytes(b"v2")
+        output = tmp_path / "reel.mp4"
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            await assembler.assemble([seg1, seg2], output)
+
+        call_args = mock_aio.create_subprocess_exec.call_args[0]
+        assert "concat" in call_args
+        assert "-filter_complex" not in call_args
+
+
 class TestReelAssemblerValidateDuration:
     async def test_valid_duration(self) -> None:
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"75.5\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"75.5\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
             result = await assembler.validate_duration(Path("reel.mp4"))
@@ -114,9 +201,7 @@ class TestReelAssemblerValidateDuration:
 
     async def test_too_short(self) -> None:
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"10.0\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"10.0\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
             result = await assembler.validate_duration(Path("reel.mp4"))
@@ -125,9 +210,7 @@ class TestReelAssemblerValidateDuration:
 
     async def test_too_long(self) -> None:
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"200.0\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"200.0\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
             result = await assembler.validate_duration(Path("reel.mp4"))
@@ -136,9 +219,7 @@ class TestReelAssemblerValidateDuration:
 
     async def test_ffprobe_failure_returns_false(self) -> None:
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(returncode=1, stderr=b"error")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(returncode=1, stderr=b"error"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
             result = await assembler.validate_duration(Path("reel.mp4"))
@@ -147,13 +228,13 @@ class TestReelAssemblerValidateDuration:
 
     async def test_custom_duration_bounds(self) -> None:
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"15.0\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"15.0\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
             result = await assembler.validate_duration(
-                Path("reel.mp4"), min_duration=10.0, max_duration=20.0,
+                Path("reel.mp4"),
+                min_duration=10.0,
+                max_duration=20.0,
             )
 
         assert result is True

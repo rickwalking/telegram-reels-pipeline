@@ -26,6 +26,14 @@
 - **Fail**: No audio, or audio is severely desynced (> 1s drift)
 - **Prescriptive fix template**: "Audio desync detected ({drift}s drift). Re-concatenate with matching audio parameters across all segments. Ensure all segments have same audio sample rate (44100 Hz)."
 
+### Dimension 5: Transition Quality (weight: 0/100 when no transitions, redistributed from others)
+- **Pass**: xfade transitions render smoothly, no visual glitches at transition boundaries, duration matches spec (0.5s)
+- **Rework**: xfade transitions present but minor artifacts (single-frame flash, slight audio pop)
+- **Fail**: xfade transitions cause video corruption or significant visual artifacts
+- **Prescriptive fix template**: "xfade transition at {offset}s has visual artifacts. Fall back to hard-cut concat for this transition boundary."
+
+**Note**: This dimension is only evaluated when xfade transitions are present. When all transitions are hard cuts, its weight (0) is redistributed equally to dimensions 1-4 (6.25 each, totaling 25 per dimension).
+
 ## Scoring Rubric
 
 - 90-100: Excellent — perfect dimensions, duration matches, audio synced, valid file

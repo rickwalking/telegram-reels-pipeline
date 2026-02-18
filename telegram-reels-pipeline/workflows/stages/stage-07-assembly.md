@@ -43,8 +43,8 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 1. **Verify all segments exist** and are readable. List any missing segments.
 2. **Validate each segment**: check dimensions (1080x1920), codec (H.264), audio (AAC).
 3. **Determine concatenation order** — sequential by segment number.
-4. **Plan transitions** — use "cut" (instant) for all transitions. The ReelAssembler uses `-c copy` concat which does not support crossfades.
-5. **Execute concatenation** via ReelAssembler adapter (FFmpeg concat demuxer).
+4. **Plan transitions** — check `encoding-plan.json` for `style_transitions`. If transitions with `effect` entries exist, use xfade for smooth visual transitions (see `crop-playbook.md` § Style Transitions). Otherwise use hard cuts (`-c copy` concat).
+5. **Execute concatenation** via ReelAssembler adapter. Pass `TransitionSpec` tuples for xfade mode, or omit for concat mode. If xfade fails, fall back to hard-cut concat and log warning.
 6. **Validate final output**: dimensions, duration, file size, codec.
 7. **Check duration tolerance**: final duration should be within 5% of expected.
 8. **Summarize style transitions** — if `encoding-plan.json` contains `style_transitions`, include a `style_summary` in `assembly-report.json` with: `framing_style` used, `transitions_count`, unique `states_used`, and `effects_applied`.
