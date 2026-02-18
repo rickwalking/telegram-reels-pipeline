@@ -388,6 +388,32 @@ When `style-transitions.json` contains transitions (from auto mode or explicit s
 - Maximum 3 xfade transitions per reel — more than that causes visual fatigue
 - If xfade fails (encoding error), fall back to hard-cut concat and log warning
 
+## Audio Waveform Overlay
+
+Visual audio waveform bar displayed at the bottom of the frame during screen share segments. Helps viewers track speech activity when no speaker face is visible.
+
+**Pi-conditional**: Only apply if benchmark gate (12-4) shows sufficient encoding headroom. The `showwaves` filter adds moderate CPU load.
+
+### Filter Template
+
+```
+# Audio waveform overlay on screen share segment:
+[0:a]showwaves=s=1080x80:mode=cline:rate=25:colors=white@0.7[wave];
+[v][wave]overlay=0:1840,setsar=1
+```
+
+- Size: 1080x80px bar at the bottom of the frame (y=1840, leaving 80px + setsar room)
+- Mode: `cline` (centered line, less visual noise than `p2p`)
+- Color: white at 70% opacity
+- Rate: 25fps (matches video framerate)
+- Only apply to `screen_share` segments where audio is present
+
+### Rules
+
+- Only apply when `screen_share` layout is detected AND audio track exists
+- Position: bottom of frame, below the speaker-bottom split (or at frame bottom for full-frame screen share)
+- Disable if benchmark gate marks `showwaves` as too expensive for Pi
+
 ## Content Overlays
 
 Optional visual overlays that add context to the reel — speaker labels, quote cards, and borders/dividers. Applied as FFmpeg `drawtext` and `drawbox` filters appended to the existing filter chain.
