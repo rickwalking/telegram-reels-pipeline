@@ -1,6 +1,6 @@
 # Story 10.3: Segment Overlap Removal & Camera Transition Detection Fix
 
-Status: in-progress
+Status: done
 
 ## Problem
 

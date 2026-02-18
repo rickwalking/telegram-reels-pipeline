@@ -116,7 +116,21 @@ development_status:
   epic-10: in-progress
   10-1-cli-elicitation-loop-interactive-questions: in-progress
   10-2-crop-framing-quality-side-by-side-qa-visual-composition: in-progress
-  10-3-segment-overlap-crop-camera-transition-fix: in-progress
+  10-3-segment-overlap-crop-camera-transition-fix: done
 
   epic-11: in-progress
   11-1-publishing-assets-localization-veo3-prompts: in-progress
+
+  epic-12: backlog
+  12-1-style-selection-passthrough: backlog
+  12-2-horizontal-split-screen: backlog
+  12-3-pip-overlay: backlog
+  12-4-pi-performance-benchmark-gate: backlog
+  12-5-screen-share-detection: backlog
+
+  epic-13: backlog
+  13-1-dynamic-style-switching-fsm: backlog
+  13-2-style-transitions-journal: backlog
+  13-3-auto-style-intelligence: backlog
+  13-4-advanced-visual-effects: backlog
+  13-5-style-gallery-preview: backlog
