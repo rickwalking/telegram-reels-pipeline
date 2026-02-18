@@ -47,9 +47,9 @@ Plan FFmpeg crop and encode operations to convert source video segments into ver
 
 The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** them. After execution, the FFmpeg Engineer **validates** results.
 
-- **Planning phase** (steps 1-12): Produce `encoding-plan.json` with all FFmpeg command specifications.
+- **Planning phase** (steps 1-14): Produce `encoding-plan.json` with all FFmpeg command specifications and style transitions journal.
 - **Execution phase**: FFmpegAdapter runs the planned commands.
-- **Validation phase** (steps 13-16): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
+- **Validation phase** (steps 15-18): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
 
 ## Instructions
 
@@ -98,21 +98,25 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 11. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
 
-12. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc. Output `encoding-plan.json`.
+12. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
+
+13. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), and `effect` (the visual effect applied, or null). This journal is used by the Assembly stage for reporting and by QA for verifying transition quality.
+
+14. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
 
 ### Validation Phase (after FFmpegAdapter executes)
 
-13. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
+15. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
     ```bash
     python scripts/check_upscale_quality.py <segment.mp4> --crop-width <W> --target-width 1080 --source-frame <representative_frame.png>
     ```
     Update `encoding-plan.json` with quality results under the `quality` key per command.
 
-14. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
+16. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
 
-15. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
+17. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
 
-16. **Update `encoding-plan.json`** with final validation and quality data.
+18. **Update `encoding-plan.json`** with final validation and quality data.
 
 ## Constraints
 

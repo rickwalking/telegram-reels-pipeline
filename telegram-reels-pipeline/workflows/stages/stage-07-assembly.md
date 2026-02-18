@@ -7,7 +7,7 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 ## Inputs
 
 - **Encoded segment files**: segment-001.mp4, segment-002.mp4, etc. from Stage 6
-- **encoding-plan.json**: Contains `segment_paths` and `total_duration_seconds`
+- **encoding-plan.json**: Contains `segment_paths`, `total_duration_seconds`, and optional `style_transitions` journal
 - **moment-selection.json**: Expected duration for validation
 
 ## Expected Outputs
@@ -28,6 +28,12 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
     "audio_codec": "aac",
     "all_segments_valid": true,
     "duration_within_tolerance": true
+  },
+  "style_summary": {
+    "framing_style": "auto",
+    "transitions_count": 3,
+    "states_used": ["solo", "duo_split", "screen_share"],
+    "effects_applied": ["focus_pull", "spotlight_dim"]
   }
 }
 ```
@@ -41,7 +47,8 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 5. **Execute concatenation** via ReelAssembler adapter (FFmpeg concat demuxer).
 6. **Validate final output**: dimensions, duration, file size, codec.
 7. **Check duration tolerance**: final duration should be within 5% of expected.
-8. **Output assembly-report.json** with quality verification results.
+8. **Summarize style transitions** — if `encoding-plan.json` contains `style_transitions`, include a `style_summary` in `assembly-report.json` with: `framing_style` used, `transitions_count`, unique `states_used`, and `effects_applied`.
+9. **Output assembly-report.json** with quality verification results and style summary.
 
 ## Constraints
 

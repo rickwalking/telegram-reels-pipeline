@@ -60,6 +60,12 @@ Output valid JSON written to `encoding-plan.json`:
 | `commands[].end_seconds` | float | Segment end timestamp |
 | `segment_paths` | array | Ordered list of all output segment paths |
 | `total_duration_seconds` | float | Sum of all segment durations |
+| `style_transitions` | array or null | Style transition journal entries (present when `framing_style` is `auto` or when visual effects are applied) |
+| `style_transitions[].timestamp` | float | Timestamp of the style change |
+| `style_transitions[].from_state` | string | Previous framing style state |
+| `style_transitions[].to_state` | string | New framing style state |
+| `style_transitions[].trigger` | string | Event that caused the transition (e.g., `face_count_increase`) |
+| `style_transitions[].effect` | string or null | Visual effect applied at this transition (`focus_pull`, `pulse_zoom`, `spotlight_dim`, or null) |
 
 ## Behavioral Rules
 
