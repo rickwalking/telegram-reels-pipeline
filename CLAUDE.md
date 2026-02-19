@@ -56,6 +56,14 @@ poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" 
 poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
   --message "create a short about TOPIC" --timeout 600 \
   --resume workspace/runs/WORKSPACE_ID --start-stage 6
+
+# Framing style: split-screen, pip, or auto (dynamic FSM)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --style auto
+
+# Extended narrative (multi-moment, up to 300s)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --target-duration 180
 ```
 
 Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4`.
@@ -68,11 +76,11 @@ Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4
 | 2 | Research | `research` | `research-output.json`, `transcript_clean.txt` |
 | 3 | Transcript | `transcript` | `moment-selection.json` |
 | 4 | Content | `content-creator` | `content.json` |
-| 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, `face-position-map.json`, `speaker-timeline.json`, extracted frames |
-| 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-001.mp4`, `encoding-plan.json` (with face validation + quality results) |
+| 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, `face-position-map.json` (with `--gate` hybrid face gate data), `speaker-timeline.json`, extracted frames |
+| 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-*.mp4`, `encoding-plan.json` (with face validation, quality results, style transitions) |
 | 7 | Assembly | `qa` | `final-reel.mp4`, `assembly-report.json` |
 
-Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fail get retried via the recovery chain.
+Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fail get retried via the recovery chain. Stage 5 runs the hybrid face gate (`--gate` flag on `detect_faces.py`) to produce per-frame editorial duo decisions and shot type classifications. Stage 6 uses these to drive framing style FSM transitions and crop decisions.
 
 ## Code Conventions
 
@@ -108,18 +116,34 @@ poetry run python scripts/parse_vtt_speakers.py <vtt_file> --start-s N --end-s N
 
 # Face detection — map face positions in extracted frames using YuNet DNN
 poetry run python scripts/detect_faces.py <frames_dir> --output path --min-confidence 0.7
+# With hybrid face gate (adds duo_score, ema_score, shot_type, gate_reason per frame)
+poetry run python scripts/detect_faces.py <frames_dir> --gate --output path
 
 # Quality check — validate upscale factor and sharpness degradation
 poetry run python scripts/check_upscale_quality.py --predict --crop-width N --target-width 1080
 poetry run python scripts/check_upscale_quality.py <segment.mp4> --crop-width N --target-width 1080 --source-frame frame.png
+
+# Screen share OCR — extract text from slides/code/demos (requires tesseract)
+poetry run python scripts/ocr_screen_share.py <frames_dir> --output path --confidence 60
+
+# Pi performance benchmark — test which framing styles are feasible on target hardware
+poetry run python scripts/benchmark_styles.py <source_video> --output benchmark-results.json
+
+# Style gallery preview — generate 5s preview clips for each framing style
+poetry run python scripts/generate_style_previews.py <source_video> --start 60.0 \
+  --faces-left 300 --faces-right 1200 --output-dir <workspace>/previews
 ```
 
 ## Key Patterns
 
-- FSM transition table in `domain/transitions.py` (pure data, no I/O)
+- FSM transition table in `domain/transitions.py` (pure data, no I/O) — both pipeline stage FSM and framing style FSM
 - Generator-Critic QA: ReflectionLoop with max 3 attempts, best-of-three selection
 - Recovery chain: retry -> fork -> fresh -> escalate
 - EventBus: in-process Observer pattern with failure isolation
 - Queue: FIFO with `fcntl.flock`, inbox/processing/completed lifecycle
 - Settings: Pydantic BaseSettings loading from `.env`
 - Four-Layer Framing: VTT speaker timeline + Face position intelligence + AI agent reasoning + QA safety net
+- Hybrid Face Gate: 6-component weighted duo score + EMA temporal hysteresis + persistence counters + cooldown in `domain/face_gate.py`
+- Framing Style FSM: 5 states (solo, duo_split, duo_pip, screen_share, cinematic_solo) with event-driven transitions in `domain/transitions.py`
+- xfade Assembly: style-change (0.5s fade) and narrative-boundary (1.0s dissolve) transitions via `infrastructure/adapters/reel_assembler.py`
+- Shot Classification: `classify_shot` decision tree + `derive_fsm_event` transition mapping in `domain/face_gate.py`
