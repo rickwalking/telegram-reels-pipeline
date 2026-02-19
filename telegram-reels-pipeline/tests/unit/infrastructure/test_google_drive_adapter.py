@@ -60,14 +60,17 @@ class TestGoogleDriveAdapter:
 
         # Block all google imports
         with (
-            patch.dict(sys.modules, {
-                "google": None,
-                "google.oauth2": None,
-                "google.oauth2.service_account": None,
-                "googleapiclient": None,
-                "googleapiclient.discovery": None,
-                "googleapiclient.http": None,
-            }),
+            patch.dict(
+                sys.modules,
+                {
+                    "google": None,
+                    "google.oauth2": None,
+                    "google.oauth2.service_account": None,
+                    "googleapiclient": None,
+                    "googleapiclient.discovery": None,
+                    "googleapiclient.http": None,
+                },
+            ),
             pytest.raises(ConfigurationError, match="google-api-python-client"),
         ):
             await adapter.upload(video)

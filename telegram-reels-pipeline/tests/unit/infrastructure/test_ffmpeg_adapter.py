@@ -43,9 +43,7 @@ class TestFFmpegAdapterExtractFrames:
         video.write_bytes(b"fake")
 
         with patch("pipeline.infrastructure.adapters.ffmpeg_adapter.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(returncode=1, stderr=b"error")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(returncode=1, stderr=b"error"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             adapter = FFmpegAdapter()
             with pytest.raises(FFmpegError, match="Failed to extract frame"):
@@ -54,7 +52,10 @@ class TestFFmpegAdapterExtractFrames:
 
 class TestFFmpegAdapterCropAndEncode:
     def _segment(
-        self, start: float = 0.0, end: float = 60.0, layout: str = "side_by_side",
+        self,
+        start: float = 0.0,
+        end: float = 60.0,
+        layout: str = "side_by_side",
     ) -> SegmentLayout:
         return SegmentLayout(
             start_seconds=start,
@@ -131,7 +132,9 @@ class TestFFmpegAdapterCropAndEncode:
         video.write_bytes(b"fake")
         output = tmp_path / "output.mp4"
         seg = SegmentLayout(
-            start_seconds=10.0, end_seconds=70.0, layout_name="test",
+            start_seconds=10.0,
+            end_seconds=70.0,
+            layout_name="test",
             crop_region=CropRegion(x=100, y=50, width=540, height=960),
         )
 
@@ -184,9 +187,7 @@ class TestFFmpegAdapterConcatVideos:
 class TestFFmpegAdapterProbeDuration:
     async def test_returns_duration(self) -> None:
         with patch("pipeline.infrastructure.adapters.ffmpeg_adapter.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"65.432\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"65.432\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             adapter = FFmpegAdapter()
             duration = await adapter.probe_duration(Path("test.mp4"))
@@ -195,9 +196,7 @@ class TestFFmpegAdapterProbeDuration:
 
     async def test_raises_on_failure(self) -> None:
         with patch("pipeline.infrastructure.adapters.ffmpeg_adapter.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(returncode=1, stderr=b"err")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(returncode=1, stderr=b"err"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             adapter = FFmpegAdapter()
             with pytest.raises(FFmpegError, match="ffprobe failed"):
@@ -205,9 +204,7 @@ class TestFFmpegAdapterProbeDuration:
 
     async def test_raises_on_bad_output(self) -> None:
         with patch("pipeline.infrastructure.adapters.ffmpeg_adapter.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(
-                return_value=_mock_process(stdout=b"not-a-number\n")
-            )
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process(stdout=b"not-a-number\n"))
             mock_aio.subprocess = __import__("asyncio").subprocess
             adapter = FFmpegAdapter()
             with pytest.raises(FFmpegError, match="Could not parse"):

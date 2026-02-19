@@ -153,10 +153,7 @@ class TestTelegramPollerBoundedDedup:
         poller, mock_bot = _make_poller(tmp_path)
         # Use unauthorized chat_id (999) so updates are tracked in seen_update_ids
         # but never reach enqueue — avoids writing thousands of files to disk.
-        updates = [
-            _make_update(i, 999, "not-a-url")
-            for i in range(1, _MAX_SEEN_IDS + 100)
-        ]
+        updates = [_make_update(i, 999, "not-a-url") for i in range(1, _MAX_SEEN_IDS + 100)]
         mock_bot.get_updates = AsyncMock(return_value=updates)
         await poller.poll_once()
 

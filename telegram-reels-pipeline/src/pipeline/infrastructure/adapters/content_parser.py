@@ -48,5 +48,3 @@ def parse_content_output(raw: str) -> ContentPackage:
         music_suggestion=str(music),
         mood_category=str(data.get("mood_category", "")),
     )
-
-

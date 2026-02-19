@@ -38,9 +38,7 @@ def _make_metadata_json(
 def _make_proc(returncode: int = 0, stdout: str = "", stderr: str = "") -> MagicMock:
     proc = MagicMock()
     proc.returncode = returncode
-    proc.communicate = AsyncMock(
-        return_value=(stdout.encode(), stderr.encode())
-    )
+    proc.communicate = AsyncMock(return_value=(stdout.encode(), stderr.encode()))
     proc.kill = AsyncMock()
     proc.wait = AsyncMock()
     return proc
@@ -103,9 +101,7 @@ class TestRetryLogic:
         ok_proc = _make_proc(stdout=_make_metadata_json())
 
         with patch("pipeline.infrastructure.adapters.ytdlp_adapter.asyncio") as mock_asyncio:
-            mock_asyncio.create_subprocess_exec = AsyncMock(
-                side_effect=[fail_proc, fail_proc, ok_proc]
-            )
+            mock_asyncio.create_subprocess_exec = AsyncMock(side_effect=[fail_proc, fail_proc, ok_proc])
             mock_asyncio.subprocess = MagicMock()
             mock_asyncio.subprocess.PIPE = -1
             mock_asyncio.timeout = lambda s: _FakeTimeout()

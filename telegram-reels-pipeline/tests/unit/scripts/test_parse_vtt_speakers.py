@@ -163,9 +163,9 @@ class TestParseVttSpeakers:
         # Debouncing should merge changes < MIN_SEGMENT_DURATION_S apart
         for entry in timeline:
             duration = entry["end_s"] - entry["start_s"]
-            assert duration >= MIN_SEGMENT_DURATION_S, (
-                f"Sub-segment duration {duration}s is less than minimum {MIN_SEGMENT_DURATION_S}s"
-            )
+            assert (
+                duration >= MIN_SEGMENT_DURATION_S
+            ), f"Sub-segment duration {duration}s is less than minimum {MIN_SEGMENT_DURATION_S}s"
 
     def test_single_speaker_content(self, tmp_path: Path) -> None:
         vtt_file = _write_vtt(tmp_path, _VTT_SINGLE_SPEAKER)

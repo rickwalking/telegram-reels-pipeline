@@ -68,7 +68,10 @@ class TestRecommendAction:
 class TestCheckUpscaleQualityPredictMode:
     def test_predict_good_quality(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=960, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=960,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert result["mode"] == "predict"
@@ -78,7 +81,10 @@ class TestCheckUpscaleQualityPredictMode:
 
     def test_predict_degraded_quality(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=608, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=608,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert result["quality"] == "degraded"
@@ -87,7 +93,10 @@ class TestCheckUpscaleQualityPredictMode:
 
     def test_predict_unacceptable_quality(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=400, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=400,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert result["quality"] == "unacceptable"
@@ -96,19 +105,28 @@ class TestCheckUpscaleQualityPredictMode:
     def test_predict_exact_boundaries(self) -> None:
         # 1.2x boundary
         result = check_upscale_quality(
-            segment_path=None, crop_width=900, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=900,
+            target_width=1080,
+            predict_only=True,
         )
         assert result["quality"] == "good"  # 1080/900 = 1.2
 
         # 1.5x boundary
         result = check_upscale_quality(
-            segment_path=None, crop_width=720, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=720,
+            target_width=1080,
+            predict_only=True,
         )
         assert result["quality"] == "acceptable"  # 1080/720 = 1.5
 
         # 2.0x boundary
         result = check_upscale_quality(
-            segment_path=None, crop_width=540, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=540,
+            target_width=1080,
+            predict_only=True,
         )
         assert result["quality"] == "degraded"  # 1080/540 = 2.0
 
@@ -116,7 +134,10 @@ class TestCheckUpscaleQualityPredictMode:
 class TestInvalidDimensions:
     def test_zero_crop_width(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=0, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=0,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert result["quality"] == "unacceptable"
@@ -125,7 +146,10 @@ class TestInvalidDimensions:
 
     def test_negative_crop_width(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=-100, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=-100,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert result["quality"] == "unacceptable"
@@ -133,7 +157,10 @@ class TestInvalidDimensions:
 
     def test_negative_target_width(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=960, target_width=-1, predict_only=True,
+            segment_path=None,
+            crop_width=960,
+            target_width=-1,
+            predict_only=True,
         )
 
         assert result["quality"] == "unacceptable"
@@ -141,7 +168,10 @@ class TestInvalidDimensions:
 
     def test_zero_target_width(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=960, target_width=0, predict_only=True,
+            segment_path=None,
+            crop_width=960,
+            target_width=0,
+            predict_only=True,
         )
 
         assert result["quality"] == "unacceptable"
@@ -173,7 +203,10 @@ class TestSegmentNotFound:
 class TestResultStructure:
     def test_predict_mode_keys(self) -> None:
         result = check_upscale_quality(
-            segment_path=None, crop_width=960, target_width=1080, predict_only=True,
+            segment_path=None,
+            crop_width=960,
+            target_width=1080,
+            predict_only=True,
         )
 
         assert "upscale_factor" in result
@@ -191,7 +224,9 @@ class TestResultStructure:
         segment.write_bytes(b"not a real video")
 
         result = check_upscale_quality(
-            segment_path=segment, crop_width=960, target_width=1080,
+            segment_path=segment,
+            crop_width=960,
+            target_width=1080,
         )
 
         # Should fall back to predict mode since frames can't be extracted

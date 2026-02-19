@@ -12,6 +12,7 @@ from pipeline.application.run_cleanup import CleanupResult, RunCleaner
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_run_dir(
     base: Path,
     name: str = "run-001",
@@ -43,6 +44,7 @@ def _make_run_dir(
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestRunCleaner:
     async def test_empty_directory(self, tmp_path: Path) -> None:

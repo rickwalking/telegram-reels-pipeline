@@ -10,12 +10,14 @@ from pipeline.domain.models import LayoutClassification, SegmentLayout
 logger = logging.getLogger(__name__)
 
 # Known layout types that have predefined crop strategies
-KNOWN_LAYOUTS: frozenset[str] = frozenset({
-    "side_by_side",
-    "speaker_focus",
-    "grid",
-    "screen_share",
-})
+KNOWN_LAYOUTS: frozenset[str] = frozenset(
+    {
+        "side_by_side",
+        "speaker_focus",
+        "grid",
+        "screen_share",
+    }
+)
 
 
 def parse_layout_classifications(raw: str) -> tuple[LayoutClassification, ...]:
@@ -85,17 +87,13 @@ def group_into_segments(
         if clamped[i].layout_name != current_layout:
             end = clamped[i].timestamp
             if end > start:
-                segments.append(
-                    SegmentLayout(start_seconds=start, end_seconds=end, layout_name=current_layout)
-                )
+                segments.append(SegmentLayout(start_seconds=start, end_seconds=end, layout_name=current_layout))
             current_layout = clamped[i].layout_name
             start = clamped[i].timestamp
 
     # Last segment extends to video end (skip if zero-length)
     if video_duration > start:
-        segments.append(
-            SegmentLayout(start_seconds=start, end_seconds=video_duration, layout_name=current_layout)
-        )
+        segments.append(SegmentLayout(start_seconds=start, end_seconds=video_duration, layout_name=current_layout))
 
     return tuple(segments)
 

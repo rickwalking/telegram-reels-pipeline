@@ -59,6 +59,7 @@ class FakeMessaging:
 # _check_constraints tests
 # ---------------------------------------------------------------------------
 
+
 class TestCheckConstraints:
     def test_no_constraint_when_within_limits(self) -> None:
         monitor = FakeMonitor([_snap()])
@@ -112,6 +113,7 @@ class TestCheckConstraints:
 # ---------------------------------------------------------------------------
 # wait_for_resources tests
 # ---------------------------------------------------------------------------
+
 
 class TestWaitForResources:
     async def test_returns_immediately_when_within_limits(self) -> None:

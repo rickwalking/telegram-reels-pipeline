@@ -35,10 +35,14 @@ def _setup_moment_file(workspace: Path, start: float = 10.0, end: float = 70.0) 
     assets = workspace / "assets"
     assets.mkdir(parents=True, exist_ok=True)
     moment_file = assets / "moment-selection.json"
-    moment_file.write_text(json.dumps({
-        "start_seconds": start,
-        "end_seconds": end,
-    }))
+    moment_file.write_text(
+        json.dumps(
+            {
+                "start_seconds": start,
+                "end_seconds": end,
+            }
+        )
+    )
     return moment_file
 
 

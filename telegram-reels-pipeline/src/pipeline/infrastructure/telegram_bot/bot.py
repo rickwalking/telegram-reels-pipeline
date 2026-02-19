@@ -81,11 +81,7 @@ class TelegramBotAdapter:
                 updates = await self._bot.get_updates(offset=offset, timeout=0)
                 for update in updates:
                     self._last_update_id = update.update_id
-                    if (
-                        update.message
-                        and update.message.chat_id == self._chat_id
-                        and update.message.text
-                    ):
+                    if update.message and update.message.chat_id == self._chat_id and update.message.text:
                         logger.info("Received reply to question (update_id=%d)", update.update_id)
                         return update.message.text
             except Exception:

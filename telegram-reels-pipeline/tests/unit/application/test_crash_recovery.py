@@ -15,6 +15,7 @@ from pipeline.domain.types import RunId
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_run(
     run_id: str = "run-001",
     stage: PipelineStage = PipelineStage.TRANSCRIPT,
@@ -72,6 +73,7 @@ class FakeMessaging:
 # _build_recovery_plan tests
 # ---------------------------------------------------------------------------
 
+
 class TestBuildRecoveryPlan:
     def test_resumes_from_first_incomplete_stage(self) -> None:
         run = _make_run(stages_completed=("router", "research"))
@@ -105,8 +107,14 @@ class TestBuildRecoveryPlan:
 
     def test_returns_none_when_all_stages_completed(self) -> None:
         all_stages = (
-            "router", "research", "transcript", "content",
-            "layout_detective", "ffmpeg_engineer", "assembly", "delivery",
+            "router",
+            "research",
+            "transcript",
+            "content",
+            "layout_detective",
+            "ffmpeg_engineer",
+            "assembly",
+            "delivery",
         )
         run = _make_run(stages_completed=all_stages)
         plan = _build_recovery_plan(run)
@@ -115,8 +123,13 @@ class TestBuildRecoveryPlan:
 
     def test_single_stage_remaining(self) -> None:
         completed = (
-            "router", "research", "transcript", "content",
-            "layout_detective", "ffmpeg_engineer", "assembly",
+            "router",
+            "research",
+            "transcript",
+            "content",
+            "layout_detective",
+            "ffmpeg_engineer",
+            "assembly",
         )
         run = _make_run(stages_completed=completed)
         plan = _build_recovery_plan(run)
@@ -143,6 +156,7 @@ class TestBuildRecoveryPlan:
 # ---------------------------------------------------------------------------
 # CrashRecoveryHandler.scan_and_recover tests
 # ---------------------------------------------------------------------------
+
 
 class TestScanAndRecover:
     async def test_no_incomplete_runs_returns_empty(self) -> None:
@@ -213,8 +227,14 @@ class TestScanAndRecover:
 
     async def test_skips_inconsistent_runs(self) -> None:
         all_stages = (
-            "router", "research", "transcript", "content",
-            "layout_detective", "ffmpeg_engineer", "assembly", "delivery",
+            "router",
+            "research",
+            "transcript",
+            "content",
+            "layout_detective",
+            "ffmpeg_engineer",
+            "assembly",
+            "delivery",
         )
         run = _make_run(stages_completed=all_stages, stage=PipelineStage.DELIVERY)
         store = FakeStateStore(incomplete=[run])

@@ -18,6 +18,7 @@ from pipeline.infrastructure.adapters.systemd_watchdog import (
 # _sd_notify tests
 # ---------------------------------------------------------------------------
 
+
 class TestSdNotify:
     def test_returns_false_when_no_socket(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
@@ -60,6 +61,7 @@ class TestSdNotify:
 # Convenience function tests
 # ---------------------------------------------------------------------------
 
+
 class TestConvenienceFunctions:
     def test_notify_ready(self) -> None:
         with patch("pipeline.infrastructure.adapters.systemd_watchdog._sd_notify", return_value=True) as m:
@@ -81,6 +83,7 @@ class TestConvenienceFunctions:
 # get_watchdog_usec tests
 # ---------------------------------------------------------------------------
 
+
 class TestGetWatchdogUsec:
     def test_returns_none_when_not_set(self) -> None:
         with patch.dict("os.environ", {}, clear=True):
@@ -98,6 +101,7 @@ class TestGetWatchdogUsec:
 # ---------------------------------------------------------------------------
 # WatchdogHeartbeat tests
 # ---------------------------------------------------------------------------
+
 
 class TestWatchdogHeartbeat:
     async def test_start_creates_task(self) -> None:

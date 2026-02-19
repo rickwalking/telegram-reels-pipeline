@@ -136,10 +136,7 @@ class RevisionRouter:
         """Ask user to confirm or correct the classification."""
         assert self._messaging is not None
 
-        options = "\n".join(
-            f"  {i+1}. {rt.value.replace('_', ' ').title()}"
-            for i, rt in enumerate(RevisionType)
-        )
+        options = "\n".join(f"  {i+1}. {rt.value.replace('_', ' ').title()}" for i, rt in enumerate(RevisionType))
         question = (
             f"I think you want: {suggested.value.replace('_', ' ').title()}\n"
             f"Is that correct? Reply with a number to choose:\n{options}\n"
@@ -177,6 +174,6 @@ class RevisionRouter:
             "- different_moment: User wants a completely different clip from the episode\n"
             "- add_context: User wants to widen the clip to include surrounding context\n\n"
             f"User message: {user_message}\n\n"
-            "Respond with JSON: {\"revision_type\": \"...\", \"confidence\": 0.0-1.0, "
-            "\"reasoning\": \"...\", \"extra_seconds\": 0, \"timestamp_hint\": null}"
+            'Respond with JSON: {"revision_type": "...", "confidence": 0.0-1.0, '
+            '"reasoning": "...", "extra_seconds": 0, "timestamp_hint": null}'
         )

@@ -16,6 +16,7 @@ class StateProvider(Protocol):
 
     def get_current_state(self) -> RunState | None: ...
 
+
 logger = logging.getLogger(__name__)
 
 # Events that trigger a checkpoint write

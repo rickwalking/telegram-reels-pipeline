@@ -63,10 +63,13 @@ class YtDlpAdapter:
                 "yt-dlp",
                 "--write-subs",
                 "--write-auto-subs",
-                "--sub-lang", "en",
-                "--sub-format", "srt",
+                "--sub-lang",
+                "en",
+                "--sub-format",
+                "srt",
                 "--skip-download",
-                "--output", str(output.parent / stem),
+                "--output",
+                str(output.parent / stem),
                 url,
             ],
             operation="subtitles",
@@ -90,8 +93,10 @@ class YtDlpAdapter:
         await self._run_with_retry(
             [
                 "yt-dlp",
-                "--format", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                "--output", str(output),
+                "--format",
+                "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+                "--output",
+                str(output),
                 url,
             ],
             operation="video",
@@ -124,13 +129,19 @@ class YtDlpAdapter:
                     backoff = BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
                     logger.warning(
                         "yt-dlp %s attempt %d/%d failed: %s (retrying in %.1fs)",
-                        operation, attempt, MAX_RETRIES, exc, backoff,
+                        operation,
+                        attempt,
+                        MAX_RETRIES,
+                        exc,
+                        backoff,
                     )
                     await asyncio.sleep(backoff)
                 else:
                     logger.error(
                         "yt-dlp %s failed after %d attempts: %s",
-                        operation, MAX_RETRIES, exc,
+                        operation,
+                        MAX_RETRIES,
+                        exc,
                     )
 
         assert last_error is not None

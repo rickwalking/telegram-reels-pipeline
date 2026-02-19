@@ -50,16 +50,12 @@ class LayoutEscalationHandler:
         )
 
         options_text = "\n".join(_ESCALATION_OPTIONS)
-        reply = await self._messaging.ask_user(
-            f"Choose framing for this layout:\n{options_text}"
-        )
+        reply = await self._messaging.ask_user(f"Choose framing for this layout:\n{options_text}")
 
         crop = self._parse_reply(reply, segment.layout_name)
 
         await self._knowledge_base.save_strategy(segment.layout_name, crop)
-        await self._messaging.notify_user(
-            f"Learned layout '{segment.layout_name}' — will auto-apply next time."
-        )
+        await self._messaging.notify_user(f"Learned layout '{segment.layout_name}' — will auto-apply next time.")
 
         return crop
 
@@ -77,13 +73,15 @@ class LayoutEscalationHandler:
             parts = [int(p.strip()) for p in reply.split(",")]
             if len(parts) == 4:
                 return CropRegion(
-                    x=parts[0], y=parts[1], width=parts[2], height=parts[3], layout_name=layout_name,
+                    x=parts[0],
+                    y=parts[1],
+                    width=parts[2],
+                    height=parts[3],
+                    layout_name=layout_name,
                 )
         except (ValueError, IndexError) as exc:
             raise UnknownLayoutError(
                 f"Could not parse layout guidance: {reply!r}. Expected A/B/C or x,y,width,height"
             ) from exc
 
-        raise UnknownLayoutError(
-            f"Could not parse layout guidance: {reply!r}. Expected A/B/C or x,y,width,height"
-        )
+        raise UnknownLayoutError(f"Could not parse layout guidance: {reply!r}. Expected A/B/C or x,y,width,height")

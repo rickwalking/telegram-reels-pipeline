@@ -142,13 +142,9 @@ def validate_segment_bounds(
     Raises ValidationError if bounds are invalid.
     """
     if selection.start_seconds >= video_duration:
-        raise ValidationError(
-            f"Segment start ({selection.start_seconds}s) exceeds video duration ({video_duration}s)"
-        )
+        raise ValidationError(f"Segment start ({selection.start_seconds}s) exceeds video duration ({video_duration}s)")
     if selection.end_seconds > video_duration + 1.0:
-        raise ValidationError(
-            f"Segment end ({selection.end_seconds}s) exceeds video duration ({video_duration}s)"
-        )
+        raise ValidationError(f"Segment end ({selection.end_seconds}s) exceeds video duration ({video_duration}s)")
 
 
 def _ts_to_seconds(parts: tuple[str, ...]) -> float:

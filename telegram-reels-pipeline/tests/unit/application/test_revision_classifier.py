@@ -16,11 +16,13 @@ from pipeline.domain.enums import RevisionType
 
 class TestParseRevisionClassification:
     def test_valid_extend_moment(self) -> None:
-        raw = json.dumps({
-            "revision_type": "extend_moment",
-            "confidence": 0.95,
-            "reasoning": "User wants more time",
-        })
+        raw = json.dumps(
+            {
+                "revision_type": "extend_moment",
+                "confidence": 0.95,
+                "reasoning": "User wants more time",
+            }
+        )
         rev_type, confidence = parse_revision_classification(raw)
         assert rev_type == RevisionType.EXTEND_MOMENT
         assert confidence == pytest.approx(0.95)

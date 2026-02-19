@@ -44,10 +44,14 @@ class FFmpegAdapter:
             output = video.parent / f"frame_{ts:.3f}.jpg"
             try:
                 await self._run_ffmpeg(
-                    "-ss", str(ts),
-                    "-i", str(video),
-                    "-frames:v", "1",
-                    "-q:v", "2",
+                    "-ss",
+                    str(ts),
+                    "-i",
+                    str(video),
+                    "-frames:v",
+                    "1",
+                    "-q:v",
+                    "2",
                     "-y",
                     str(output),
                 )
@@ -113,9 +117,12 @@ class FFmpegAdapter:
         """Get video duration in seconds using ffprobe."""
         proc = await asyncio.create_subprocess_exec(
             "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             str(video),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -137,35 +144,44 @@ class FFmpegAdapter:
 
         vf = f"crop={crop.width}:{crop.height}:{crop.x}:{crop.y},scale=1080:1920"
         await self._run_ffmpeg(
-            "-i", str(video),
-            "-ss", str(segment.start_seconds),
-            "-to", str(segment.end_seconds),
-            "-vf", vf,
-            "-c:v", "libx264",
-            "-c:a", "aac",
-            "-threads", str(self._threads),
+            "-i",
+            str(video),
+            "-ss",
+            str(segment.start_seconds),
+            "-to",
+            str(segment.end_seconds),
+            "-vf",
+            vf,
+            "-c:v",
+            "libx264",
+            "-c:a",
+            "aac",
+            "-threads",
+            str(self._threads),
             "-y",
             str(output),
         )
 
     @staticmethod
     def _escape_concat_path(path: Path) -> str:
-        """Escape a path for FFmpeg concat demuxer (single quotes -> '\\''). """
+        """Escape a path for FFmpeg concat demuxer (single quotes -> '\\'')."""
         escaped = str(path.resolve()).replace("'", "'\\''")
         return f"file '{escaped}'"
 
     async def _concat_files(self, files: list[Path], output: Path) -> None:
         """Concatenate files using FFmpeg concat demuxer."""
         list_file = output.parent / f"_concat_{output.stem}.txt"
-        list_file.write_text(
-            "\n".join(self._escape_concat_path(f) for f in files)
-        )
+        list_file.write_text("\n".join(self._escape_concat_path(f) for f in files))
         try:
             await self._run_ffmpeg(
-                "-f", "concat",
-                "-safe", "0",
-                "-i", str(list_file),
-                "-c", "copy",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                str(list_file),
+                "-c",
+                "copy",
                 "-y",
                 str(output),
             )
@@ -175,7 +191,8 @@ class FFmpegAdapter:
     async def _run_ffmpeg(self, *args: str) -> str:
         """Run an FFmpeg command and return stdout."""
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", *args,
+            "ffmpeg",
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

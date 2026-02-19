@@ -18,10 +18,12 @@ from pipeline.infrastructure.adapters.layout_classifier import (
 
 class TestParseLayoutClassifications:
     def test_parses_valid_json(self) -> None:
-        raw = json.dumps([
-            {"timestamp": 1.0, "layout_name": "side_by_side", "confidence": 0.95},
-            {"timestamp": 5.0, "layout_name": "speaker_focus", "confidence": 0.88},
-        ])
+        raw = json.dumps(
+            [
+                {"timestamp": 1.0, "layout_name": "side_by_side", "confidence": 0.95},
+                {"timestamp": 5.0, "layout_name": "speaker_focus", "confidence": 0.88},
+            ]
+        )
         result = parse_layout_classifications(raw)
         assert len(result) == 2
         assert result[0] == LayoutClassification(timestamp=1.0, layout_name="side_by_side", confidence=0.95)
@@ -163,9 +165,7 @@ class TestHasUnknownLayouts:
         assert "screen_share" in KNOWN_LAYOUTS
 
     def test_screen_share_is_known(self) -> None:
-        segs = (
-            SegmentLayout(start_seconds=0, end_seconds=30, layout_name="screen_share"),
-        )
+        segs = (SegmentLayout(start_seconds=0, end_seconds=30, layout_name="screen_share"),)
         assert not has_unknown_layouts(segs)
 
 

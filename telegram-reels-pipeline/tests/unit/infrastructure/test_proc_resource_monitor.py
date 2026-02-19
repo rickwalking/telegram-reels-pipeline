@@ -16,6 +16,7 @@ from pipeline.infrastructure.adapters.proc_resource_monitor import (
 # _read_memory tests
 # ---------------------------------------------------------------------------
 
+
 class TestReadMemory:
     def test_parses_meminfo(self) -> None:
         content = (
@@ -45,6 +46,7 @@ class TestReadMemory:
 # _read_cpu_load tests
 # ---------------------------------------------------------------------------
 
+
 class TestReadCpuLoad:
     def test_parses_loadavg(self) -> None:
         content = "1.50 1.20 0.90 1/200 12345\n"
@@ -71,6 +73,7 @@ class TestReadCpuLoad:
 # ---------------------------------------------------------------------------
 # _read_temperature tests
 # ---------------------------------------------------------------------------
+
 
 class TestReadTemperature:
     def test_parses_thermal_zone(self) -> None:

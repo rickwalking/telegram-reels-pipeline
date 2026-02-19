@@ -61,11 +61,7 @@ class GoogleDriveAdapter:
                 file_metadata["parents"] = [self._folder_id]
 
             media = MediaFileUpload(str(path), resumable=True)
-            file_result = (
-                service.files()
-                .create(body=file_metadata, media_body=media, fields="id")
-                .execute()
-            )
+            file_result = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
             file_id = file_result["id"]
 
             # Make the file viewable by anyone with the link

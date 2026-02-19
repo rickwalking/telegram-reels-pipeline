@@ -116,9 +116,7 @@ class TelegramPoller:
         try:
             pending = self._queue.pending_count()
             if pending > 1:
-                await self._bot.notify_user(
-                    f"Queued! You're #{pending} in line."
-                )
+                await self._bot.notify_user(f"Queued! You're #{pending} in line.")
             else:
                 await self._bot.notify_user("Queued! Processing will begin shortly.")
         except Exception:
