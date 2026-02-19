@@ -653,6 +653,7 @@ class TestValidateCliArgs:
         p.add_argument("--stages", "-s", type=int, default=7)
         p.add_argument("--resume", type=Path, default=None)
         p.add_argument("--start-stage", type=int, default=None)
+        p.add_argument("--target-duration", type=int, default=90)
         return p
 
     def test_valid_defaults_pass(self) -> None:
@@ -718,6 +719,24 @@ class TestValidateCliArgs:
         args = p.parse_args(["--resume", str(tmp_path), "--start-stage", "1"])
         run_cli._validate_cli_args(args, arg_parser=p)
         assert args.start_stage == 1
+
+    def test_target_duration_too_low_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--target-duration", "10"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_target_duration_too_high_exits(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--target-duration", "500"])
+        with pytest.raises(SystemExit):
+            run_cli._validate_cli_args(args, arg_parser=p)
+
+    def test_target_duration_valid_passes(self) -> None:
+        p = self._make_parser()
+        args = p.parse_args(["--target-duration", "120"])
+        run_cli._validate_cli_args(args, arg_parser=p)
+        assert args.target_duration == 120
 
     def test_auto_detect_empty_workspace_stays_at_1(self, tmp_path: Path) -> None:
         """Resume with empty workspace — no artifacts to detect, stays at 1."""

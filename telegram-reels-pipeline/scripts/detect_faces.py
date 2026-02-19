@@ -4,9 +4,14 @@ Scans all extracted frames with YuNet DNN face detection to build a face positio
 map BEFORE any crop decisions are made. Produces face-position-map.json with
 per-frame face positions and a summary of speaker positions via spatial clustering.
 
+When ``--gate`` is enabled, applies the hybrid face gate (spatial + confidence +
+temporal persistence) to classify each frame's shot type and determine editorial
+face count for FSM event derivation.
+
 Usage::
 
     python scripts/detect_faces.py <frames_dir> [--output path] [--min-confidence 0.7] [--min-face-width 50]
+    python scripts/detect_faces.py <frames_dir> --gate [--output path]
 """
 
 from __future__ import annotations
@@ -19,6 +24,9 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+
+# Add src to path for domain imports when using --gate
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 try:
     import cv2
@@ -198,12 +206,14 @@ def _spatial_cluster(
         dominant_side = max(side_counts, key=side_counts.get)  # type: ignore[arg-type]
         label = side_labels.get(dominant_side, f"Speaker_{dominant_side.title()}")
 
-        speakers.append({
-            "label": label,
-            "avg_x": round(avg_x, 1),
-            "avg_y": round(avg_y, 1),
-            "seen_in_frames": len(cluster),
-        })
+        speakers.append(
+            {
+                "label": label,
+                "avg_x": round(avg_x, 1),
+                "avg_y": round(avg_y, 1),
+                "seen_in_frames": len(cluster),
+            }
+        )
 
     return speakers
 
@@ -321,7 +331,13 @@ def detect_faces_in_frames(
 
     for frame_file in frame_files:
         result = _process_frame(
-            frame_file, detector, use_yunet, min_face_width, min_confidence, frame_width, frame_height,
+            frame_file,
+            detector,
+            use_yunet,
+            min_face_width,
+            min_confidence,
+            frame_width,
+            frame_height,
         )
         if result is not None:
             frame_entry, faces = result
@@ -342,6 +358,53 @@ def detect_faces_in_frames(
             "detector": "yunet" if use_yunet else "haar_cascade",
         },
     }
+
+
+def _apply_gate_to_result(result: dict[str, object], frame_width: int, frame_height: int) -> dict[str, object]:
+    """Apply hybrid face gate to face detection result, enriching frames with gate data."""
+    from pipeline.domain.face_gate import apply_face_gate
+    from pipeline.domain.models import FaceGateConfig
+
+    frames = result.get("frames", [])
+    if not frames:
+        return result
+
+    config = FaceGateConfig()
+
+    # Build frame_faces tuple from detection results
+    frame_faces: list[tuple[dict[str, float], ...]] = []
+    for frame_entry in frames:
+        faces = frame_entry.get("faces", [])  # type: ignore[union-attr]
+        face_dicts: list[dict[str, float]] = []
+        for f in faces:
+            face_dicts.append(
+                {
+                    "x": float(f["x"]),  # type: ignore[index]
+                    "y": float(f["y"]),  # type: ignore[index]
+                    "w": float(f["w"]),  # type: ignore[index]
+                    "h": float(f["h"]),  # type: ignore[index]
+                    "confidence": float(f.get("confidence", 0.7)),  # type: ignore[union-attr]
+                }
+            )
+        frame_faces.append(tuple(face_dicts))
+
+    gate_results = apply_face_gate(tuple(frame_faces), frame_width, frame_height, config)
+
+    for frame_entry, gate_result in zip(frames, gate_results):
+        frame_entry["editorial_face_count"] = gate_result.editorial_face_count  # type: ignore[index]
+        frame_entry["duo_score"] = gate_result.duo_score  # type: ignore[index]
+        frame_entry["ema_score"] = gate_result.ema_score  # type: ignore[index]
+        frame_entry["is_editorial_duo"] = gate_result.is_editorial_duo  # type: ignore[index]
+        frame_entry["shot_type"] = gate_result.shot_type.value  # type: ignore[index]
+        frame_entry["gate_reason"] = gate_result.gate_reason  # type: ignore[index]
+
+    # Update summary with gate info
+    summary = result.get("summary", {})
+    editorial_duo_count = sum(1 for g in gate_results if g.is_editorial_duo)
+    summary["editorial_duo_frames"] = editorial_duo_count  # type: ignore[index]
+    summary["face_gate_enabled"] = True  # type: ignore[index]
+
+    return result
 
 
 def _atomic_write_json(data: object, output_path: Path) -> None:
@@ -365,6 +428,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=None, help="Output path (default: stdout)")
     parser.add_argument("--min-confidence", type=float, default=0.7, help="Minimum detection confidence (default: 0.7)")
     parser.add_argument("--min-face-width", type=int, default=50, help="Minimum face width in pixels (default: 50)")
+    parser.add_argument("--gate", action="store_true", help="Apply hybrid face gate (spatial + temporal persistence)")
     args = parser.parse_args()
 
     result = detect_faces_in_frames(
@@ -372,6 +436,19 @@ def main() -> None:
         min_confidence=args.min_confidence,
         min_face_width=args.min_face_width,
     )
+
+    if args.gate and _HAS_OPENCV:
+        # Get frame dimensions from first frame for gate calculation
+        frame_files = sorted(
+            [f for f in args.frames_dir.iterdir() if f.suffix.lower() in (".png", ".jpg", ".jpeg")],
+            key=lambda f: _extract_timestamp(f.name) or 0.0,
+        )
+        if frame_files:
+            first = cv2.imread(str(frame_files[0]))
+            if first is not None:
+                h, w = first.shape[:2]
+                result = _apply_gate_to_result(result, w, h)
+                print(f"Face gate applied ({w}x{h} frames)", file=sys.stderr)
 
     if args.output:
         _atomic_write_json(result, args.output)

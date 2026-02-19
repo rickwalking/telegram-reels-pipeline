@@ -149,6 +149,9 @@ def _validate_cli_args(args: argparse.Namespace, *, arg_parser: argparse.Argumen
     if args.stages < 1 or args.stages > TOTAL_CLI_STAGES:
         arg_parser.error(f"--stages must be between 1 and {TOTAL_CLI_STAGES}, got {args.stages}")
 
+    if args.target_duration < 30 or args.target_duration > 300:
+        arg_parser.error(f"--target-duration must be between 30 and 300, got {args.target_duration}")
+
     _resolve_start_stage(args)
 
     if args.start_stage > args.stages:
@@ -417,6 +420,7 @@ async def _run_stages(
     artifacts: tuple[Path, ...],
     settings: PipelineSettings,
     framing_style: str | None = None,
+    target_duration_seconds: int = 90,
 ) -> tuple[Path, ...]:
     """Execute pipeline stages sequentially with router elicitation support."""
     for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
@@ -446,6 +450,9 @@ async def _run_stages(
 
         if framing_style:
             elicitation["framing_style"] = framing_style
+
+        if target_duration_seconds != 90:
+            elicitation["target_duration_seconds"] = str(target_duration_seconds)
 
         criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
         gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
@@ -522,6 +529,7 @@ async def run_pipeline(
     resume_workspace: Path | None = None,
     start_stage: int = 1,
     framing_style: str | None = None,
+    target_duration_seconds: int = 90,
 ) -> None:
     settings = PipelineSettings()
     project_root = Path(__file__).resolve().parent.parent
@@ -560,6 +568,8 @@ async def run_pipeline(
     if message != url:
         print(f"  Message: {message}")
     print(f"  Timeout: {effective_timeout}s")
+    if target_duration_seconds != 90:
+        print(f"  Target duration: {target_duration_seconds}s (extended narrative)")
     print(f"{'='*60}\n")
 
     if resume_workspace is not None:
@@ -599,6 +609,7 @@ async def run_pipeline(
             artifacts,
             settings,
             framing_style=effective_style,
+            target_duration_seconds=target_duration_seconds,
         )
     finally:
         cli_backend.set_workspace(None)
@@ -629,6 +640,12 @@ def main() -> None:
     parser.add_argument(
         "--style", default=None, choices=["default", "split", "pip", "auto"], help="Framing style for the reel"
     )
+    parser.add_argument(
+        "--target-duration",
+        type=int,
+        default=90,
+        help="Target duration in seconds (default: 90, max: 300). Longer durations use multi-moment narrative.",
+    )
     args = parser.parse_args()
 
     _validate_cli_args(args, arg_parser=parser)
@@ -639,7 +656,16 @@ def main() -> None:
 
     message = args.message if args.message else args.url
     asyncio.run(
-        run_pipeline(args.url, message, args.stages, args.timeout, args.resume, args.start_stage, framing_style)
+        run_pipeline(
+            args.url,
+            message,
+            args.stages,
+            args.timeout,
+            args.resume,
+            args.start_stage,
+            framing_style,
+            args.target_duration,
+        )
     )
 
 

@@ -41,8 +41,13 @@ def _create_frame(tmp_path: Path, name: str, width: int = 1920, height: int = 10
 
 
 def _create_frame_with_circle(
-    tmp_path: Path, name: str, center_x: int, center_y: int, radius: int = 80,
-    width: int = 1920, height: int = 1080,
+    tmp_path: Path,
+    name: str,
+    center_x: int,
+    center_y: int,
+    radius: int = 80,
+    width: int = 1920,
+    height: int = 1080,
 ) -> Path:
     """Create a test frame with a circular face-like feature."""
     frame = np.zeros((height, width, 3), dtype=np.uint8)

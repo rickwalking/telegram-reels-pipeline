@@ -6,12 +6,15 @@ from types import MappingProxyType
 
 import pytest
 
-from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus
+from pipeline.domain.enums import EscalationState, NarrativeRole, PipelineStage, QADecision, QAStatus, ShotType
 from pipeline.domain.models import (
     AgentRequest,
     AgentResult,
     CropRegion,
+    FaceGateConfig,
+    FaceGateResult,
     LocalizedDescription,
+    NarrativeMoment,
     PipelineEvent,
     PublishingAssets,
     QACritique,
@@ -427,3 +430,98 @@ class TestPublishingAssets:
             veo3_prompts=(prompt,),
         )
         assert assets.hashtags == ("#podcast", "#tech")
+
+
+class TestNarrativeMoment:
+    def test_construction(self) -> None:
+        moment = NarrativeMoment(
+            start_seconds=51.0,
+            end_seconds=81.0,
+            role=NarrativeRole.CORE,
+            transcript_excerpt="AI personalities discussion",
+        )
+        assert moment.duration_seconds == 30.0
+        assert moment.role == NarrativeRole.CORE
+
+    def test_negative_start_raises(self) -> None:
+        with pytest.raises(ValueError, match="start_seconds"):
+            NarrativeMoment(
+                start_seconds=-1.0,
+                end_seconds=10.0,
+                role=NarrativeRole.INTRO,
+                transcript_excerpt="text",
+            )
+
+    def test_end_before_start_raises(self) -> None:
+        with pytest.raises(ValueError, match="end_seconds"):
+            NarrativeMoment(
+                start_seconds=50.0,
+                end_seconds=40.0,
+                role=NarrativeRole.CORE,
+                transcript_excerpt="text",
+            )
+
+    def test_empty_transcript_raises(self) -> None:
+        with pytest.raises(ValueError, match="transcript_excerpt"):
+            NarrativeMoment(
+                start_seconds=10.0,
+                end_seconds=30.0,
+                role=NarrativeRole.BUILDUP,
+                transcript_excerpt="",
+            )
+
+    def test_frozen_immutability(self) -> None:
+        moment = NarrativeMoment(
+            start_seconds=0.0,
+            end_seconds=15.0,
+            role=NarrativeRole.INTRO,
+            transcript_excerpt="intro text",
+        )
+        with pytest.raises(AttributeError):
+            moment.role = NarrativeRole.CORE  # type: ignore[misc]
+
+
+class TestFaceGateConfigModel:
+    def test_default_weights_sum(self) -> None:
+        config = FaceGateConfig()
+        total = (
+            config.w_area
+            + config.w_geometry
+            + config.w_separation
+            + config.w_vertical
+            + config.w_size_ratio
+            + config.w_confidence
+        )
+        assert abs(total - 1.0) < 0.01
+
+    def test_frozen_immutability(self) -> None:
+        config = FaceGateConfig()
+        with pytest.raises(AttributeError):
+            config.min_area_pct = 2.0  # type: ignore[misc]
+
+
+class TestFaceGateResultModel:
+    def test_construction(self) -> None:
+        result = FaceGateResult(
+            raw_face_count=2,
+            editorial_face_count=2,
+            duo_score=0.85,
+            ema_score=0.72,
+            is_editorial_duo=True,
+            shot_type=ShotType.TWO_SHOT,
+            gate_reason="editorial_duo",
+        )
+        assert result.shot_type == ShotType.TWO_SHOT
+
+    def test_frozen_immutability(self) -> None:
+        result = FaceGateResult(
+            raw_face_count=0,
+            editorial_face_count=0,
+            duo_score=0.0,
+            ema_score=0.0,
+            is_editorial_duo=False,
+            shot_type=ShotType.WIDE_SHOT,
+            gate_reason="no_faces",
+        )
+        with pytest.raises(AttributeError):
+            result.is_editorial_duo = True  # type: ignore[misc]

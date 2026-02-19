@@ -7,7 +7,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.infrastructure.adapters.reel_assembler import AssemblyError, ReelAssembler, TransitionSpec
+from pipeline.domain.enums import TransitionKind
+from pipeline.infrastructure.adapters.reel_assembler import (
+    AssemblyError,
+    ReelAssembler,
+    TransitionSpec,
+    make_transition,
+)
 
 
 def _mock_process(returncode: int = 0, stdout: bytes = b"", stderr: bytes = b"") -> MagicMock:
@@ -110,11 +116,42 @@ class TestTransitionSpec:
         spec = TransitionSpec(offset_seconds=5.0)
         assert spec.effect == "fade"
         assert spec.duration == 0.5
+        assert spec.kind == TransitionKind.STYLE_CHANGE
 
     def test_custom_values(self) -> None:
         spec = TransitionSpec(offset_seconds=10.0, effect="slideright", duration=1.0)
         assert spec.effect == "slideright"
         assert spec.duration == 1.0
+
+    def test_narrative_boundary_kind(self) -> None:
+        spec = TransitionSpec(
+            offset_seconds=30.0,
+            effect="dissolve",
+            duration=1.0,
+            kind=TransitionKind.NARRATIVE_BOUNDARY,
+        )
+        assert spec.kind == TransitionKind.NARRATIVE_BOUNDARY
+        assert spec.effect == "dissolve"
+        assert spec.duration == 1.0
+
+
+class TestMakeTransition:
+    def test_style_change_defaults(self) -> None:
+        tr = make_transition(offset_seconds=19.5)
+        assert tr.kind == TransitionKind.STYLE_CHANGE
+        assert tr.duration == 0.5
+        assert tr.effect == "fade"
+
+    def test_narrative_boundary_defaults(self) -> None:
+        tr = make_transition(offset_seconds=30.0, kind=TransitionKind.NARRATIVE_BOUNDARY)
+        assert tr.kind == TransitionKind.NARRATIVE_BOUNDARY
+        assert tr.duration == 1.0
+        assert tr.effect == "dissolve"
+
+    def test_custom_effect_override(self) -> None:
+        tr = make_transition(offset_seconds=10.0, kind=TransitionKind.NARRATIVE_BOUNDARY, effect="wipeleft")
+        assert tr.effect == "wipeleft"
+        assert tr.duration == 1.0  # still narrative boundary duration
 
 
 class TestBuildXfadeFilter:

@@ -70,6 +70,36 @@ class FramingStyleState(Enum):
 
 
 @unique
+class ShotType(Enum):
+    """Classified shot type based on face spatial analysis."""
+
+    CLOSE_UP = "close_up"
+    MEDIUM_SHOT = "medium_shot"
+    TWO_SHOT = "two_shot"
+    WIDE_SHOT = "wide_shot"
+    SCREEN_SHARE = "screen_share"
+
+
+@unique
+class NarrativeRole(Enum):
+    """Narrative arc role for a transcript moment in extended shorts."""
+
+    INTRO = "intro"
+    BUILDUP = "buildup"
+    CORE = "core"
+    REACTION = "reaction"
+    CONCLUSION = "conclusion"
+
+
+@unique
+class TransitionKind(Enum):
+    """Transition type between segments — controls xfade style and duration."""
+
+    STYLE_CHANGE = "style_change"
+    NARRATIVE_BOUNDARY = "narrative_boundary"
+
+
+@unique
 class RevisionType(Enum):
     """User-requested revision categories routed by Router Agent."""
 

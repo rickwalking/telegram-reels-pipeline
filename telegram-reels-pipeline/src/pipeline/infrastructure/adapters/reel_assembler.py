@@ -8,12 +8,17 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from pipeline.domain.enums import TransitionKind
 from pipeline.domain.errors import PipelineError
 
 logger = logging.getLogger(__name__)
 
-# Default xfade transition duration in seconds
-_XFADE_DURATION: float = 0.5
+# Default xfade transition durations in seconds
+_STYLE_CHANGE_DURATION: float = 0.5
+_NARRATIVE_BOUNDARY_DURATION: float = 1.0
+
+# Default effect for narrative boundary transitions
+_NARRATIVE_BOUNDARY_EFFECT: str = "dissolve"
 
 
 @dataclass(frozen=True)
@@ -22,7 +27,32 @@ class TransitionSpec:
 
     offset_seconds: float
     effect: str = "fade"
-    duration: float = _XFADE_DURATION
+    duration: float = _STYLE_CHANGE_DURATION
+    kind: TransitionKind = TransitionKind.STYLE_CHANGE
+
+
+def make_transition(
+    offset_seconds: float,
+    kind: TransitionKind = TransitionKind.STYLE_CHANGE,
+    effect: str | None = None,
+) -> TransitionSpec:
+    """Create a TransitionSpec with sensible defaults based on kind.
+
+    Narrative boundaries get dissolve (1.0s). Style changes get slide/wipe (0.5s).
+    """
+    if kind == TransitionKind.NARRATIVE_BOUNDARY:
+        return TransitionSpec(
+            offset_seconds=offset_seconds,
+            effect=effect or _NARRATIVE_BOUNDARY_EFFECT,
+            duration=_NARRATIVE_BOUNDARY_DURATION,
+            kind=kind,
+        )
+    return TransitionSpec(
+        offset_seconds=offset_seconds,
+        effect=effect or "fade",
+        duration=_STYLE_CHANGE_DURATION,
+        kind=kind,
+    )
 
 
 class AssemblyError(PipelineError):

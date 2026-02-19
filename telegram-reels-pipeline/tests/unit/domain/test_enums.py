@@ -4,10 +4,13 @@ from pipeline.domain.enums import (
     EscalationState,
     FramingStyle,
     FramingStyleState,
+    NarrativeRole,
     PipelineStage,
     QADecision,
     QAStatus,
     RevisionType,
+    ShotType,
+    TransitionKind,
 )
 
 
@@ -100,6 +103,40 @@ class TestFramingStyleState:
         for member in FramingStyleState:
             assert member.value == member.value.lower(), f"{member.name} value should be lowercase"
             assert " " not in member.value, f"{member.name} value should not contain spaces"
+
+
+class TestShotType:
+    def test_has_all_expected_members(self) -> None:
+        expected = {"CLOSE_UP", "MEDIUM_SHOT", "TWO_SHOT", "WIDE_SHOT", "SCREEN_SHARE"}
+        actual = {member.name for member in ShotType}
+        assert actual == expected
+
+    def test_member_count(self) -> None:
+        assert len(ShotType) == 5
+
+    def test_values_are_snake_case(self) -> None:
+        for member in ShotType:
+            assert member.value == member.value.lower()
+
+
+class TestNarrativeRole:
+    def test_has_all_expected_members(self) -> None:
+        expected = {"INTRO", "BUILDUP", "CORE", "REACTION", "CONCLUSION"}
+        actual = {member.name for member in NarrativeRole}
+        assert actual == expected
+
+    def test_member_count(self) -> None:
+        assert len(NarrativeRole) == 5
+
+
+class TestTransitionKind:
+    def test_has_all_expected_members(self) -> None:
+        expected = {"STYLE_CHANGE", "NARRATIVE_BOUNDARY"}
+        actual = {member.name for member in TransitionKind}
+        assert actual == expected
+
+    def test_member_count(self) -> None:
+        assert len(TransitionKind) == 2
 
 
 class TestRevisionType:

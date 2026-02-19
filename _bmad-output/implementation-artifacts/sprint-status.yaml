@@ -137,3 +137,9 @@ development_status:
   13-4b-content-overlays: done
   13-4c-screen-share-ocr-waveform: done
   13-5-style-gallery-preview: done
+
+  epic-14: done
+  14-1-hybrid-face-gate-spatial-confidence-persistence: done
+  14-2-shot-classifier-domain-model: done
+  14-3-extended-narrative-cli-flag: done
+  14-4-multi-segment-narrative-planner: done

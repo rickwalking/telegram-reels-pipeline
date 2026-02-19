@@ -10,7 +10,15 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any
 
-from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus, RevisionType
+from pipeline.domain.enums import (
+    EscalationState,
+    NarrativeRole,
+    PipelineStage,
+    QADecision,
+    QAStatus,
+    RevisionType,
+    ShotType,
+)
 from pipeline.domain.types import GateName, RunId, SessionId
 
 
@@ -358,6 +366,113 @@ class RevisionResult:
     original_run_id: RunId
     artifacts: tuple[Path, ...] = field(default_factory=tuple)
     stages_rerun: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
+class FaceGateConfig:
+    """Configuration for hybrid face gate — spatial + confidence + temporal persistence."""
+
+    # Area thresholds (percentage of frame area)
+    min_area_pct: float = 0.8
+    editorial_area_pct: float = 1.2
+    hard_enter_area_pct: float = 1.6
+    # Geometry thresholds
+    min_separation_norm: float = 0.28
+    min_cy_norm: float = 0.32
+    min_size_ratio: float = 0.55
+    min_confidence: float = 0.85
+    # EMA temporal hysteresis
+    ema_alpha: float = 0.4
+    enter_threshold: float = 0.65
+    exit_threshold: float = 0.45
+    enter_persistence: int = 2
+    exit_persistence: int = 3
+    cooldown_seconds: float = 4.0
+    # Component weights (must sum to 1.0)
+    w_area: float = 0.40
+    w_geometry: float = 0.20
+    w_separation: float = 0.15
+    w_vertical: float = 0.10
+    w_size_ratio: float = 0.10
+    w_confidence: float = 0.05
+
+    def __post_init__(self) -> None:
+        self._validate_ranges()
+        total = (
+            self.w_area + self.w_geometry + self.w_separation + self.w_vertical + self.w_size_ratio + self.w_confidence
+        )
+        if abs(total - 1.0) > 0.01:
+            raise ValueError(f"Component weights must sum to 1.0, got {total:.3f}")
+        if self.enter_threshold <= self.exit_threshold:
+            raise ValueError(
+                f"enter_threshold ({self.enter_threshold}) must be > exit_threshold ({self.exit_threshold})"
+            )
+        if self.enter_persistence < 1:
+            raise ValueError(f"enter_persistence must be >= 1, got {self.enter_persistence}")
+        if self.exit_persistence < 1:
+            raise ValueError(f"exit_persistence must be >= 1, got {self.exit_persistence}")
+        if self.cooldown_seconds < 0:
+            raise ValueError(f"cooldown_seconds must be non-negative, got {self.cooldown_seconds}")
+
+    def _validate_ranges(self) -> None:
+        if not 0.0 < self.ema_alpha <= 1.0:
+            raise ValueError(f"ema_alpha must be in (0.0, 1.0], got {self.ema_alpha}")
+        if not 0.0 <= self.enter_threshold <= 1.0:
+            raise ValueError(f"enter_threshold must be in [0.0, 1.0], got {self.enter_threshold}")
+        if not 0.0 <= self.exit_threshold <= 1.0:
+            raise ValueError(f"exit_threshold must be in [0.0, 1.0], got {self.exit_threshold}")
+        if not 0.0 <= self.min_confidence <= 1.0:
+            raise ValueError(f"min_confidence must be in [0.0, 1.0], got {self.min_confidence}")
+        if self.min_area_pct < 0:
+            raise ValueError(f"min_area_pct must be non-negative, got {self.min_area_pct}")
+
+
+@dataclass(frozen=True)
+class FaceGateResult:
+    """Per-frame result from the hybrid face gate evaluation."""
+
+    raw_face_count: int
+    editorial_face_count: int
+    duo_score: float
+    ema_score: float
+    is_editorial_duo: bool
+    shot_type: ShotType
+    gate_reason: str
+
+    def __post_init__(self) -> None:
+        if self.raw_face_count < 0:
+            raise ValueError(f"raw_face_count must be non-negative, got {self.raw_face_count}")
+        if self.editorial_face_count < 0:
+            raise ValueError(f"editorial_face_count must be non-negative, got {self.editorial_face_count}")
+        if not 0.0 <= self.duo_score <= 1.0:
+            raise ValueError(f"duo_score must be 0.0-1.0, got {self.duo_score}")
+        if not 0.0 <= self.ema_score <= 1.0:
+            raise ValueError(f"ema_score must be 0.0-1.0, got {self.ema_score}")
+        if not self.gate_reason:
+            raise ValueError("gate_reason must not be empty")
+
+
+@dataclass(frozen=True)
+class NarrativeMoment:
+    """A transcript moment with a narrative role for extended shorts."""
+
+    start_seconds: float
+    end_seconds: float
+    role: NarrativeRole
+    transcript_excerpt: str
+
+    def __post_init__(self) -> None:
+        if self.start_seconds < 0:
+            raise ValueError(f"start_seconds must be non-negative, got {self.start_seconds}")
+        if self.end_seconds <= self.start_seconds:
+            raise ValueError(f"end_seconds ({self.end_seconds}) must be > start_seconds ({self.start_seconds})")
+        if not self.transcript_excerpt:
+            raise ValueError("transcript_excerpt must not be empty")
+
+    @property
+    def duration_seconds(self) -> float:
+        """Duration of this moment in seconds."""
+        return self.end_seconds - self.start_seconds
 
 
 @dataclass(frozen=True)
