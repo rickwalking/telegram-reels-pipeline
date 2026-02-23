@@ -15,9 +15,9 @@
 - **Prescriptive fix template**: "Final video is {actual_w}x{actual_h} instead of 1080x1920. Check that all input segments have matching dimensions before concatenation."
 
 ### Dimension 3: Duration Accuracy (weight: 25/100)
-- **Pass**: Duration is within 5% of expected (from moment-selection.json)
-- **Rework**: Duration is within 5-10% of expected
-- **Fail**: Duration mismatch > 10%
+- **Pass**: Duration is within 5% of expected (single-moment) or 15% of `target_duration_seconds` (multi-moment, from `narrative_summary`)
+- **Rework**: Duration is within 5-10% (single-moment) or 15-20% (multi-moment) of expected
+- **Fail**: Duration mismatch > 10% (single-moment) or > 20% (multi-moment)
 - **Prescriptive fix template**: "Final duration {actual}s vs expected {expected}s (difference: {diff}%). Check concatenation order — segment {n} may be missing or duplicated."
 - **Boundary trim exemption**: When `encoding-plan.json` contains segments with `boundary_validation.start_trimmed: true` or `boundary_validation.end_trimmed: true`, recalculate the expected duration by subtracting the total trimmed seconds. A 1–2s gap per camera transition is intentional and should not count as a duration mismatch.
 - **Cumulative trim cap**: If total trimmed seconds across all segments exceeds 5.0s, flag as **Fail** regardless of the trim exemption. Excessive trimming indicates a systemic boundary detection problem that needs investigation.
@@ -49,11 +49,42 @@
 - 30-49: Poor — rework required, duration mismatch or quality issues
 - 0-29: Fail — no valid output or fundamentally broken
 
+## Multi-Moment Dimensions (when `narrative_summary` present)
+
+When the assembly report contains a `narrative_summary` (multi-moment mode), apply standard dimensions above plus these additional checks:
+
+### Dimension 6: Narrative Ordering (weight: 10/100, redistributed from Dim 1-4)
+
+- **Pass**: Segments appear in correct narrative role order in the final Reel (intro → buildup → core → reaction → conclusion)
+- **Rework**: Segments are in correct role order but one moment's internal segments are out of order
+- **Fail**: Segments are in wrong narrative role order (e.g., conclusion before core)
+- **Prescriptive fix template**: "Segments are in {actual_order} instead of narrative order. Reorder so that {expected_order} is used."
+
+### Dimension 7: Transition Consistency (weight: 5/100, redistributed from Dim 1-4)
+
+- **Pass**: `narrative_boundary` transitions (1.0s dissolve) are used between moments, `style_change` transitions (0.5s slide) within moments
+- **Rework**: Transition types are present but durations don't match spec
+- **Fail**: No transitions between moments or wrong transition types
+- **Prescriptive fix template**: "Transition between moment {i} and {j} uses {actual_type} instead of narrative_boundary dissolve. Update the transition to use 1.0s dissolve between narrative moments."
+
+### Weight Redistribution (multi-moment)
+
+| Dimension | Single-moment | Multi-moment |
+|-----------|--------------|--------------|
+| Final Video Existence | 25 | 20 |
+| Dimensions Compliance | 25 | 20 |
+| Duration Accuracy | 25 | 20 |
+| Audio Sync | 25 | 15 |
+| Transition Quality | 0-10 | 10 |
+| Narrative Ordering | — | 10 |
+| Transition Consistency | — | 5 |
+
 ## Output Schema Requirements
 
 Output JSON (`assembly-report.json`) must contain:
 - `concatenation_order`: array of segment paths in order
-- `transitions`: array of transition specs (type, at_seconds)
+- `transitions`: array of transition specs (type, at_seconds, transition_kind)
 - `final_output_path`: string path to final video
 - `quality_checks`: object with dimensions, duration_seconds, file_size_mb, codec, audio_codec, all_segments_valid, duration_within_tolerance
 - `boundary_trims`: array (optional, present when boundary trims exist) — each entry has `segment` (int), `boundary` ("start" or "end"), `original_seconds` (float), `adjusted_seconds` (float), `trimmed_duration` (float)
+- `narrative_summary`: object (multi-moment only) with `moments_count`, `role_order`, `per_role_duration`, `total_gap_seconds`

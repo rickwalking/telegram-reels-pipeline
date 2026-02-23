@@ -15,6 +15,7 @@ from pipeline.domain.models import (
     FaceGateResult,
     LocalizedDescription,
     NarrativeMoment,
+    NarrativePlan,
     PipelineEvent,
     PublishingAssets,
     QACritique,
@@ -525,3 +526,108 @@ class TestFaceGateResultModel:
         )
         with pytest.raises(AttributeError):
             result.is_editorial_duo = True  # type: ignore[misc]
+
+
+class TestNarrativePlan:
+    def _moment(
+        self,
+        role: NarrativeRole,
+        start: float = 0.0,
+        end: float = 30.0,
+        excerpt: str = "text",
+    ) -> NarrativeMoment:
+        return NarrativeMoment(
+            start_seconds=start,
+            end_seconds=end,
+            role=role,
+            transcript_excerpt=excerpt,
+        )
+
+    def test_single_moment_construction(self) -> None:
+        plan = NarrativePlan(
+            moments=(self._moment(NarrativeRole.CORE, 10.0, 70.0),),
+            target_duration_seconds=90.0,
+        )
+        assert len(plan.moments) == 1
+        assert plan.actual_duration_seconds == 60.0
+        assert plan.is_chronological is True
+
+    def test_multi_moment_construction(self) -> None:
+        plan = NarrativePlan(
+            moments=(
+                self._moment(NarrativeRole.INTRO, 10.0, 25.0),
+                self._moment(NarrativeRole.CORE, 100.0, 160.0),
+                self._moment(NarrativeRole.CONCLUSION, 200.0, 215.0),
+            ),
+            target_duration_seconds=180.0,
+        )
+        assert len(plan.moments) == 3
+        assert plan.actual_duration_seconds == 90.0
+        assert plan.is_chronological is True
+
+    def test_empty_moments_raises(self) -> None:
+        with pytest.raises(ValueError, match="moments must not be empty"):
+            NarrativePlan(moments=(), target_duration_seconds=90.0)
+
+    def test_more_than_five_moments_raises(self) -> None:
+        moments = tuple(
+            self._moment(r, i * 50.0, i * 50.0 + 20.0)
+            for i, r in enumerate(
+                [
+                    NarrativeRole.INTRO,
+                    NarrativeRole.BUILDUP,
+                    NarrativeRole.CORE,
+                    NarrativeRole.REACTION,
+                    NarrativeRole.CONCLUSION,
+                    NarrativeRole.INTRO,  # duplicate triggers other validation
+                ]
+            )
+        )
+        with pytest.raises(ValueError, match="1-5 items"):
+            NarrativePlan(moments=moments, target_duration_seconds=180.0)
+
+    def test_zero_core_roles_raises(self) -> None:
+        with pytest.raises(ValueError, match="exactly one moment must have role CORE"):
+            NarrativePlan(
+                moments=(
+                    self._moment(NarrativeRole.INTRO, 0.0, 30.0),
+                    self._moment(NarrativeRole.BUILDUP, 50.0, 80.0),
+                ),
+                target_duration_seconds=90.0,
+            )
+
+    def test_duplicate_roles_raises(self) -> None:
+        with pytest.raises(ValueError, match="each narrative role must appear at most once"):
+            NarrativePlan(
+                moments=(
+                    self._moment(NarrativeRole.CORE, 0.0, 30.0),
+                    self._moment(NarrativeRole.INTRO, 50.0, 80.0),
+                    self._moment(NarrativeRole.INTRO, 100.0, 130.0),
+                ),
+                target_duration_seconds=90.0,
+            )
+
+    def test_non_positive_target_duration_raises(self) -> None:
+        with pytest.raises(ValueError, match="target_duration_seconds must be positive"):
+            NarrativePlan(
+                moments=(self._moment(NarrativeRole.CORE, 0.0, 30.0),),
+                target_duration_seconds=0.0,
+            )
+
+    def test_is_chronological_false_when_unordered(self) -> None:
+        plan = NarrativePlan(
+            moments=(
+                self._moment(NarrativeRole.INTRO, 200.0, 215.0),
+                self._moment(NarrativeRole.CORE, 100.0, 160.0),
+            ),
+            target_duration_seconds=180.0,
+        )
+        assert plan.is_chronological is False
+
+    def test_frozen_immutability(self) -> None:
+        plan = NarrativePlan(
+            moments=(self._moment(NarrativeRole.CORE, 0.0, 60.0),),
+            target_duration_seconds=90.0,
+        )
+        with pytest.raises(AttributeError):
+            plan.target_duration_seconds = 120.0  # type: ignore[misc]

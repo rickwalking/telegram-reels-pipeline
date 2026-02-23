@@ -40,6 +40,45 @@
 - 30-49: Poor — rework required, duration or relevance issues
 - 0-29: Fail — fundamentally wrong selection
 
+## Multi-Moment Dimensions (when `moments` array present)
+
+When the output contains a `moments[]` array (multi-moment mode), apply all standard dimensions above to the **primary/core moment** (top-level fields), plus these additional dimensions:
+
+### Dimension 5: Narrative Coherence (weight: 15/100, redistributed from Dim 1-4)
+
+- **Pass**: Moments tell a coherent story when presented in narrative role order. Each moment's content matches its assigned role.
+- **Rework**: Story arc is present but weak — one moment's role assignment feels forced.
+- **Fail**: Moments are unrelated fragments with no narrative thread.
+- **Prescriptive fix template**: "Moment {index} (role '{role}') does not serve its narrative function. Replace with a moment that {expected_purpose}."
+
+### Dimension 6: Moment Diversity (weight: 10/100, redistributed from Dim 1-4)
+
+- **Pass**: Moments come from different parts of the episode (>= 30s gap between each pair). No moment exceeds 60% of total duration.
+- **Rework**: Gap between two moments < 30s, or one moment exceeds 60% of total.
+- **Fail**: Moments overlap or are adjacent (< 10s gap).
+- **Prescriptive fix template**: "Moments {i} and {j} are only {gap}s apart (minimum: 30s). Select a moment from a different part of the transcript."
+
+### Dimension 7: Role Validity (weight: 10/100, redistributed from Dim 1-4)
+
+- **Pass**: Exactly one `core` role, no duplicate roles, roles from valid enum.
+- **Rework**: Missing `core` role or one duplicate.
+- **Fail**: Multiple `core` roles, invalid role names, or missing role fields.
+- **Prescriptive fix template**: "Role validation failed: {issue}. Each moment needs exactly one role from [intro, buildup, core, reaction, conclusion] with exactly one core."
+
+### Weight Redistribution (multi-moment)
+
+When multi-moment dimensions are active, weights are redistributed:
+
+| Dimension | Single-moment | Multi-moment |
+|-----------|--------------|--------------|
+| Duration Compliance | 30 | 20 |
+| Boundary Quality | 25 | 20 |
+| Topic Match | 25 | 15 |
+| Rationale Quality | 20 | 10 |
+| Narrative Coherence | — | 15 |
+| Moment Diversity | — | 10 |
+| Role Validity | — | 10 |
+
 ## Output Schema Requirements
 
 Output JSON must contain:
@@ -49,3 +88,4 @@ Output JSON must contain:
 - `rationale`: string (> 50 words)
 - `topic_match_score`: float 0.0-1.0
 - `alternative_moments`: array of 2-3 backup candidates
+- `moments`: array of 2-5 items (multi-moment only), each with `start_seconds`, `end_seconds`, `role`, `transcript_excerpt`, `selection_rationale`

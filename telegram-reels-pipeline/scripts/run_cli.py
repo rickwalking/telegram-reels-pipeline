@@ -60,6 +60,25 @@ MAX_QUESTIONS_PER_ROUND: int = 5
 INPUT_TIMEOUT_SECONDS: int = 120
 MTIME_TOLERANCE_SECONDS: float = 2.0
 TOTAL_CLI_STAGES: int = len(ALL_STAGES)
+_AUTO_TRIGGER_THRESHOLD: int = 120
+
+
+def compute_moments_requested(target_duration: int, explicit_moments: int | None) -> int:
+    """Compute the number of narrative moments to request.
+
+    If ``explicit_moments`` is provided, returns it directly (user override).
+    Otherwise, auto-computes from ``target_duration``:
+    - ``<= 120s``: 1 moment (single, current behavior)
+    - ``> 120s``: ``min(5, max(2, int(target_duration / 60 + 0.5)))``
+
+    Uses ``int(x + 0.5)`` instead of ``round()`` to avoid Python's banker's
+    rounding (round-half-to-even), which would map 150s → 2 instead of 3.
+    """
+    if explicit_moments is not None:
+        return explicit_moments
+    if target_duration <= _AUTO_TRIGGER_THRESHOLD:
+        return 1
+    return min(5, max(2, int(target_duration / 60 + 0.5)))
 
 # Signature artifacts per stage (1-indexed). A stage is "complete" if at least
 # one of its signature artifacts exists in the workspace.
@@ -151,6 +170,9 @@ def _validate_cli_args(args: argparse.Namespace, *, arg_parser: argparse.Argumen
 
     if args.target_duration < 30 or args.target_duration > 300:
         arg_parser.error(f"--target-duration must be between 30 and 300, got {args.target_duration}")
+
+    if args.moments is not None and (args.moments < 1 or args.moments > 5):
+        arg_parser.error(f"--moments must be between 1 and 5, got {args.moments}")
 
     _resolve_start_stage(args)
 
@@ -421,6 +443,7 @@ async def _run_stages(
     settings: PipelineSettings,
     framing_style: str | None = None,
     target_duration_seconds: int = 90,
+    moments_requested: int = 1,
 ) -> tuple[Path, ...]:
     """Execute pipeline stages sequentially with router elicitation support."""
     for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
@@ -453,6 +476,9 @@ async def _run_stages(
 
         if target_duration_seconds != 90:
             elicitation["target_duration_seconds"] = str(target_duration_seconds)
+
+        if moments_requested > 1:
+            elicitation["moments_requested"] = str(moments_requested)
 
         criteria_path = workflows_dir / "qa" / "gate-criteria" / f"{gate_name}-criteria.md"
         gate_criteria = criteria_path.read_text() if criteria_path.exists() else ""
@@ -531,6 +557,7 @@ async def run_pipeline(
     framing_style: str | None = None,
     target_duration_seconds: int = 90,
     verbose: bool = False,
+    moments_requested: int = 1,
 ) -> None:
     settings = PipelineSettings()
     project_root = Path(__file__).resolve().parent.parent
@@ -572,6 +599,8 @@ async def run_pipeline(
     print(f"  Timeout: {effective_timeout}s")
     if target_duration_seconds != 90:
         print(f"  Target duration: {target_duration_seconds}s (extended narrative)")
+    if moments_requested > 1:
+        print(f"  Narrative moments: {moments_requested}")
     print(f"{'='*60}\n")
 
     if resume_workspace is not None:
@@ -612,6 +641,7 @@ async def run_pipeline(
             settings,
             framing_style=effective_style,
             target_duration_seconds=target_duration_seconds,
+            moments_requested=moments_requested,
         )
     finally:
         cli_backend.set_workspace(None)
@@ -648,6 +678,12 @@ def main() -> None:
         default=90,
         help="Target duration in seconds (default: 90, max: 300). Longer durations use multi-moment narrative.",
     )
+    parser.add_argument(
+        "--moments",
+        type=int,
+        default=None,
+        help="Number of narrative moments (1-5). Auto-computed from target-duration when omitted.",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Print Claude agent output to terminal")
     args = parser.parse_args()
 
@@ -656,6 +692,8 @@ def main() -> None:
     # Map CLI shorthand to domain enum values
     style_map = {"split": "split_horizontal", "pip": "pip", "auto": "auto", "default": "default"}
     framing_style = style_map.get(args.style) if args.style else None
+
+    moments = compute_moments_requested(args.target_duration, args.moments)
 
     message = args.message if args.message else args.url
     asyncio.run(
@@ -669,6 +707,7 @@ def main() -> None:
             framing_style,
             args.target_duration,
             verbose=args.verbose,
+            moments_requested=moments,
         )
     )
 

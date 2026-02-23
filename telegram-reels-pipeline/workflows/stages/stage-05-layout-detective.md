@@ -7,7 +7,7 @@ Extract video frames at regular intervals within the selected moment, run face d
 ## Inputs
 
 - **Video file**: Downloaded source video (typically 1920x1080)
-- **moment-selection.json**: Contains `start_seconds`, `end_seconds` for frame extraction range
+- **moment-selection.json**: Contains `start_seconds`, `end_seconds` for frame extraction range. In multi-moment mode, also contains `moments[]` array with per-moment time ranges and narrative roles.
 - **VTT subtitle file**: Raw VTT from YouTube (already downloaded in Stage 2)
 - **Known strategies**: From knowledge base (crop-strategies.yaml) for previously learned layouts
 
@@ -47,7 +47,9 @@ Extract video frames at regular intervals within the selected moment, run face d
 
 ## Instructions
 
-1. **Extract frames** every 5 seconds from `start_seconds` to `end_seconds` using VideoProcessingPort. This is the **coarse pass** — it identifies approximate layout transition zones.
+1. **Check for multi-moment mode** — if `moment-selection.json` contains a `moments[]` array, process each moment's time range independently using the steps below. Sort moments by `start_seconds` (chronological source order) to minimize disk seeks on the Pi. Each moment's output segments include a `moment_index` field (0-based) matching the moment's position in the `moments[]` array.
+
+1a. **Extract frames** every 5 seconds from `start_seconds` to `end_seconds` of the current moment using VideoProcessingPort. This is the **coarse pass** — it identifies approximate layout transition zones. (For single-moment mode, use the top-level `start_seconds`/`end_seconds`.)
 
 2. **Run face detection** on all extracted frames:
    ```bash
@@ -144,4 +146,4 @@ See: `workflows/qa/gate-criteria/layout-criteria.md`
 
 - Source video file from Stage 2 (Research) — downloaded video
 - VTT subtitle file from Stage 2 (Research) — raw VTT with speaker change markers
-- `moment-selection.json` from Stage 3 (Transcript) — timestamp range for frame extraction
+- `moment-selection.json` from Stage 3 (Transcript) — timestamp range(s) for frame extraction. Multi-moment: `moments[]` array processed in chronological order

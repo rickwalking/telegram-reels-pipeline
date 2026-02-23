@@ -8,6 +8,8 @@ Analyze the full episode transcript to identify and select the best 60-90 second
 
 - **research-output.json**: Contains `transcript_text`, `episode_summary`, `key_themes`, `speakers_identified`
 - **topic_focus** (optional): User-specified topic from elicitation context
+- **moments_requested** (optional): Number of narrative moments (1-5). Default: 1
+- **target_duration_seconds** (optional): Target total output duration. Default: 90
 
 ## Expected Outputs
 
@@ -29,13 +31,16 @@ Analyze the full episode transcript to identify and select the best 60-90 second
 ## Instructions
 
 1. **Read the full transcript** from research-output.json.
-2. **Identify candidate moments** — scan for narrative arcs, emotional peaks, quotable statements.
-3. **Score each candidate** using the four-dimension rubric (narrative, emotional, quotable, relevance). See `moment-selection-criteria.md`.
-4. **Apply topic_focus weighting** — if user specified a topic, prioritize matching segments.
-5. **Select the best moment** — highest combined score within 30-120 second duration.
-6. **Set clean boundaries** — ensure start/end land on complete sentences.
-7. **Include 2-3 alternatives** — backup moments ranked by score.
-8. **Output valid JSON** as `moment-selection.json`.
+2. **Check for multi-moment mode** — if `moments_requested >= 2` in the elicitation context, activate multi-moment selection.
+3. **Identify candidate moments** — scan for narrative arcs, emotional peaks, quotable statements.
+4. **Score each candidate** using the four-dimension rubric (narrative, emotional, quotable, relevance). See `moment-selection-criteria.md`.
+5. **Apply topic_focus weighting** — if user specified a topic, prioritize matching segments.
+6. **Select moment(s)**:
+   - **Single-moment mode** (`moments_requested = 1` or absent): select the highest-scoring candidate within 30-120s.
+   - **Multi-moment mode** (`moments_requested >= 2`): select `moments_requested` complementary moments with narrative roles. Each moment >= 15s. Total within ±20% of `target_duration_seconds`. Minimum 30s gap between moments. Assign roles: intro, buildup, core, reaction, conclusion (exactly one core, no duplicates).
+7. **Set clean boundaries** — ensure start/end land on complete sentences for each moment.
+8. **Include 2-3 alternatives** — backup moments ranked by score.
+9. **Output valid JSON** as `moment-selection.json`. For multi-moment, include `moments[]` array alongside top-level fields.
 
 ## Constraints
 

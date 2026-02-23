@@ -885,3 +885,39 @@ I want the QA gates to detect wrong-crop-at-boundary artifacts and issue prescri
 so that misaligned boundaries are caught even when the FFmpeg Engineer's prevention layer misses them.
 
 **Files affected:** `ffmpeg-criteria.md` (Dimension 8 + weight redistribution), `assembly-criteria.md` (Dim 3 trim exemption + Dim 5 framing mismatch), `stage-07-assembly.md` (trim-aware duration step)
+
+## Epic 16: Multi-Moment Narrative Selection
+
+Pedro can request shorts with 2-5 complementary transcript moments that build a narrative arc. Triggered automatically when `--target-duration > 120` or explicitly via `--moments N`. Builds on Epic 14 infrastructure (`NarrativeMoment` dataclass, `NarrativeRole` enum, `TransitionKind.NARRATIVE_BOUNDARY`, `--target-duration` CLI flag, xfade assembly support).
+
+### Story 16.1: NarrativePlan Domain Model & Parser
+
+As a pipeline developer,
+I want a `NarrativePlan` domain model and a parser that extracts multi-moment structures from agent JSON output,
+so that the pipeline can represent and deserialize narrative arcs with graceful fallback to single-moment on parse failure.
+
+**Files affected:** `domain/models.py` (NarrativePlan dataclass), `application/moment_parser.py` (parser + fallback), tests
+
+### Story 16.2: CLI --moments Flag & Auto-Trigger
+
+As a pipeline user,
+I want a `--moments N` CLI flag that explicitly requests multi-moment selection, and automatic multi-moment activation when `--target-duration > 120`,
+so that I can control narrative complexity directly or let the pipeline decide based on duration.
+
+**Files affected:** `scripts/run_cli.py` (CLI flag), `application/orchestrator.py` (auto-trigger logic), `CLAUDE.md` (docs update), tests
+
+### Story 16.3: Transcript Agent Multi-Moment Selection
+
+As a pipeline user,
+I want the transcript agent to select 2-5 complementary moments with narrative roles when multi-moment mode is active,
+so that extended shorts follow a coherent narrative arc instead of one long continuous block.
+
+**Files affected:** `agents/transcript/agent.md` (prompt), `agents/transcript/moment-selection-criteria.md` (multi-moment criteria), `qa/gate-criteria/transcript-criteria.md` (QA dimensions), `workflows/stages/stage-03-transcript.md` (multi-moment step)
+
+### Story 16.4: Downstream Stage Multi-Moment Support
+
+As a pipeline user,
+I want stages 5-7 (Layout Detective, FFmpeg Engineer, Assembly) to process multiple moments with chronological I/O ordering for Pi performance,
+so that the full pipeline produces a coherent multi-moment Reel end-to-end.
+
+**Files affected:** `workflows/stages/stage-05-layout-detective.md` (multi-moment loop), `workflows/stages/stage-06-ffmpeg-engineer.md` (per-moment encoding), `workflows/stages/stage-07-assembly.md` (narrative-ordered assembly), `qa/gate-criteria/assembly-criteria.md` (multi-moment validation)

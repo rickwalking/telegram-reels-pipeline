@@ -59,7 +59,9 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 ### Planning Phase
 
-1. **Read layout analysis** to get segment boundaries, sub-segments, crop regions, and `speaker_face_mapping`.
+1. **Check for multi-moment mode** — if `moment-selection.json` contains a `moments[]` array, process each moment's segments independently but number segments **globally** across all moments (e.g., Moment 0 has segments 001-005, Moment 1 has segments 006-009). Encode moments in chronological source order (sorted by `start_seconds`) for sequential I/O on the Pi. Each command in `encoding-plan.json` includes `moment_index` (int, 0-based) and `narrative_role` (string, e.g., "intro", "core") fields.
+
+1a. **Read layout analysis** to get segment boundaries, sub-segments, crop regions, and `speaker_face_mapping`.
 
 2. **Read face-position-map.json** to understand scene composition and verify face positions.
 
@@ -107,7 +109,7 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 13. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
 
-14. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), and `effect` (the visual effect applied, or null). This journal is used by the Assembly stage for reporting and by QA for verifying transition quality.
+14. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), `effect` (the visual effect applied, or null), and `transition_kind` (`style_change` for within-moment style transitions, `narrative_boundary` for transitions between moments). In multi-moment mode, FSM state persists across moment boundaries. Transitions between moments always use `transition_kind: "narrative_boundary"` with a 1.0s dissolve effect. This journal is used by the Assembly stage for narrative reordering, transition type selection, and QA reporting.
 
 15. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
 
@@ -153,5 +155,5 @@ See: `workflows/qa/gate-criteria/ffmpeg-criteria.md`
 - `layout-analysis.json` from Stage 5 (Layout Detective) — segment layouts, sub-segments, crop regions, speaker_face_mapping
 - `face-position-map.json` from Stage 5 (Layout Detective) — face positions for validation
 - `speaker-timeline.json` from Stage 5 (Layout Detective) — speaker turn boundaries for active speaker verification
-- `moment-selection.json` from Stage 3 (Transcript) — overall timestamp range
+- `moment-selection.json` from Stage 3 (Transcript) — overall timestamp range. Multi-moment: `moments[]` array with per-moment time ranges and narrative roles
 - Source video file from Stage 2 (Research)

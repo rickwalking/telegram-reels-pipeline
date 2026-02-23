@@ -654,6 +654,7 @@ class TestValidateCliArgs:
         p.add_argument("--resume", type=Path, default=None)
         p.add_argument("--start-stage", type=int, default=None)
         p.add_argument("--target-duration", type=int, default=90)
+        p.add_argument("--moments", type=int, default=None)
         return p
 
     def test_valid_defaults_pass(self) -> None:

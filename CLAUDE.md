@@ -64,6 +64,13 @@ poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" 
 # Extended narrative (multi-moment, up to 300s)
 poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
   --message "create a short about TOPIC" --target-duration 180
+
+# Explicit multi-moment (2-5 moments, overrides auto-trigger)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --moments 3
+
+# Multi-moment auto-trigger: --moments is auto-computed when --target-duration > 120
+# Use --moments 1 to force single-moment even for long durations
 ```
 
 Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4`.

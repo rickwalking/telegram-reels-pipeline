@@ -81,3 +81,43 @@ Automatically disqualify segments that contain:
 - **Pure filler**: Extended small talk, "how's the weather", logistics discussion
 - **Intro/outro**: First 120 seconds or last 120 seconds of the episode
 - **Content warnings or disclaimers**: Legal, medical, or financial disclaimers
+
+## Multi-Moment Selection Criteria
+
+When `moments_requested >= 2`, the scoring rubric above applies to each individual moment. Additional multi-moment constraints:
+
+### Moment Constraints
+
+| Constraint | Rule | Rationale |
+|-----------|------|-----------|
+| Per-moment minimum | >= 15 seconds | Shorter moments lack context |
+| Per-moment maximum | <= 120 seconds | Same as single-moment cap |
+| Minimum gap | >= 30 seconds between moments | Forces narrative diversity |
+| No overlaps | Moments cannot share timestamps | Prevents redundant content |
+| Duration balance | No moment > 60% of total | Distributes screen time |
+| Total duration | ±20% of target_duration_seconds | Stays near requested length |
+
+### Narrative Role Assignment
+
+Each moment receives exactly one role from: `intro`, `buildup`, `core`, `reaction`, `conclusion`.
+
+| Role | Purpose | Typical Duration |
+|------|---------|-----------------|
+| intro | Establishes context, sets the scene | 10-20s |
+| buildup | Builds tension, provides background | 15-30s |
+| core | The main hook, key insight, payoff | 30-60s |
+| reaction | Response, consequence, discussion | 10-25s |
+| conclusion | Wrap-up, callback, summary | 10-20s |
+
+**Rules**:
+- Exactly one `core` role (mandatory)
+- No duplicate roles
+- Not all roles required — a 2-moment short uses only 2 roles (e.g., `intro` + `core`)
+- Role assignment must match content (don't label a climax as `intro`)
+
+### Multi-Moment Quality Score
+
+Each moment is scored individually (0-100) using the same four-dimension rubric. The overall plan quality considers:
+- All moments must score >= 50/100 individually
+- The `core` moment must score >= 65/100
+- Narrative coherence: do the moments build a logical arc when presented in role order?

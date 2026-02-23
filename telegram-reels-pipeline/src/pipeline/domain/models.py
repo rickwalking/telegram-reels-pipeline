@@ -475,6 +475,49 @@ class NarrativeMoment:
         return self.end_seconds - self.start_seconds
 
 
+NARRATIVE_ROLE_ORDER: tuple[NarrativeRole, ...] = (
+    NarrativeRole.INTRO,
+    NarrativeRole.BUILDUP,
+    NarrativeRole.CORE,
+    NarrativeRole.REACTION,
+    NarrativeRole.CONCLUSION,
+)
+
+
+@dataclass(frozen=True)
+class NarrativePlan:
+    """Ordered collection of narrative moments composing an extended short."""
+
+    moments: tuple[NarrativeMoment, ...]
+    target_duration_seconds: float
+
+    def __post_init__(self) -> None:
+        if not self.moments:
+            raise ValueError("moments must not be empty")
+        if len(self.moments) > 5:
+            raise ValueError(f"moments must have 1-5 items, got {len(self.moments)}")
+        if self.target_duration_seconds <= 0:
+            raise ValueError(f"target_duration_seconds must be positive, got {self.target_duration_seconds}")
+        core_count = sum(1 for m in self.moments if m.role == NarrativeRole.CORE)
+        if core_count != 1:
+            raise ValueError(f"exactly one moment must have role CORE, got {core_count}")
+        roles = [m.role for m in self.moments]
+        if len(roles) != len(set(roles)):
+            raise ValueError("each narrative role must appear at most once")
+
+    @property
+    def actual_duration_seconds(self) -> float:
+        """Sum of all moment durations (excludes gaps between moments)."""
+        return sum(m.duration_seconds for m in self.moments)
+
+    @property
+    def is_chronological(self) -> bool:
+        """True if moments are ordered by source start_seconds."""
+        return all(
+            self.moments[i].start_seconds <= self.moments[i + 1].start_seconds for i in range(len(self.moments) - 1)
+        )
+
+
 @dataclass(frozen=True)
 class ResourceSnapshot:
     """Point-in-time system resource measurements."""
