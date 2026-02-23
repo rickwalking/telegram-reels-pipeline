@@ -47,9 +47,9 @@ Plan FFmpeg crop and encode operations to convert source video segments into ver
 
 The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** them. After execution, the FFmpeg Engineer **validates** results.
 
-- **Planning phase** (steps 1-14): Produce `encoding-plan.json` with all FFmpeg command specifications and style transitions journal.
+- **Planning phase** (steps 1-15): Produce `encoding-plan.json` with all FFmpeg command specifications and style transitions journal.
 - **Execution phase**: FFmpegAdapter runs the planned commands.
-- **Validation phase** (steps 15-18): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
+- **Validation phase** (steps 16-19): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
 
 ## Instructions
 
@@ -87,40 +87,43 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
    - **Both-visible preference**: For `side_by_side` segments without sub_segments, the crop should keep BOTH speakers visible. Verify BOTH face positions fall within the crop range. If the Layout Detective provided a single `crop_region` (no sub_segments), do NOT split into per-speaker segments.
    - **Stability**: Do not create segments shorter than 5 seconds. If a speaker turn is < 5s, keep the current crop and merge that turn into the surrounding segment.
 
-7. **Handle quality degradation** for segments flagged by the Layout Detective:
+7. **Boundary Frame Guard** — for each segment, verify face count at the first and last 1 second using `face-position-map.json`. Compare against the expected face count for the layout type (`side_by_side` → 2+ faces, `speaker_focus` → 1 face, `screen_share` → 0 faces). If there's a mismatch at a boundary, trim that boundary inward by 1.0 second. If 1.0s exceeds 20% of the segment duration, skip the trim entirely (do not partial-trim). If trimming would reduce the segment below 5 seconds, skip the trim. Record the check and any adjustments in the `boundary_validation` field per command. See `crop-playbook.md` § Boundary Frame Guard for the full protocol.
+
+8. **Handle quality degradation** for segments flagged by the Layout Detective:
    - For `quality: "degraded"` (upscale 1.5-2.0x): try widening the crop to include more background around the face while keeping face centered. Recheck upscale factor.
    - For `quality: "unacceptable"` (upscale > 2.0x): widen the crop further or accept quality loss. Log the upscale factor in encoding-plan.json.
 
-8. **Set encoding parameters** per `encoding-params.md`: H.264 Main, CRF 23, preset medium.
+9. **Set encoding parameters** per `encoding-params.md`: H.264 Main, CRF 23, preset medium.
 
-9. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Use **exact boundary timestamps** with no overlap between segments (the Assembly stage concatenates them directly with `-c copy`).
+10. **Handle transitions** — split at layout boundaries, encode each sub-segment separately. Use **exact boundary timestamps** with no overlap between segments (the Assembly stage concatenates them directly with `-c copy`).
 
-10. **Verify segment boundary integrity** — Stage 5 is authoritative for transition timestamps. Before encoding, validate:
+11. **Verify segment boundary integrity** — Stage 5 is authoritative for transition timestamps. Before encoding, validate:
     - For each pair of adjacent segments, confirm `next.start_seconds == prev.end_seconds` (no overlap, no gap)
-    - If any boundary mismatch is found, align both segments to the same timestamp (update BOTH `prev.end_seconds` AND `next.start_seconds` atomically)
+    - **Exception**: When `boundary_validation` on either segment shows a trim (`start_trimmed` or `end_trimmed`), a gap of up to 2.0s at that boundary is permitted. The gap contains ambiguous camera transition frames intentionally excluded.
+    - If any non-trim boundary mismatch is found, align both segments to the same timestamp (update BOTH `prev.end_seconds` AND `next.start_seconds` atomically)
     - **Bias toward wider crops at uncertain boundaries**: if unsure which side a boundary frame belongs to, assign it to the segment with the wider crop — a wide crop on a close-up is acceptable, but a narrow crop on a wide shot cuts people off
 
-11. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
+12. **Validate crop coordinates** — ensure they don't exceed source video dimensions.
 
-12. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
+13. **Number segments sequentially**: segment-001.mp4, segment-002.mp4, etc.
 
-13. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), and `effect` (the visual effect applied, or null). This journal is used by the Assembly stage for reporting and by QA for verifying transition quality.
+14. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), and `effect` (the visual effect applied, or null). This journal is used by the Assembly stage for reporting and by QA for verifying transition quality.
 
-14. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
+15. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
 
 ### Validation Phase (after FFmpegAdapter executes)
 
-15. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
+16. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
     ```bash
     python scripts/check_upscale_quality.py <segment.mp4> --crop-width <W> --target-width 1080 --source-frame <representative_frame.png>
     ```
     Update `encoding-plan.json` with quality results under the `quality` key per command.
 
-16. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
+17. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
 
-17. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
+18. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
 
-18. **Update `encoding-plan.json`** with final validation and quality data.
+19. **Update `encoding-plan.json`** with final validation and quality data.
 
 ## Constraints
 

@@ -259,6 +259,51 @@ When the layout changes within a moment (e.g., `side_by_side` → `speaker_focus
 - **Verify with source frames**: before encoding, extract a frame at the exact transition timestamp and check face count. If the frame shows the wrong layout for the assigned crop, adjust the boundary.
 - A wide shot with a narrow crop is **always worse** than a close-up with a wide crop. When in doubt, use the wider crop.
 
+## Boundary Frame Guard
+
+Camera transitions occur between extracted frames, not exactly on layout boundary timestamps. Layout analysis has ±1s resolution at best. To prevent wrong-crop-at-boundary artifacts (see FM-4):
+
+### Pre-Encode Verification Protocol
+
+For each segment boundary (first 1s and last 1s), check `face-position-map.json`:
+
+1. **Boundary face count check**: Count faces at the nearest extracted frame within the first and last 1 second of the segment.
+2. **Expected face count**: Determine from the segment's layout — `side_by_side` expects 2+ faces (use integer `2`), `speaker_focus` expects 1 face, `screen_share` expects 0 faces.
+3. **Mismatch handling**:
+   - If **last 1s** face count ≠ expected: trim `end_seconds` by 1.0s (camera is transitioning out)
+   - If **first 1s** face count ≠ expected: advance `start_seconds` by 1.0s (camera is transitioning in)
+   - Both trims can apply to the same segment, but never trim more than 20% of segment duration
+4. **Record in `boundary_validation`**:
+   ```json
+   {
+     "start_face_count": 2,
+     "end_face_count": 1,
+     "expected_face_count": 2,
+     "start_trimmed": false,
+     "end_trimmed": true,
+     "original_end": 27.0,
+     "adjusted_end": 26.0
+   }
+   ```
+
+### Gap Tolerance
+
+Boundary trimming may create 1–2s gaps between segments. This is intentional — the gap removes ambiguous camera transition frames rather than encoding them with the wrong crop. The trimmed frames show an in-progress camera movement that looks wrong with either crop style.
+
+**Important**: When boundary trims create gaps, the `total_duration_seconds` in `encoding-plan.json` should reflect the actual encoded duration (excluding gaps). The Assembly stage's Dimension 3 (Duration Accuracy) exempts intentional boundary trims — when `boundary_validation` entries show `start_trimmed: true` or `end_trimmed: true`, the expected duration is recalculated excluding trimmed seconds.
+
+**Cumulative trim cap**: Total trimmed seconds across ALL segments in a reel must not exceed 5.0 seconds. If cumulative trims would exceed 5.0s, skip the lowest-priority trims (start boundaries before end boundaries). This prevents excessive content loss.
+
+### Interaction with Crop Stability Rules
+
+Boundary Frame Guard trims happen **after** the 5-second minimum hold rule is applied. If trimming would reduce a segment below 5 seconds, **skip the trim entirely** (do not partial-trim) and log a warning — the QA gate's Dimension 8 will catch the unresolved mismatch and issue a prescriptive fix.
+
+### Edge Cases
+
+- **1.0s trim exceeds 20% of segment duration**: Skip the trim entirely. Do not attempt a partial trim. QA catches it.
+- **No face data at boundary**: If `face-position-map.json` has no frames within the first/last 1s of a segment, record `boundary_validation` with the available data and note `"no_data_at_boundary": true`. Do not trim. Bias toward the wider crop at that boundary region. QA flags for review.
+- **Both boundaries need trimming on same segment**: Both trims may apply, but total trim must not exceed 20% of original duration. If it would, trim only the end boundary (camera transitions out are more visually jarring than transitions in).
+
 ## Fallback Matrix
 
 | Scenario | face-position-map.json | speaker-timeline.json | Crop Strategy |

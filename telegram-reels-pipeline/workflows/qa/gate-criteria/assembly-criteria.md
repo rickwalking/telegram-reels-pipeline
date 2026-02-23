@@ -19,6 +19,8 @@
 - **Rework**: Duration is within 5-10% of expected
 - **Fail**: Duration mismatch > 10%
 - **Prescriptive fix template**: "Final duration {actual}s vs expected {expected}s (difference: {diff}%). Check concatenation order — segment {n} may be missing or duplicated."
+- **Boundary trim exemption**: When `encoding-plan.json` contains segments with `boundary_validation.start_trimmed: true` or `boundary_validation.end_trimmed: true`, recalculate the expected duration by subtracting the total trimmed seconds. A 1–2s gap per camera transition is intentional and should not count as a duration mismatch.
+- **Cumulative trim cap**: If total trimmed seconds across all segments exceeds 5.0s, flag as **Fail** regardless of the trim exemption. Excessive trimming indicates a systemic boundary detection problem that needs investigation.
 
 ### Dimension 4: Audio Sync (weight: 25/100)
 - **Pass**: Audio is present and synchronized with video
@@ -31,8 +33,13 @@
 - **Rework**: xfade transitions present but minor artifacts (single-frame flash, slight audio pop)
 - **Fail**: xfade transitions cause video corruption or significant visual artifacts
 - **Prescriptive fix template**: "xfade transition at {offset}s has visual artifacts. Fall back to hard-cut concat for this transition boundary."
+- **Rework** (framing mismatch at join): For multi-segment reels, check the last frame of segment N and first frame of segment N+1. If the visual framing style changes abruptly without a transition effect (e.g., split-screen suddenly becomes solo crop with no fade), flag as rework. This catches Boundary Frame Guard gaps where trimming created a visual discontinuity.
+- **Prescriptive fix template** (framing mismatch): "Join between segment {n} and {n+1} shows abrupt framing change ({style_a} → {style_b}) with no transition. Either add an xfade transition at this boundary or verify that the FFmpeg Engineer's boundary_validation correctly trimmed the camera transition frames."
 
-**Note**: This dimension is only evaluated when xfade transitions are present. When all transitions are hard cuts, its weight (0) is redistributed equally to dimensions 1-4 (6.25 each, totaling 25 per dimension).
+**Note**: This dimension has two independent sub-checks:
+- **xfade artifact checks** (Pass/Rework/Fail above): Only evaluated when xfade transitions are present. When all transitions are hard cuts and the reel is single-segment, this dimension's weight (0) is redistributed equally to dimensions 1-4 (6.25 each, totaling 25 per dimension).
+- **Framing mismatch at join** (Rework above): Evaluated for ALL multi-segment reels, regardless of whether xfade is used. This catches boundary-trim gaps and hard-cut style discontinuities.
+- **Multi-segment weight**: For multi-segment reels, Dimension 5 weight is **10/100** (redistributed from Dimensions 1-4, reducing each by 2.5) to account for framing mismatch checks at segment joins.
 
 ## Scoring Rubric
 
@@ -49,3 +56,4 @@ Output JSON (`assembly-report.json`) must contain:
 - `transitions`: array of transition specs (type, at_seconds)
 - `final_output_path`: string path to final video
 - `quality_checks`: object with dimensions, duration_seconds, file_size_mb, codec, audio_codec, all_segments_valid, duration_within_tolerance
+- `boundary_trims`: array (optional, present when boundary trims exist) — each entry has `segment` (int), `boundary` ("start" or "end"), `original_seconds` (float), `adjusted_seconds` (float), `trimmed_duration` (float)

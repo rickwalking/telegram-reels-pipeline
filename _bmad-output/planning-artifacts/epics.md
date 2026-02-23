@@ -865,3 +865,23 @@ So that I can understand what the pipeline is doing and make targeted improvemen
 **Given** old run assets accumulate
 **When** the cleanup script runs
 **Then** run assets older than 30 days are deleted, keeping only final Reels and `run.md` metadata
+
+## Epic 15: Boundary Frame Guard
+
+The FFmpeg Engineer agent validates face count at segment boundaries before encoding and trims misaligned boundaries to prevent wrong-crop artifacts at camera transitions. The QA gates detect surviving misalignment and issue prescriptive fixes. Two-layer defense: Prevention (Story 15-1) + Detection (Story 15-2).
+
+### Story 15.1: FFmpeg Engineer — Boundary Frame Guard Prevention
+
+As a pipeline user,
+I want the FFmpeg Engineer to verify face count at segment boundaries and trim misaligned boundaries before encoding,
+so that camera transition frames are never encoded with the wrong crop filter.
+
+**Files affected:** `crop-failure-modes.md` (FM-4), `crop-playbook.md` (Boundary Frame Guard section), `agent.md` (boundary_validation field), `stage-06-ffmpeg-engineer.md` (step 7 + step 11 amendment)
+
+### Story 15.2: QA Gate — Boundary Frame Alignment Detection
+
+As a pipeline user,
+I want the QA gates to detect wrong-crop-at-boundary artifacts and issue prescriptive fixes,
+so that misaligned boundaries are caught even when the FFmpeg Engineer's prevention layer misses them.
+
+**Files affected:** `ffmpeg-criteria.md` (Dimension 8 + weight redistribution), `assembly-criteria.md` (Dim 3 trim exemption + Dim 5 framing mismatch), `stage-07-assembly.md` (trim-aware duration step)

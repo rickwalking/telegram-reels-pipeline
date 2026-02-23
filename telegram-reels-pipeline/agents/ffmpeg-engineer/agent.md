@@ -27,14 +27,28 @@ Output valid JSON written to `encoding-plan.json`:
       "crop_filter": "crop=960:1080:0:0,scale=1080:1920",
       "output": "/workspace/runs/XYZ/segment-001.mp4",
       "start_seconds": 1247.0,
-      "end_seconds": 1257.0
+      "end_seconds": 1257.0,
+      "boundary_validation": {
+        "start_face_count": 2,
+        "end_face_count": 2,
+        "expected_face_count": 2,
+        "start_trimmed": false,
+        "end_trimmed": false
+      }
     },
     {
       "input": "/workspace/runs/XYZ/source.mp4",
       "crop_filter": "crop=608:1080:280:0,scale=1080:1920",
       "output": "/workspace/runs/XYZ/segment-002.mp4",
       "start_seconds": 1257.0,
-      "end_seconds": 1325.0
+      "end_seconds": 1325.0,
+      "boundary_validation": {
+        "start_face_count": 1,
+        "end_face_count": 1,
+        "expected_face_count": 1,
+        "start_trimmed": false,
+        "end_trimmed": false
+      }
     }
   ],
   "segment_paths": [
@@ -58,6 +72,7 @@ Output valid JSON written to `encoding-plan.json`:
 | `commands[].framing_style_state` | string or null | Active framing FSM state for this segment (`solo`, `duo_split`, `duo_pip`, `screen_share`, `cinematic_solo`). Set when `framing_style` is `auto`. |
 | `commands[].start_seconds` | float | Segment start timestamp |
 | `commands[].end_seconds` | float | Segment end timestamp |
+| `commands[].boundary_validation` | object or null | Boundary Frame Guard results: `start_face_count`, `end_face_count`, `expected_face_count`, `start_trimmed` (bool), `end_trimmed` (bool), `original_start`/`original_end` (float, only if trimmed), `adjusted_start`/`adjusted_end` (float, only if trimmed) |
 | `segment_paths` | array | Ordered list of all output segment paths |
 | `total_duration_seconds` | float | Sum of all segment durations |
 | `style_transitions` | array or null | Style transition journal entries (present when `framing_style` is `auto` or when visual effects are applied) |

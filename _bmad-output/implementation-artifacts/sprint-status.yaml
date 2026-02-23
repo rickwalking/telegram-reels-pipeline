@@ -143,3 +143,7 @@ development_status:
   14-2-shot-classifier-domain-model: done
   14-3-extended-narrative-cli-flag: done
   14-4-multi-segment-narrative-planner: done
+
+  epic-15: done
+  15-1-boundary-frame-guard-prevention: done
+  15-2-qa-boundary-frame-alignment-detection: done

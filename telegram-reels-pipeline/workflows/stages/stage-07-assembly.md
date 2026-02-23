@@ -46,9 +46,10 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 4. **Plan transitions** — check `encoding-plan.json` for `style_transitions`. If transitions with `effect` entries exist, use xfade for smooth visual transitions (see `crop-playbook.md` § Style Transitions). Otherwise use hard cuts (`-c copy` concat).
 5. **Execute concatenation** via ReelAssembler adapter. Pass `TransitionSpec` tuples for xfade mode, or omit for concat mode. If xfade fails, fall back to hard-cut concat and log warning.
 6. **Validate final output**: dimensions, duration, file size, codec.
-7. **Check duration tolerance**: final duration should be within 5% of expected.
-8. **Summarize style transitions** — if `encoding-plan.json` contains `style_transitions`, include a `style_summary` in `assembly-report.json` with: `framing_style` used, `transitions_count`, unique `states_used`, and `effects_applied`.
-9. **Output assembly-report.json** with quality verification results and style summary.
+7. **Account for boundary trims** — if `encoding-plan.json` contains segments with `boundary_validation` entries where `start_trimmed` or `end_trimmed` is true, subtract the total trimmed seconds from the expected duration before checking tolerance. Log trimmed gaps in `assembly-report.json` under a `boundary_trims` key listing each trim with its timestamp and duration.
+8. **Check duration tolerance**: final duration should be within 5% of the trim-adjusted expected duration.
+9. **Summarize style transitions** — if `encoding-plan.json` contains `style_transitions`, include a `style_summary` in `assembly-report.json` with: `framing_style` used, `transitions_count`, unique `states_used`, and `effects_applied`.
+10. **Output assembly-report.json** with quality verification results and style summary.
 
 ## Constraints
 
