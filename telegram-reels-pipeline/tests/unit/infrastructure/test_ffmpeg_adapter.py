@@ -1131,6 +1131,42 @@ class TestFFmpegAdapterExecuteEncodingPlan:
         assert call_args[map_indices[0] + 1] == "[v]"
         assert call_args[map_indices[1] + 1] == "0:a?"
 
+    async def test_filter_complex_without_v_label_gets_appended(self, tmp_path: Path) -> None:
+        """When filter_complex output is unlabeled, adapter appends [v] for -map."""
+        fc_no_label = (
+            "split=2[top][bot];[top]crop=960:1080:17:0,scale=1080:960:flags=lanczos[t];"
+            "[bot]crop=960:1080:930:0,scale=1080:960:flags=lanczos[b];"
+            "[t][b]vstack,drawbox=x=0:y=957:w=1080:h=6:color=white@0.8:t=fill,setsar=1"
+        )
+        commands = [
+            {
+                "input": str(tmp_path / "source.mp4"),
+                "crop_filter": "",
+                "filter_type": "filter_complex",
+                "filter_complex": fc_no_label,
+                "output": str(tmp_path / "segment-001.mp4"),
+                "start_seconds": 100.0,
+                "end_seconds": 130.0,
+            },
+        ]
+        plan_path = self._make_plan(tmp_path, commands)
+
+        with patch("pipeline.infrastructure.adapters.ffmpeg_adapter.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(side_effect=_ffmpeg_side_effect)
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            adapter = FFmpegAdapter()
+            await adapter.execute_encoding_plan(plan_path)
+
+        call_args = list(mock_aio.create_subprocess_exec.call_args[0])
+        fc_idx = call_args.index("-filter_complex")
+        # [v] should be appended to the filter graph
+        assert call_args[fc_idx + 1].endswith("[v]")
+        # -map [v] and -map 0:a? must still be present
+        map_indices = [i for i, a in enumerate(call_args) if a == "-map"]
+        assert len(map_indices) == 2
+        assert call_args[map_indices[0] + 1] == "[v]"
+        assert call_args[map_indices[1] + 1] == "0:a?"
+
     # ------------------------------------------------------------------
     # Return value correctness
     # ------------------------------------------------------------------

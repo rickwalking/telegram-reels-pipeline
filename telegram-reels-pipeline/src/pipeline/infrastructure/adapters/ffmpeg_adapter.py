@@ -227,7 +227,11 @@ class FFmpegAdapter:
 
         filter_type = cmd.get("filter_type", "crop")
         if filter_type == "filter_complex" and cmd.get("filter_complex"):
-            args.extend(["-filter_complex", str(cmd["filter_complex"])])
+            fc = str(cmd["filter_complex"])
+            # Ensure the filter graph has a labeled [v] output for -map
+            if "[v]" not in fc:
+                fc = fc.rstrip() + "[v]"
+            args.extend(["-filter_complex", fc])
             args.extend(["-map", "[v]", "-map", "0:a?"])
         else:
             crop_filter = cmd.get("crop_filter")
