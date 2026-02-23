@@ -265,34 +265,38 @@ Camera transitions occur between extracted frames, not exactly on layout boundar
 
 ### Pre-Encode Verification Protocol
 
-For each segment boundary (first 1s and last 1s), check `face-position-map.json`:
+For each segment boundary, use **fine-grained face data** (`face-position-map-fine.json`) to find the **exact camera transition frame**. Do NOT use a fixed 1.0s trim — real camera transitions can take 2-4 seconds.
 
-1. **Boundary face count check**: Count faces at the nearest extracted frame within the first and last 1 second of the segment.
+1. **Boundary face count check**: Walk per-second frames from `face-position-map-fine.json` at the segment's start and end boundaries.
 2. **Expected face count**: Determine from the segment's layout — `side_by_side` expects 2+ faces (use integer `2`), `speaker_focus` expects 1 face, `screen_share` expects 0 faces.
-3. **Mismatch handling**:
-   - If **last 1s** face count ≠ expected: trim `end_seconds` by 1.0s (camera is transitioning out)
-   - If **first 1s** face count ≠ expected: advance `start_seconds` by 1.0s (camera is transitioning in)
-   - Both trims can apply to the same segment, but never trim more than 20% of segment duration
-4. **Record in `boundary_validation`**:
+3. **Find the exact transition frame** (CRITICAL):
+   - **Start boundary mismatch**: If the first frame's face count ≠ expected, scan forward frame-by-frame through the fine data until a frame matches the expected count. Set `start_seconds` to that frame's timestamp. Example: if segment expects 1 face (solo) but frames at t=4079 and t=4080 show 2 faces, and t=4081 shows 1 face → set `start_seconds = 4081.0`.
+   - **End boundary mismatch**: If the last frame's face count ≠ expected, scan backward frame-by-frame through the fine data until a frame matches. Set `end_seconds` to that frame's timestamp.
+   - **Fallback**: If fine data is unavailable for the boundary region, fall back to the coarse 5-second `face-position-map.json` and trim 1.0s as a conservative estimate.
+4. **Trim limits**: Never trim more than 20% of the original segment duration. If the exact transition frame would exceed that, trim to 20% and log a warning.
+5. **Record in `boundary_validation`**:
    ```json
    {
      "start_face_count": 2,
      "end_face_count": 1,
-     "expected_face_count": 2,
-     "start_trimmed": false,
-     "end_trimmed": true,
-     "original_end": 27.0,
-     "adjusted_end": 26.0
+     "expected_face_count": 1,
+     "start_trimmed": true,
+     "end_trimmed": false,
+     "original_start": 4078.0,
+     "adjusted_start": 4081.0,
+     "trim_source": "fine_pass",
+     "transition_timestamp": 4081.0,
+     "notes": "Fine pass: wide_shot at 4079-4080, close_up from 4081. Trimmed 3.0s to exact transition."
    }
    ```
 
 ### Gap Tolerance
 
-Boundary trimming may create 1–2s gaps between segments. This is intentional — the gap removes ambiguous camera transition frames rather than encoding them with the wrong crop. The trimmed frames show an in-progress camera movement that looks wrong with either crop style.
+Boundary trimming may create gaps between segments. This is intentional — the gap removes camera transition frames rather than encoding them with the wrong crop. The trimmed frames show an in-progress camera movement that looks wrong with either crop style.
 
 **Important**: When boundary trims create gaps, the `total_duration_seconds` in `encoding-plan.json` should reflect the actual encoded duration (excluding gaps). The Assembly stage's Dimension 3 (Duration Accuracy) exempts intentional boundary trims — when `boundary_validation` entries show `start_trimmed: true` or `end_trimmed: true`, the expected duration is recalculated excluding trimmed seconds.
 
-**Cumulative trim cap**: Total trimmed seconds across ALL segments in a reel must not exceed 5.0 seconds. If cumulative trims would exceed 5.0s, skip the lowest-priority trims (start boundaries before end boundaries). This prevents excessive content loss.
+**Cumulative trim cap**: Total trimmed seconds across ALL segments in a reel must not exceed 8.0 seconds. If cumulative trims would exceed 8.0s, skip the lowest-priority trims (start boundaries before end boundaries). This prevents excessive content loss.
 
 ### Interaction with Crop Stability Rules
 
@@ -300,9 +304,10 @@ Boundary Frame Guard trims happen **after** the 5-second minimum hold rule is ap
 
 ### Edge Cases
 
-- **1.0s trim exceeds 20% of segment duration**: Skip the trim entirely. Do not attempt a partial trim. QA catches it.
-- **No face data at boundary**: If `face-position-map.json` has no frames within the first/last 1s of a segment, record `boundary_validation` with the available data and note `"no_data_at_boundary": true`. Do not trim. Bias toward the wider crop at that boundary region. QA flags for review.
+- **Trim exceeds 20% of segment duration**: Skip the trim entirely. Do not attempt a partial trim. QA catches it.
+- **No face data at boundary**: If neither fine nor coarse face data covers the boundary, record `boundary_validation` with `"no_data_at_boundary": true`. Do not trim. Bias toward the wider crop at that boundary region.
 - **Both boundaries need trimming on same segment**: Both trims may apply, but total trim must not exceed 20% of original duration. If it would, trim only the end boundary (camera transitions out are more visually jarring than transitions in).
+- **Fine data missing but coarse available**: Fall back to 1.0s trim, set `"trim_source": "coarse_fallback"` in boundary_validation.
 
 ## Fallback Matrix
 

@@ -7,7 +7,8 @@ Plan FFmpeg crop and encode operations to convert source video segments into ver
 ## Inputs
 
 - **layout-analysis.json**: Contains `segments` with layout names, crop regions, quality predictions, and `speaker_face_mapping`
-- **face-position-map.json**: Per-frame face positions and speaker position summary
+- **face-position-map.json**: Per-frame face positions and speaker position summary (coarse, every 5s)
+- **face-position-map-fine.json**: Per-second face data at camera transition boundaries (used by Boundary Frame Guard to find exact transition timestamps)
 - **speaker-timeline.json**: Speaker turn boundaries (used to verify active speaker alignment)
 - **moment-selection.json**: Contains overall `start_seconds`, `end_seconds`
 - **Video file path**: Source video for encoding
@@ -89,7 +90,7 @@ The FFmpeg Engineer **plans** encoding commands. The pipeline runner calls `FFmp
    - **Both-visible preference**: For `side_by_side` segments without sub_segments, the crop should keep BOTH speakers visible. Verify BOTH face positions fall within the crop range. If the Layout Detective provided a single `crop_region` (no sub_segments), do NOT split into per-speaker segments.
    - **Stability**: Do not create segments shorter than 5 seconds. If a speaker turn is < 5s, keep the current crop and merge that turn into the surrounding segment.
 
-7. **Boundary Frame Guard** — for each segment, verify face count at the first and last 1 second using `face-position-map.json`. Compare against the expected face count for the layout type (`side_by_side` → 2+ faces, `speaker_focus` → 1 face, `screen_share` → 0 faces). If there's a mismatch at a boundary, trim that boundary inward by 1.0 second. If 1.0s exceeds 20% of the segment duration, skip the trim entirely (do not partial-trim). If trimming would reduce the segment below 5 seconds, skip the trim. Record the check and any adjustments in the `boundary_validation` field per command. See `crop-playbook.md` § Boundary Frame Guard for the full protocol.
+7. **Boundary Frame Guard** — for each segment, use `face-position-map-fine.json` to find the **exact camera transition frame** at boundaries. Do NOT use a fixed 1.0s trim — camera transitions can take 2-4 seconds. Walk per-second frames forward (start) or backward (end) until face count matches the expected count for the layout type (`side_by_side` → 2+ faces, `speaker_focus` → 1 face). Set `start_seconds`/`end_seconds` to the exact transition timestamp. Fall back to 1.0s trim only when fine data is unavailable. Total trim must not exceed 20% of segment duration. Record the check, trim source (`fine_pass` or `coarse_fallback`), and exact transition timestamp in `boundary_validation`. See `crop-playbook.md` § Boundary Frame Guard for the full protocol.
 
 8. **Handle quality degradation** for segments flagged by the Layout Detective:
    - For `quality: "degraded"` (upscale 1.5-2.0x): try widening the crop to include more background around the face while keeping face centered. Recheck upscale factor.
@@ -156,7 +157,8 @@ See: `workflows/qa/gate-criteria/ffmpeg-criteria.md`
 ## Prior Artifact Dependencies
 
 - `layout-analysis.json` from Stage 5 (Layout Detective) — segment layouts, sub-segments, crop regions, speaker_face_mapping
-- `face-position-map.json` from Stage 5 (Layout Detective) — face positions for validation
+- `face-position-map.json` from Stage 5 (Layout Detective) — coarse face positions (every 5s) for validation
+- `face-position-map-fine.json` from Stage 5 (Layout Detective) — per-second face data at transition boundaries for exact trim timestamps
 - `speaker-timeline.json` from Stage 5 (Layout Detective) — speaker turn boundaries for active speaker verification
 - `moment-selection.json` from Stage 3 (Transcript) — overall timestamp range. Multi-moment: `moments[]` array with per-moment time ranges and narrative roles
 - Source video file from Stage 2 (Research)
