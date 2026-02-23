@@ -41,11 +41,13 @@ class CliBackend:
         work_dir: Path,
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         dispatch_timeout_seconds: float = DEFAULT_DISPATCH_TIMEOUT_SECONDS,
+        verbose: bool = False,
     ) -> None:
         self._work_dir = work_dir
         self._timeout_seconds = timeout_seconds
         self._dispatch_timeout_seconds = dispatch_timeout_seconds
         self._workspace_override: Path | None = None
+        self._verbose = verbose
 
     def set_workspace(self, workspace: Path | None) -> None:
         """Set per-run workspace override. Pass None to clear."""
@@ -95,6 +97,11 @@ class CliBackend:
         if returncode != 0:
             detail = stderr.strip() if stderr and stderr.strip() else stdout[-2000:]
             raise AgentExecutionError(f"Agent {request.stage.value} exited with code {returncode}: {detail}")
+
+        if self._verbose and stdout.strip():
+            print(f"\n--- Agent [{request.stage.value}] output ---")
+            print(stdout)
+            print(f"--- End [{request.stage.value}] output ---\n")
 
         session_id = _extract_session_id(stdout)
         artifacts = collect_artifacts(cwd)
@@ -161,6 +168,11 @@ class CliBackend:
         if returncode != 0:
             detail = stderr.strip() if stderr and stderr.strip() else stdout[-2000:]
             raise AgentExecutionError(f"Model dispatch ({role}) exited with code {returncode}: {detail}")
+
+        if self._verbose and stdout.strip():
+            print(f"\n--- QA [{role}] output ---")
+            print(stdout)
+            print(f"--- End QA [{role}] output ---\n")
 
         logger.info(
             "Model dispatch (%s) completed: stdout=%d bytes, stderr=%d bytes",

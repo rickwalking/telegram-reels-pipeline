@@ -530,6 +530,7 @@ async def run_pipeline(
     start_stage: int = 1,
     framing_style: str | None = None,
     target_duration_seconds: int = 90,
+    verbose: bool = False,
 ) -> None:
     settings = PipelineSettings()
     project_root = Path(__file__).resolve().parent.parent
@@ -544,6 +545,7 @@ async def run_pipeline(
     cli_backend = CliBackend(
         work_dir=project_root,
         timeout_seconds=effective_timeout,
+        verbose=verbose,
     )
     event_bus = EventBus()
     recovery_chain = RecoveryChain(agent_port=cli_backend)
@@ -646,6 +648,7 @@ def main() -> None:
         default=90,
         help="Target duration in seconds (default: 90, max: 300). Longer durations use multi-moment narrative.",
     )
+    parser.add_argument("--verbose", "-v", action="store_true", help="Print Claude agent output to terminal")
     args = parser.parse_args()
 
     _validate_cli_args(args, arg_parser=parser)
@@ -665,6 +668,7 @@ def main() -> None:
             args.start_stage,
             framing_style,
             args.target_duration,
+            verbose=args.verbose,
         )
     )
 
