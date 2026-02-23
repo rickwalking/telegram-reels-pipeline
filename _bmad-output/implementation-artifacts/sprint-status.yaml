@@ -148,8 +148,8 @@ development_status:
   15-1-boundary-frame-guard-prevention: done
   15-2-qa-boundary-frame-alignment-detection: done
 
-  epic-16: backlog
-  16-1-narrative-plan-domain-model-parser: backlog
-  16-2-cli-moments-flag-auto-trigger: backlog
-  16-3-transcript-agent-multi-moment-selection: backlog
-  16-4-downstream-stage-multi-moment-support: backlog
+  epic-16: done
+  16-1-narrative-plan-domain-model-parser: done
+  16-2-cli-moments-flag-auto-trigger: done
+  16-3-transcript-agent-multi-moment-selection: done
+  16-4-downstream-stage-multi-moment-support: done
