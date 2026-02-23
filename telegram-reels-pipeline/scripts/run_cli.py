@@ -35,6 +35,7 @@ from pipeline.domain.enums import PipelineStage
 from pipeline.domain.models import AgentRequest, ReflectionResult
 from pipeline.domain.types import GateName
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
+from pipeline.infrastructure.adapters.ffmpeg_adapter import FFmpegAdapter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,7 +89,7 @@ STAGE_SIGNATURES: dict[int, tuple[str, ...]] = {
     3: ("moment-selection.json",),
     4: ("content.json",),
     5: ("layout-analysis.json",),
-    6: ("encoding-plan.json",),
+    6: ("encoding-plan.json", "segment-001.mp4"),
     7: ("final-reel.mp4",),
 }
 
@@ -96,14 +97,16 @@ STAGE_SIGNATURES: dict[int, tuple[str, ...]] = {
 def _detect_resume_stage(workspace: Path) -> int | None:
     """Detect the next stage to run by inspecting workspace artifacts.
 
-    Walks stages 1-N checking for signature artifacts. Returns the first
-    stage number whose signature is missing (i.e., the stage that needs to run).
+    Walks stages 1-N checking for signature artifacts. A stage is complete
+    when ALL of its signature artifacts exist (e.g., stage 6 requires both
+    encoding-plan.json and segment-001.mp4). Returns the first stage number
+    whose signatures are incomplete.
     Returns None if no completed stages found (empty workspace).
     """
     last_completed = 0
     for stage_num in range(1, TOTAL_CLI_STAGES + 1):
         signatures = STAGE_SIGNATURES.get(stage_num, ())
-        if any((workspace / name).exists() for name in signatures):
+        if all((workspace / name).exists() for name in signatures):
             last_completed = stage_num
         else:
             break
@@ -513,12 +516,32 @@ async def _run_stages(
                 )
                 artifacts = result.artifacts
 
-            elapsed = time.monotonic() - stage_start
-            _print_stage_result(stage, result, artifacts, elapsed)
-
             if result.escalation_needed:
+                elapsed = time.monotonic() - stage_start
+                _print_stage_result(stage, result, artifacts, elapsed)
                 print("    ESCALATION needed — stopping.")
                 break
+
+            # Post-stage hook: execute encoding plan after FFmpeg Engineer plans commands
+            if stage == PipelineStage.FFMPEG_ENGINEER:
+                plan_path = workspace / "encoding-plan.json"
+                if not plan_path.exists():
+                    raise RuntimeError(
+                        "FFmpeg Engineer completed but encoding-plan.json is missing"
+                    )
+                print("  [FFMPEG_ADAPTER] Executing encoding plan...")
+                adapter = FFmpegAdapter()
+                segments = await adapter.execute_encoding_plan(plan_path, workspace=workspace)
+                print(f"  [FFMPEG_ADAPTER] Produced {len(segments)} segments")
+                for seg in segments:
+                    print(f"      - {seg.name}")
+                # Re-collect artifacts so downstream stages see the segment files
+                from pipeline.infrastructure.adapters.artifact_collector import collect_artifacts
+
+                artifacts = collect_artifacts(workspace)
+
+            elapsed = time.monotonic() - stage_start
+            _print_stage_result(stage, result, artifacts, elapsed)
 
         except Exception as exc:
             elapsed = time.monotonic() - stage_start

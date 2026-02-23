@@ -2,7 +2,7 @@
 
 ## Objective
 
-Plan FFmpeg crop and encode operations to convert source video segments into vertical 9:16 format at target specifications. Use face position data and quality checks to ensure no speakers are cut off and visual quality is maintained. The agent plans commands; the FFmpegAdapter executes them.
+Plan FFmpeg crop and encode operations to convert source video segments into vertical 9:16 format at target specifications. Use face position data and quality checks to ensure no speakers are cut off and visual quality is maintained. The agent plans commands; the pipeline runner calls FFmpegAdapter to execute them.
 
 ## Inputs
 
@@ -45,10 +45,10 @@ Plan FFmpeg crop and encode operations to convert source video segments into ver
 
 ## Responsibilities
 
-The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** them. After execution, the FFmpeg Engineer **validates** results.
+The FFmpeg Engineer **plans** encoding commands. The pipeline runner calls `FFmpegAdapter.execute_encoding_plan()` to **execute** them between stage 6 and stage 7.
 
 - **Planning phase** (steps 1-15): Produce `encoding-plan.json` with all FFmpeg command specifications and style transitions journal.
-- **Execution phase**: FFmpegAdapter runs the planned commands.
+- **Execution phase** (automatic): Pipeline runner invokes FFmpegAdapter with `encoding-plan.json`. The adapter builds full FFmpeg commands from the plan (encoding params from `encoding-params.md`) and runs each sequentially.
 - **Validation phase** (steps 16-19): Run post-encode quality and face checks. Update `encoding-plan.json` with results.
 
 ## Instructions
@@ -113,19 +113,21 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 
 15. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
 
-### Validation Phase (after FFmpegAdapter executes)
+### Pre-Encoding Validation (steps 16-19, performed BEFORE the plan is written)
 
-16. **Run quality check** on each encoded segment using the `representative_frame` from `layout-analysis.json`:
+> **Note**: Encoding is executed *automatically* by the pipeline runner (FFmpegAdapter) after this agent exits. The agent cannot validate encoded outputs. Instead, perform these checks on the *planned* crop regions before writing `encoding-plan.json`.
+
+16. **Predict quality** for each planned command using `check_upscale_quality.py --predict`:
     ```bash
-    python scripts/check_upscale_quality.py <segment.mp4> --crop-width <W> --target-width 1080 --source-frame <representative_frame.png>
+    python scripts/check_upscale_quality.py --predict --crop-width <W> --target-width 1080
     ```
-    Update `encoding-plan.json` with quality results under the `quality` key per command.
+    Record predicted quality results under the `quality` key per command in `encoding-plan.json`.
 
-17. **Include face validation results** in `encoding-plan.json` under the `validation` key per command.
+17. **Include face validation results** in `encoding-plan.json` under the `validation` key per command. Verify face positions from `face-position-map.json` fall within the planned crop region.
 
-18. **Safety net**: If the crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Something went wrong with crop computation.
+18. **Safety net**: If the planned crop area at a segment's timestamps has 0 detected faces in `face-position-map.json`, flag for rework. Adjust the crop to include a face before writing the plan.
 
-19. **Update `encoding-plan.json`** with final validation and quality data.
+19. **Write `encoding-plan.json`** with all commands, predicted quality data, and face validation results. The pipeline runner will execute the plan and produce segment files automatically.
 
 ## Constraints
 
@@ -138,6 +140,7 @@ The FFmpeg Engineer **plans** encoding commands. The FFmpegAdapter **executes** 
 - Crop coordinates must be within source bounds
 - Widen crop when upscale factor > 2.0x to reduce quality loss
 - All segments must have face validation results in encoding-plan.json
+- Agent plans commands only — encoding is executed by the pipeline runner via FFmpegAdapter
 
 ## Quality Criteria Reference
 

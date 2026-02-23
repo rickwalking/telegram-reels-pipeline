@@ -621,6 +621,7 @@ class TestDetectResumeStage:
             "content.json",
             "layout-analysis.json",
             "encoding-plan.json",
+            "segment-001.mp4",
             "final-reel.mp4",
         ):
             (tmp_path / name).write_text("{}")
@@ -788,6 +789,7 @@ class TestValidateCliArgs:
             "content.json",
             "layout-analysis.json",
             "encoding-plan.json",
+            "segment-001.mp4",
             "final-reel.mp4",
         ):
             (tmp_path / name).write_text("{}")
