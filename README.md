@@ -51,7 +51,8 @@ Run the full pipeline from a terminal without Telegram.
 | `--resume` | path | — | Resume from existing workspace directory |
 | `--start-stage` | int | auto-detected | Stage number to start from (1-7, requires `--resume`) |
 | `--style` | choice | — | Framing style: `default`, `split`, `pip`, `auto` |
-| `--target-duration` | int | 90 | Target duration in seconds (30-300). Longer durations use multi-moment narrative. |
+| `--target-duration` | int | 90 | Target duration in seconds (30-300). Durations > 120s auto-trigger multi-moment narrative. |
+| `--moments` | int | auto | Number of narrative moments (1-5). Auto-computed from `--target-duration` when omitted. |
 
 **Examples:**
 
@@ -79,9 +80,17 @@ poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" 
 poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
   --message "create a short about TOPIC" --style split
 
-# Extended narrative (3+ minutes)
+# Extended narrative (3+ minutes, auto-triggers 3 moments)
 poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
   --message "create a short about TOPIC" --target-duration 180
+
+# Explicit multi-moment (override auto-trigger)
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --moments 3
+
+# Force single-moment even for long durations
+poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
+  --message "create a short about TOPIC" --target-duration 180 --moments 1
 
 # Auto-style with extended duration
 poetry run python scripts/run_cli.py "https://www.youtube.com/watch?v=VIDEO_ID" \
@@ -261,11 +270,11 @@ Generates 5-second preview clips for each framing style from a source video, all
 |---|-------|-------|------------|-------------|---------|
 | 1 | Router | `router` | YouTube URL, user message | `router-output.json` | URL validated, parameters extracted |
 | 2 | Research | `research` | Router output | `research-output.json`, `transcript_clean.txt` | Metadata complete, transcript available |
-| 3 | Transcript | `transcript` | Clean transcript, research context | `moment-selection.json` | Moment 30-120s, narrative coherent |
+| 3 | Transcript | `transcript` | Clean transcript, research context | `moment-selection.json` | Moment 30-120s, narrative coherent. Multi-moment: 2-5 moments with narrative roles |
 | 4 | Content | `content-creator` | Moment selection, research context | `content.json` | Descriptions, hashtags, music suggestion |
 | 5 | Layout Detective | `layout-detective` | Source video, moment timestamps | `layout-analysis.json`, `face-position-map.json`, `speaker-timeline.json`, extracted frames | Faces detected, layouts classified |
 | 6 | FFmpeg Engineer | `ffmpeg-engineer` | All prior artifacts | `segment-*.mp4`, `encoding-plan.json` | 9:16 output, face-centered, quality validated |
-| 7 | Assembly | `qa` | Encoded segments, encoding plan | `final-reel.mp4`, `assembly-report.json` | Duration 30-120s, transitions applied |
+| 7 | Assembly | `qa` | Encoded segments, encoding plan | `final-reel.mp4`, `assembly-report.json` | Duration 30-120s, transitions applied. Multi-moment: narrative reordering, 15% tolerance |
 
 ### QA Reflection Loop (Generator-Critic)
 
@@ -564,6 +573,27 @@ Applied in `auto` mode at style transitions and speaker changes:
 | Pulse zoom | Speaker change | 0.3s | 5% zoom-in on new speaker, ease back to normal |
 | Spotlight dim | Active speaker change (split-screen) | Continuous | Inactive speaker's half at 70% brightness |
 
+### Multi-Moment Narrative
+
+When `--target-duration > 120` or `--moments >= 2`, the pipeline selects multiple transcript moments that build a narrative arc instead of a single clip.
+
+**Auto-trigger formula:** `min(5, max(2, int(target_duration / 60 + 0.5)))` — e.g., 180s = 3 moments, 300s = 5 moments. Override with `--moments N`.
+
+**Narrative roles:** Each moment is assigned a role from [intro, buildup, core, reaction, conclusion]. Exactly one moment must be `core`. Roles determine assembly order and transition types.
+
+**Pipeline behavior in multi-moment mode:**
+
+| Stage | Single-Moment | Multi-Moment |
+|-------|--------------|--------------|
+| 3 (Transcript) | Select 1 best 60-90s moment | Select 2-5 moments with narrative roles, >= 30s gap between each |
+| 5 (Layout) | Process one time range | Process each moment's range independently, chronological source order |
+| 6 (FFmpeg) | Sequential segment numbering | Global numbering across moments, `moment_index` + `narrative_role` per command |
+| 7 (Assembly) | Concatenate in segment order | Reorder from chronological → narrative role order, 15% duration tolerance |
+
+**Transition types between moments:** `narrative_boundary` (1.0s dissolve) between different narrative roles, `style_change` (0.5s slide) within a moment.
+
+**Domain model:** `NarrativePlan` (frozen dataclass) contains 1-5 `NarrativeMoment` instances. Parsed by `application/moment_parser.py` with graceful fallback to single-moment on malformed AI output.
+
 ### xfade Transitions
 
 The Assembly stage applies FFmpeg `xfade` transitions between segments based on `TransitionKind`:
@@ -609,6 +639,8 @@ src/pipeline/
 | **FaceGateConfig / face_gate.py** | domain | Hybrid face gate — duo scoring, EMA hysteresis, shot classification |
 | **FRAMING_TRANSITIONS** | domain/transitions.py | Framing style FSM transition table (pure data) |
 | **TRANSITIONS** | domain/transitions.py | Pipeline stage FSM transition table (pure data) |
+| **NarrativePlan** | domain/models.py | Frozen dataclass: 1-5 NarrativeMoments with role validation |
+| **moment_parser** | application/moment_parser.py | Parses AI JSON into NarrativePlan with graceful fallback |
 
 ### Data Storage
 
@@ -732,8 +764,10 @@ poetry run black src/ tests/
 | **Epic 12** | Framing styles: split-screen, PiP, benchmark gate, screen share | Done |
 | **Epic 13** | Dynamic style FSM, xfade transitions, content overlays, style gallery | Done |
 | **Epic 14** | Hybrid face gate, shot classifier, extended narrative, narrative planner | Done |
+| **Epic 15** | Boundary frame guard prevention & QA detection | Done |
+| **Epic 16** | Multi-moment narrative selection (NarrativePlan, --moments, downstream stages) | Done |
 
-The CLI pipeline has been validated end-to-end producing 1080x1920 Reels from real podcast episodes with face-centered framing, dynamic style switching, and xfade transitions.
+The CLI pipeline has been validated end-to-end producing 1080x1920 Reels from real podcast episodes with face-centered framing, dynamic style switching, xfade transitions, and multi-moment narrative arcs.
 
 ## License
 

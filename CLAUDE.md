@@ -81,7 +81,7 @@ Output goes to `workspace/runs/<timestamp>/`. The final video is `final-reel.mp4
 |---|-------|-------|--------|
 | 1 | Router | `router` | `router-output.json` |
 | 2 | Research | `research` | `research-output.json`, `transcript_clean.txt` |
-| 3 | Transcript | `transcript` | `moment-selection.json` |
+| 3 | Transcript | `transcript` | `moment-selection.json` (multi-moment: includes `moments[]` array with narrative roles) |
 | 4 | Content | `content-creator` | `content.json` |
 | 5 | Layout Detective | `layout-detective` | `layout-analysis.json`, `face-position-map.json` (with `--gate` hybrid face gate data), `speaker-timeline.json`, extracted frames |
 | 6 | FFmpeg Engineer | `ffmpeg-engineer` | `segment-*.mp4`, `encoding-plan.json` (with face validation, quality results, style transitions) |
@@ -154,3 +154,5 @@ poetry run python scripts/generate_style_previews.py <source_video> --start 60.0
 - Framing Style FSM: 5 states (solo, duo_split, duo_pip, screen_share, cinematic_solo) with event-driven transitions in `domain/transitions.py`
 - xfade Assembly: style-change (0.5s fade) and narrative-boundary (1.0s dissolve) transitions via `infrastructure/adapters/reel_assembler.py`
 - Shot Classification: `classify_shot` decision tree + `derive_fsm_event` transition mapping in `domain/face_gate.py`
+- Multi-Moment Narrative: `NarrativePlan` + `NarrativeMoment` frozen dataclasses in `domain/models.py`, `NARRATIVE_ROLE_ORDER` canonical ordering, `moment_parser.py` in application layer with graceful fallback
+- Auto-trigger: `--moments` flag or auto-computed from `--target-duration` via `compute_moments_requested()` in `scripts/run_cli.py`
