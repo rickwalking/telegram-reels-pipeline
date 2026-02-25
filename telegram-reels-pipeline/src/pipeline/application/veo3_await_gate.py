@@ -52,6 +52,13 @@ async def run_veo3_await_gate(
         logger.info("Veo3 await gate (no orchestrator): %s", summary)
         return summary
 
+    # Auto-retry: if all jobs failed (e.g. missing SDK, transient API error),
+    # re-submit them before entering the polling loop.
+    if await asyncio.to_thread(_all_jobs_failed, jobs_path):
+        run_id = workspace.name
+        logger.info("All Veo3 jobs failed — retrying submission for run %s", run_id)
+        await orchestrator.start_generation(workspace, run_id)
+
     # Polling loop with exponential backoff
     poll_interval = _INITIAL_POLL_S
     elapsed = 0.0
@@ -74,6 +81,16 @@ async def run_veo3_await_gate(
 
     summary = await asyncio.to_thread(_read_summary, jobs_path)
     return summary
+
+
+def _all_jobs_failed(jobs_path: Path) -> bool:
+    """Return True if jobs.json exists and every job has status 'failed'."""
+    try:
+        data = json.loads(jobs_path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return False
+    jobs = data.get("jobs", [])
+    return bool(jobs) and all(j.get("status") == "failed" for j in jobs)
 
 
 def _read_summary(jobs_path: Path) -> dict[str, Any]:
