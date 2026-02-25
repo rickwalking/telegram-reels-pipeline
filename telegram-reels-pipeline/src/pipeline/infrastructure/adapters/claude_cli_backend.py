@@ -141,17 +141,42 @@ class CliBackend:
         cwd = self.effective_work_dir
 
         if self._qa_via_clink:
-            cli_args, actual_prompt = self._build_clink_dispatch(prompt)
-        else:
-            effective_model = model or "sonnet"
-            cli_args = [
-                "claude", "-p",
-                "--tools", "",
-                "--model", effective_model,
-                "--no-session-persistence",
-            ]
-            actual_prompt = prompt
+            stdout = await self._dispatch_via_clink(role, prompt, cwd)
+            # Fallback: if clink returned no valid JSON (Gemini down, rate-limited, etc.),
+            # retry with Claude Sonnet directly.
+            if stdout is not None and "{" in stdout:
+                return stdout
+            logger.warning("Clink dispatch returned no JSON — falling back to Claude Sonnet")
+            if self._verbose:
+                print("  [QA] Clink/Gemini failed — falling back to Claude Sonnet")
 
+        return await self._dispatch_direct(role, prompt, cwd, model or "sonnet")
+
+    async def _dispatch_direct(
+        self, role: str, prompt: str, cwd: Path, effective_model: str
+    ) -> str:
+        """Dispatch via Claude CLI directly (no clink)."""
+        cli_args = [
+            "claude", "-p",
+            "--tools", "",
+            "--model", effective_model,
+            "--no-session-persistence",
+        ]
+        return await self._run_dispatch(role, cli_args, prompt, cwd)
+
+    async def _dispatch_via_clink(self, role: str, prompt: str, cwd: Path) -> str | None:
+        """Dispatch via clink to Gemini. Returns None on failure."""
+        cli_args, wrapped = self._build_clink_dispatch(prompt)
+        try:
+            return await self._run_dispatch(role, cli_args, wrapped, cwd)
+        except AgentExecutionError:
+            logger.warning("Clink dispatch failed for %s", role, exc_info=True)
+            return None
+
+    async def _run_dispatch(
+        self, role: str, cli_args: list[str], prompt: str, cwd: Path
+    ) -> str:
+        """Run a dispatch subprocess and return stdout."""
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cli_args,
@@ -161,7 +186,7 @@ class CliBackend:
                 cwd=str(cwd),
             )
             async with asyncio.timeout(self._dispatch_timeout_seconds):
-                stdout_bytes, stderr_bytes = await proc.communicate(input=actual_prompt.encode())
+                stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
         except TimeoutError as exc:
             proc.kill()
             await proc.wait()
