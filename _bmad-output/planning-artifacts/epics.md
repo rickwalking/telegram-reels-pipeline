@@ -171,6 +171,22 @@ NFR-S4: No external network exposure — Telegram polling only, zero open ports
 | FR41 | Epic 6 | Auto-start + auto-restart |
 | FR42 | Epic 6 | Resource monitoring |
 | FR43 | Epic 6 | Filesystem inspection |
+| FR44 | Epic 17 | Extended Veo3Prompt with narrative_anchor, duration_s, idempotent_key |
+| FR45 | Epic 17 | Veo3Job + Veo3JobStatus domain models for job tracking |
+| FR46 | Epic 17 | VideoGenerationPort protocol (9th port) |
+| FR47 | Epic 17 | GeminiVeo3Adapter implementation (Gemini API integration) |
+| FR48 | Epic 17 | Async parallel generation with idempotent keys |
+| FR49 | Epic 17 | Polling worker with adaptive backoff |
+| FR50 | Epic 17 | Await gate blocking before Stage 7 |
+| FR51 | Epic 17 | Per-clip status tracking (partial success) |
+| FR52 | Epic 17 | Content Creator enriched veo3_prompts with placement + style |
+| FR53 | Epic 17 | Narrative anchor placement (story language, not timestamps) |
+| FR54 | Epic 17 | Assembly variant-driven insertion logic |
+| FR55 | Epic 17 | Documentary cutaway model (silent video over continuous audio) |
+| FR56 | Epic 17 | Always-crop watermark post-processing |
+| FR57 | Epic 17 | Configurable settings (VEO3_CLIP_COUNT, VEO3_TIMEOUT_S, VEO3_CROP_BOTTOM_PX) |
+| FR58 | Epic 17 | Clip quality validation (resolution, duration, black-frame) |
+| FR59 | Epic 17 | Semantic/fuzzy narrative anchor matching with skip fallback |
 
 ## Epic List
 
@@ -921,3 +937,159 @@ I want stages 5-7 (Layout Detective, FFmpeg Engineer, Assembly) to process multi
 so that the full pipeline produces a coherent multi-moment Reel end-to-end.
 
 **Files affected:** `workflows/stages/stage-05-layout-detective.md` (multi-moment loop), `workflows/stages/stage-06-ffmpeg-engineer.md` (per-moment encoding), `workflows/stages/stage-07-assembly.md` (narrative-ordered assembly), `qa/gate-criteria/assembly-criteria.md` (multi-moment validation)
+
+## Epic 17: Veo3 Animated B-Roll Integration
+
+Pedro can enrich Reels with AI-generated animated B-roll clips produced by Gemini Veo3. The Content Creator agent directs clip placement using narrative anchors (story language, not timestamps). Async generation runs parallel to Stages 5-6, a formal `VEO3_AWAIT` pipeline stage blocks before Assembly, and Assembly weaves clips into the final reel as documentary-style cutaways (silent video over continuous speaker audio). Builds on Epic 11 infrastructure (`Veo3Prompt` dataclass, `publishing-assets.json` with `veo3_prompts[]`).
+
+**Brainstorming source:** `_bmad-output/brainstorming/brainstorming-session-2026-02-23.md` (29 ideas, 3 decision trees, consensus-validated architecture)
+
+**Implementation order:** 17.1 → 17.2 → 17.3 → 17.4 → 17.5 → 17.6 → 17.7 → 17.8 (17.5 parallel with 17.4)
+
+### Story 17.1: Veo3 Domain Models
+
+As a pipeline developer,
+I want to extend the existing `Veo3Prompt` frozen dataclass and add new `Veo3Job` and `Veo3JobStatus` models,
+so that the domain layer can represent Veo3 generation state and editorial intent without external dependencies.
+
+**Acceptance criteria:**
+- Extend existing `Veo3Prompt(variant, prompt)` in `domain/models.py` with three new fields: `narrative_anchor: str`, `duration_s: int`, `idempotent_key: str` (preserving frozen + tuple conventions)
+- New `Veo3JobStatus` enum: `pending`, `generating`, `completed`, `failed`, `timed_out`
+- New `Veo3Job` frozen dataclass: `idempotent_key`, `variant`, `prompt`, `status`, `video_path`, `error_message`
+- Variant taxonomy: `intro`, `broll`, `outro`, `transition` as string constants
+- Idempotent key pattern: `{run_id}_{variant}` — deterministic, zero collision risk
+- All models use stdlib only (frozen dataclass, tuple, Mapping) — no Pydantic in domain
+- Existing `PublishingAssets.veo3_prompts` tuple type remains compatible with extended Veo3Prompt
+- Unit tests for dataclass construction, immutability, and idempotent key generation
+
+**Files affected:** `domain/models.py` (extend existing Veo3Prompt, new Veo3Job, Veo3JobStatus), tests
+
+### Story 17.2: VideoGenerationPort Protocol
+
+As a pipeline developer,
+I want a `VideoGenerationPort` protocol defining the contract for async video generation services,
+so that the domain and application layers depend on an abstraction, not on Gemini-specific implementation details.
+
+**Acceptance criteria:**
+- `VideoGenerationPort` added as 11th port protocol (after existing 10: AgentExecution, ModelDispatch, Messaging, Queue, VideoProcessing, VideoDownload, StateStore, FileDelivery, KnowledgeBase, ResourceMonitor)
+- Methods: `submit_job(prompt: Veo3Prompt) -> Veo3Job`, `poll_job(idempotent_key: str) -> Veo3Job`, `download_clip(job: Veo3Job, dest: Path) -> Path`
+- Protocol follows existing port conventions (runtime_checkable, docstrings, async methods)
+- Application layer imports port via `TYPE_CHECKING` guard
+- Port documented in architecture decisions
+- Unit tests for protocol structural subtyping
+
+**Files affected:** `domain/ports.py` (VideoGenerationPort), tests
+
+### Story 17.3: Gemini Veo3 Adapter & Settings
+
+As a pipeline developer,
+I want a `GeminiVeo3Adapter` that implements `VideoGenerationPort` using the Gemini API, with all Veo3 configuration centralized in PipelineSettings,
+so that the pipeline can generate Veo3 video clips through a swappable infrastructure adapter with environment-driven configuration.
+
+**Acceptance criteria:**
+- `GeminiVeo3Adapter` in infrastructure layer implements all `VideoGenerationPort` methods
+- Uses `google-genai` SDK with Gemini API for Veo3 model
+- Requests 9:16 vertical format, silent audio, duration from prompt's `duration_s`
+- Sends idempotent key with each API call for deduplication
+- Handles API errors with proper exception chaining (`raise X from Y`)
+- All Veo3 settings consolidated in `app/settings.py` (single owner): `GEMINI_API_KEY`, `VEO3_CLIP_COUNT` (default 3), `VEO3_TIMEOUT_S` (default 300), `VEO3_CROP_BOTTOM_PX` (default 16)
+- Fake adapter for testing (returns canned responses)
+- `.env.example` updated with all Veo3 env vars documented
+
+**Files affected:** `infrastructure/adapters/gemini_veo3_adapter.py` (new), `app/settings.py` (all Veo3 config), `.env.example`, tests
+
+### Story 17.4: Async Generation Orchestration & Polling Worker
+
+As a pipeline developer,
+I want an orchestration service that fires parallel Veo3 API calls after Stage 4 and a polling worker that tracks job status with adaptive backoff,
+so that video generation runs concurrently with Stages 5-6 and job state is reliably tracked.
+
+**Acceptance criteria:**
+- After Stage 4 (CONTENT), reads `veo3_prompts[]` from `publishing-assets.json`
+- Caps requests at `VEO3_CLIP_COUNT` from settings
+- Fires parallel async `submit_job()` calls via `VideoGenerationPort`
+- Creates `veo3/` subfolder in run directory
+- Writes `veo3/jobs.json` with per-clip status using atomic writes (write-to-tmp + rename)
+- Polling worker: adaptive backoff (fast when status changes, patient when idle)
+- Per-clip independent tracking — partial success beats all-or-nothing
+- Idempotent keys from `{run_id}_{variant}` pattern
+- `pipeline_runner.py` modified to fire async generation after CONTENT stage completes (non-blocking, runs alongside Stages 5-6)
+- Integration tests with fake adapter
+
+**Files affected:** `application/veo3_orchestrator.py` (new), `application/pipeline_runner.py` (post-Stage-4 async hook), `infrastructure/adapters/` (jobs.json I/O), tests
+
+### Story 17.5: Content Creator Agent Veo3 Direction
+
+As a pipeline user,
+I want the Content Creator agent to produce enriched `veo3_prompts` with narrative anchors, duration, and visual style direction,
+so that the editorial director specifies clip placement and aesthetics in story language.
+
+**Acceptance criteria:**
+- Content Creator agent prompt updated to generate enriched veo3_prompts
+- Each prompt includes: `variant` (intro/broll/outro/transition), `prompt` (visual description with style direction), `narrative_anchor` (story language reference to content moment), `duration_s` (5-8s, director's choice)
+- Variant types serve as classification taxonomy with implicit placement semantics
+- Visual style in prompts matches reel's overall aesthetic (director-specified)
+- Clip count is director's choice, capped by `VEO3_CLIP_COUNT`
+- QA gate validates enriched prompt structure
+- Updated `publishing-assets.json` schema with enriched prompts
+
+**Files affected:** `agents/content-creator/agent.md` (prompt update), `qa/gate-criteria/content-criteria.md` (enriched prompt validation), `domain/models.py` (if schema adjustment needed), tests
+
+### Story 17.6: Veo3 Clip Post-Processing & Quality Validation
+
+As a pipeline developer,
+I want downloaded Veo3 clips to be automatically cropped (watermark removal) and quality-validated before the await gate passes them to Assembly,
+so that only clips meeting resolution, duration, and visual quality standards enter the final reel.
+
+**Acceptance criteria:**
+- Always-crop strategy: unconditional FFmpeg bottom strip crop (`crop=in_w:in_h-{px}:0:0`) on every downloaded clip
+- Crop pixels from `VEO3_CROP_BOTTOM_PX` setting (defined in Story 17.3)
+- Quality validation checks: resolution matches 9:16, duration within ±1s of requested, no black-frame sequences
+- Failed validation marks clip as `failed` in `jobs.json` — Assembly skips it
+- Exposes `crop_and_validate(clip_path: Path, expected_duration_s: int) -> bool` for await gate to call
+- Unit tests for crop filter construction + validation logic
+
+**Files affected:** `infrastructure/adapters/veo3_postprocessor.py` (new), tests
+
+### Story 17.7: Await Gate Pipeline Stage
+
+As a pipeline developer,
+I want a formal `VEO3_AWAIT` pipeline stage that blocks before Assembly until all Veo3 jobs resolve or timeout,
+so that the await is checkpoint-recoverable and Assembly has access to all available generated clips.
+
+**Acceptance criteria:**
+- `PipelineStage.VEO3_AWAIT` added to stage enum, inserted into `_STAGE_SEQUENCE` between FFMPEG_ENGINEER and ASSEMBLY
+- FSM transitions updated in `domain/transitions.py`: `(FFMPEG_ENGINEER, qa_pass) → VEO3_AWAIT`, `(VEO3_AWAIT, stage_complete) → ASSEMBLY`
+- `pipeline_runner.py` handles VEO3_AWAIT as a non-agent stage (no QA gate) — executes await gate logic directly
+- Reads `veo3/jobs.json` to check resolution status
+- Polls with exponential backoff until all jobs resolved or `VEO3_TIMEOUT_S` exceeded
+- Downloads completed clips to `veo3/` subfolder, applies crop + validation via Story 17.6's `crop_and_validate()`
+- Evaluates: all completed → proceed, some failed → proceed with available, all failed → proceed without B-roll (emergency fallback)
+- Updates `veo3/jobs.json` with final status after gate
+- State checkpointed before and after gate — crash during 300s wait recovers by re-checking `veo3/jobs.json` on resume
+- Emits EventBus events: `veo3.gate.started`, `veo3.gate.completed`, `veo3.gate.timeout`
+- Integration tests for all three evaluation paths + crash recovery
+
+**Files affected:** `domain/transitions.py` (VEO3_AWAIT state + transitions), `application/pipeline_runner.py` (stage sequence + gate handler), `application/veo3_await_gate.py` (new), tests
+
+### Story 17.8: Assembly Stage B-Roll Insertion
+
+As a pipeline user,
+I want the Assembly stage to weave Veo3 B-roll clips into the final reel using variant-driven placement and documentary cutaway audio model,
+so that the finished short includes animated visuals that enhance the narrative without disrupting speaker audio.
+
+**Acceptance criteria:**
+- Assembly reads `veo3/` folder for available clips + `content.json` for narrative anchors
+- Variant-driven placement: `intro` → start, `outro` → end, `transition` → between moments, `broll` → narrative anchor match
+- Narrative anchor matching: semantic/fuzzy match against content.json and transcript (not exact string match)
+- Skip fallback: unmatched anchors skip gracefully (no crash, log warning)
+- B-roll clips spliced into the segment list *before* FFmpeg filter graph construction — not inserted mid-chain
+- New `_build_cutaway_filter()` method in `reel_assembler.py` for documentary cutaway: maps Veo3 video stream over the base segment's audio stream (independent video/audio stream mapping via FFmpeg overlay + stream selection)
+- Existing `_build_xfade_filter()` remains unchanged — cutaway is a separate filter path
+- Director-specified duration (5-8s) honored for each clip
+- Reuses existing xfade transitions: 0.5s style-change fade for B-roll entry/exit points
+- Assembly proceeds normally if no clips available (graceful degradation)
+- Assembly report includes B-roll insertion details (which clips used, placement, any skipped)
+- Integration tests for all placement variants + cutaway audio continuity + no-clip fallback
+
+**Files affected:** `infrastructure/adapters/reel_assembler.py` (new `_build_cutaway_filter()` method + B-roll segment splicing), `workflows/stages/stage-07-assembly.md` (B-roll step), `qa/gate-criteria/assembly-criteria.md` (B-roll validation dimension), tests

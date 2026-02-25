@@ -153,3 +153,13 @@ development_status:
   16-2-cli-moments-flag-auto-trigger: done
   16-3-transcript-agent-multi-moment-selection: done
   16-4-downstream-stage-multi-moment-support: done
+
+  epic-17: backlog
+  17-1-veo3-domain-models: ready-for-dev
+  17-2-video-generation-port-protocol: ready-for-dev
+  17-3-gemini-veo3-adapter-and-settings: ready-for-dev
+  17-4-async-generation-orchestration-polling-worker: ready-for-dev
+  17-5-content-creator-agent-veo3-direction: ready-for-dev
+  17-6-veo3-clip-post-processing-quality-validation: ready-for-dev
+  17-7-await-gate-pipeline-stage: ready-for-dev
+  17-8-assembly-stage-broll-insertion: ready-for-dev
