@@ -200,10 +200,11 @@ class FFmpegAdapter:
         except KeyError as exc:
             raise FFmpegError(f"Command {index + 1} missing required field: {exc}") from exc
 
-        # Resolve relative paths against workspace (not CWD).
-        # Absolute paths pass through unchanged (Path("/ws") / "/abs" == "/abs").
-        output_path = (ws_root / str(output_str)).resolve()
-        input_path = (ws_root / str(input_str)).resolve()
+        # Normalize without following symlinks — source_video.mp4 is often a
+        # symlink to another workspace run and .resolve() would fail the
+        # confinement check.  os.path.normpath collapses ".." but keeps symlinks.
+        output_path = Path(os.path.normpath(ws_root / str(output_str)))
+        input_path = Path(os.path.normpath(ws_root / str(input_str)))
         self._validate_path_confinement(input_path, ws_root, "input", index + 1)
         self._validate_path_confinement(output_path, ws_root, "output", index + 1)
 
@@ -219,7 +220,7 @@ class FFmpegAdapter:
         ws_root: Path,
     ) -> Path:
         """Build ffmpeg args for one plan command, encode to tmp, and atomically rename."""
-        input_path = (ws_root / str(cmd["input"])).resolve()
+        input_path = Path(os.path.normpath(ws_root / str(cmd["input"])))
         start = cmd["start_seconds"]
         end = cmd["end_seconds"]
 
