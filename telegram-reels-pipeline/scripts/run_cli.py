@@ -36,6 +36,7 @@ from pipeline.domain.models import AgentRequest, ReflectionResult
 from pipeline.domain.types import GateName
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 from pipeline.infrastructure.adapters.ffmpeg_adapter import FFmpegAdapter
+from pipeline.infrastructure.adapters.gemini_veo3_adapter import GeminiVeo3Adapter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -80,6 +81,7 @@ def compute_moments_requested(target_duration: int, explicit_moments: int | None
     if target_duration <= _AUTO_TRIGGER_THRESHOLD:
         return 1
     return min(5, max(2, int(target_duration / 60 + 0.5)))
+
 
 # Signature artifacts per stage (1-indexed). A stage is "complete" if at least
 # one of its signature artifacts exists in the workspace.
@@ -433,6 +435,94 @@ async def _run_router_with_elicitation(
     return result, new_artifacts
 
 
+def _build_veo3_adapter(settings: PipelineSettings) -> GeminiVeo3Adapter | None:
+    """Construct the Veo3 adapter if a Gemini API key is configured."""
+    if not settings.gemini_api_key:
+        return None
+    logger.info("Veo3 adapter initialized (Gemini API key present)")
+    return GeminiVeo3Adapter(api_key=settings.gemini_api_key)
+
+
+def _fire_veo3_background(
+    adapter: GeminiVeo3Adapter,
+    workspace: Path,
+    settings: PipelineSettings,
+) -> asyncio.Task[None] | None:
+    """Create a Veo3Orchestrator and fire start_generation as a background task.
+
+    Returns the task handle, or None on setup failure. Failures are logged
+    but never crash the pipeline.
+    """
+    try:
+        from pipeline.application.veo3_orchestrator import Veo3Orchestrator
+
+        orchestrator = Veo3Orchestrator(
+            video_gen=adapter,
+            clip_count=settings.veo3_clip_count,
+            timeout_s=settings.veo3_timeout_s,
+        )
+        run_id = workspace.name
+        task: asyncio.Task[None] = asyncio.create_task(
+            orchestrator.start_generation(workspace, run_id),
+            name=f"veo3-gen-{run_id}",
+        )
+        logger.info("Veo3 background generation fired for run %s", run_id)
+        print("  [VEO3] Background generation started")
+        return task
+    except Exception:
+        logger.warning("Veo3 generation fire failed — continuing pipeline", exc_info=True)
+        print("  [VEO3] Generation fire failed — continuing without B-roll")
+        return None
+
+
+async def _run_veo3_await_gate(
+    veo3_task: asyncio.Task[None] | None,
+    adapter: GeminiVeo3Adapter | None,
+    workspace: Path,
+    settings: PipelineSettings,
+) -> None:
+    """Await Veo3 background generation and run the polling gate.
+
+    Failures are logged but never crash the pipeline (graceful degradation).
+    """
+    from pipeline.application.veo3_await_gate import run_veo3_await_gate
+    from pipeline.application.veo3_orchestrator import Veo3Orchestrator
+
+    print("  [VEO3] Awaiting generation completion...")
+    try:
+        if veo3_task is not None:
+            try:
+                await veo3_task
+            except Exception:
+                logger.warning("Veo3 background task failed", exc_info=True)
+                print("  [VEO3] Background task failed — checking partial results")
+
+        orchestrator = None
+        if adapter is not None:
+            orchestrator = Veo3Orchestrator(
+                video_gen=adapter,
+                clip_count=settings.veo3_clip_count,
+                timeout_s=settings.veo3_timeout_s,
+            )
+
+        summary = await run_veo3_await_gate(
+            workspace=workspace,
+            orchestrator=orchestrator,
+            timeout_s=settings.veo3_timeout_s,
+        )
+        logger.info("Veo3 await gate result: %s", summary)
+        if summary.get("skipped"):
+            print(f"  [VEO3] Skipped — {summary.get('reason', 'no jobs')}")
+        else:
+            completed = summary.get("completed", 0)
+            failed = summary.get("failed", 0)
+            total = summary.get("total", 0)
+            print(f"  [VEO3] Gate done — {completed}/{total} completed, {failed} failed")
+    except Exception:
+        logger.warning("Veo3 await gate failed — continuing pipeline", exc_info=True)
+        print("  [VEO3] Await gate failed — continuing without B-roll")
+
+
 async def _run_stages(
     stages: tuple[tuple[PipelineStage, str, str, str], ...],
     start_stage: int,
@@ -447,8 +537,11 @@ async def _run_stages(
     framing_style: str | None = None,
     target_duration_seconds: int = 90,
     moments_requested: int = 1,
+    veo3_adapter: GeminiVeo3Adapter | None = None,
 ) -> tuple[Path, ...]:
     """Execute pipeline stages sequentially with router elicitation support."""
+    veo3_task: asyncio.Task[None] | None = None
+
     for stage_idx, (stage, step_file_name, agent_dir, gate_name) in enumerate(stages, 1):
         if stage_idx < start_stage:
             print(f"  [{stage.value.upper()}] Skipped (resuming)")
@@ -490,6 +583,11 @@ async def _run_stages(
         stage_start = time.monotonic()
 
         try:
+            # Pre-stage hook: await Veo3 generation before Assembly
+            if stage == PipelineStage.ASSEMBLY and veo3_task is not None:
+                await _run_veo3_await_gate(veo3_task, veo3_adapter, workspace, settings)
+                veo3_task = None
+
             if stage == PipelineStage.ROUTER:
                 result, artifacts = await _run_router_with_elicitation(
                     elicitation=elicitation,
@@ -522,13 +620,15 @@ async def _run_stages(
                 print("    ESCALATION needed — stopping.")
                 break
 
+            # Post-stage hook: fire Veo3 background generation after Content stage
+            if stage == PipelineStage.CONTENT and veo3_adapter is not None:
+                veo3_task = _fire_veo3_background(veo3_adapter, workspace, settings)
+
             # Post-stage hook: execute encoding plan after FFmpeg Engineer plans commands
             if stage == PipelineStage.FFMPEG_ENGINEER:
                 plan_path = workspace / "encoding-plan.json"
                 if not plan_path.exists():
-                    raise RuntimeError(
-                        "FFmpeg Engineer completed but encoding-plan.json is missing"
-                    )
+                    raise RuntimeError("FFmpeg Engineer completed but encoding-plan.json is missing")
                 print("  [FFMPEG_ADAPTER] Executing encoding plan...")
                 adapter = FFmpegAdapter()
                 segments = await adapter.execute_encoding_plan(plan_path, workspace=workspace)
@@ -613,6 +713,9 @@ async def run_pipeline(
 
     stages = ALL_STAGES[:max_stages]
 
+    # Veo3 adapter — only when API key is configured
+    veo3_adapter = _build_veo3_adapter(settings)
+
     start_label = _stage_name(start_stage)
     print(f"\n{'='*60}")
     print(f"  PIPELINE RUN — {len(stages)} stages (starting at stage {start_stage}: {start_label})")
@@ -665,6 +768,7 @@ async def run_pipeline(
             framing_style=effective_style,
             target_duration_seconds=target_duration_seconds,
             moments_requested=moments_requested,
+            veo3_adapter=veo3_adapter,
         )
     finally:
         cli_backend.set_workspace(None)
