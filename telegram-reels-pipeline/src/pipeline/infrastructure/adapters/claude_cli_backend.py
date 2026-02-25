@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT_SECONDS: float = 300.0
-DEFAULT_DISPATCH_TIMEOUT_SECONDS: float = 120.0
+DEFAULT_DISPATCH_TIMEOUT_SECONDS: float = 300.0
 
 # Tools allowed for agent execution (stages that need bash, file I/O)
 AGENT_ALLOWED_TOOLS: tuple[str, ...] = ("Bash", "Read", "Write", "Edit", "Glob", "Grep")

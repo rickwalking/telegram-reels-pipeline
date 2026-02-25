@@ -215,13 +215,22 @@ def _extract_json_object(raw: str) -> dict[str, Any] | None:
 
 
 _TEXT_SUFFIXES: frozenset[str] = frozenset({".md", ".json", ".txt", ".yaml", ".yml"})
-_MAX_INLINE_BYTES: int = 50_000
+_MAX_INLINE_BYTES: int = 15_000
+
+# Artifacts that carry high-density data useful only as metadata summaries.
+# QA doesn't need the full per-frame face data — just that the file exists.
+_SUMMARY_ONLY_ARTIFACTS: frozenset[str] = frozenset({
+    "face-position-map.json",
+    "speaker-timeline.json",
+})
 
 
 def _build_artifact_section(artifacts: tuple[Path, ...]) -> str:
     """Build a text block with inlined artifact contents for QA evaluation.
 
-    Inlines text files under 50 KB; shows only metadata for binary/large files.
+    Inlines text files under 15 KB; shows only metadata for binary/large files.
+    High-density data files (face maps, timelines) get a brief summary instead
+    of full inlining to keep QA prompts fast.
     Returns a placeholder when no artifacts are present.
     """
     if not artifacts:
@@ -233,12 +242,33 @@ def _build_artifact_section(artifacts: tuple[Path, ...]) -> str:
             parts.append(f"#### {path.name}\n\n(file not found)")
             continue
         size = path.stat().st_size
-        if path.suffix in _TEXT_SUFFIXES and size <= _MAX_INLINE_BYTES:
+        if path.name in _SUMMARY_ONLY_ARTIFACTS:
+            summary = _summarize_json_artifact(path)
+            parts.append(f"#### {path.name} ({size} bytes)\n\n{summary}")
+        elif path.suffix in _TEXT_SUFFIXES and size <= _MAX_INLINE_BYTES:
             content = path.read_text(errors="replace")
             parts.append(f"#### {path.name}\n\n~~~~\n{content}\n~~~~")
         else:
             parts.append(f"#### {path.name} (binary/large — {size} bytes)")
     return "\n\n".join(parts)
+
+
+def _summarize_json_artifact(path: Path) -> str:
+    """Produce a brief summary of a JSON artifact for QA context."""
+    try:
+        data = json.loads(path.read_text(errors="replace"))
+    except (json.JSONDecodeError, OSError):
+        return "(could not parse)"
+    if isinstance(data, dict):
+        keys = list(data.keys())
+        if "frames" in data:
+            return f"JSON object with {len(data['frames'])} frames. Top-level keys: {keys}"
+        if "entries" in data:
+            return f"JSON object with {len(data['entries'])} entries. Top-level keys: {keys}"
+        return f"JSON object. Top-level keys: {keys}"
+    if isinstance(data, list):
+        return f"JSON array with {len(data)} items"
+    return f"JSON value: {type(data).__name__}"
 
 
 def select_best(

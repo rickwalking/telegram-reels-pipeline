@@ -695,6 +695,7 @@ async def run_pipeline(
     cli_backend = CliBackend(
         work_dir=project_root,
         timeout_seconds=effective_timeout,
+        dispatch_timeout_seconds=max(300.0, effective_timeout / 2),
         verbose=verbose,
     )
     event_bus = EventBus()
