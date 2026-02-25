@@ -13,6 +13,7 @@ class PipelineStage(Enum):
     CONTENT = "content"
     LAYOUT_DETECTIVE = "layout_detective"
     FFMPEG_ENGINEER = "ffmpeg_engineer"
+    VEO3_AWAIT = "veo3_await"
     ASSEMBLY = "assembly"
     DELIVERY = "delivery"
     COMPLETED = "completed"

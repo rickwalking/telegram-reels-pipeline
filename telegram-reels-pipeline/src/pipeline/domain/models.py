@@ -260,14 +260,71 @@ class Veo3PromptVariant(StrEnum):
 
 @dataclass(frozen=True)
 class Veo3Prompt:
-    """A single Veo 3 video generation prompt with its variant type."""
+    """A single Veo 3 video generation prompt with its variant type.
+
+    Extended for B-roll integration: narrative_anchor places the clip in story
+    language (not timestamps), duration_s is the director-specified length, and
+    idempotent_key deduplicates API calls.
+    """
 
     variant: str
     prompt: str
+    narrative_anchor: str = ""
+    duration_s: int = 0
+    idempotent_key: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "variant", self.variant.strip())
         object.__setattr__(self, "prompt", self.prompt.strip())
+        if self.variant not in {v.value for v in Veo3PromptVariant}:
+            raise ValueError(f"variant must be one of {[v.value for v in Veo3PromptVariant]}, got '{self.variant}'")
+        if not self.prompt:
+            raise ValueError("prompt must not be empty")
+        # New fields are optional for backward compatibility with Epic 11 usage
+        if self.narrative_anchor:
+            object.__setattr__(self, "narrative_anchor", self.narrative_anchor.strip())
+        if self.duration_s and not (5 <= self.duration_s <= 8):
+            raise ValueError(f"duration_s must be 5-8 when set, got {self.duration_s}")
+
+
+def make_idempotent_key(run_id: str, variant: str) -> str:
+    """Build a deterministic idempotent key for Veo3 API deduplication.
+
+    Pattern: ``{run_id}_{variant}`` — zero collision risk within a run because
+    variants are unique per PublishingAssets.
+    """
+    if not run_id:
+        raise ValueError("run_id must not be empty")
+    if not variant:
+        raise ValueError("variant must not be empty")
+    return f"{run_id}_{variant}"
+
+
+@unique
+class Veo3JobStatus(StrEnum):
+    """Lifecycle states for a Veo3 video generation job."""
+
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    TIMED_OUT = "timed_out"
+
+
+@dataclass(frozen=True)
+class Veo3Job:
+    """Tracks a single Veo3 video generation job through its lifecycle."""
+
+    idempotent_key: str
+    variant: str
+    prompt: str
+    status: Veo3JobStatus
+    video_path: str | None = None
+    error_message: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.idempotent_key:
+            raise ValueError("idempotent_key must not be empty")
         if self.variant not in {v.value for v in Veo3PromptVariant}:
             raise ValueError(f"variant must be one of {[v.value for v in Veo3PromptVariant]}, got '{self.variant}'")
         if not self.prompt:
@@ -516,6 +573,30 @@ class NarrativePlan:
         return all(
             self.moments[i].start_seconds <= self.moments[i + 1].start_seconds for i in range(len(self.moments) - 1)
         )
+
+
+@dataclass(frozen=True)
+class BrollPlacement:
+    """Resolved B-roll clip placement in the final reel timeline."""
+
+    variant: str
+    clip_path: str
+    insertion_point_s: float
+    duration_s: float
+    narrative_anchor: str
+    match_confidence: float
+
+    def __post_init__(self) -> None:
+        if self.variant not in {v.value for v in Veo3PromptVariant}:
+            raise ValueError(f"variant must be one of {[v.value for v in Veo3PromptVariant]}, got '{self.variant}'")
+        if not self.clip_path:
+            raise ValueError("clip_path must not be empty")
+        if self.insertion_point_s < 0:
+            raise ValueError(f"insertion_point_s must be non-negative, got {self.insertion_point_s}")
+        if self.duration_s <= 0:
+            raise ValueError(f"duration_s must be positive, got {self.duration_s}")
+        if not 0.0 <= self.match_confidence <= 1.0:
+            raise ValueError(f"match_confidence must be 0.0-1.0, got {self.match_confidence}")
 
 
 @dataclass(frozen=True)

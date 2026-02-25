@@ -13,6 +13,8 @@ from pipeline.domain.models import (
     ResourceSnapshot,
     RunState,
     SegmentLayout,
+    Veo3Job,
+    Veo3Prompt,
     VideoMetadata,
 )
 from pipeline.domain.types import RunId
@@ -108,3 +110,42 @@ class ResourceMonitorPort(Protocol):
     """Read system resource metrics (CPU, memory, temperature)."""
 
     async def snapshot(self) -> ResourceSnapshot: ...
+
+
+@runtime_checkable
+class VideoGenerationPort(Protocol):
+    """Generate short video clips via Veo 3 API for B-roll and transitions."""
+
+    async def submit_job(self, prompt: Veo3Prompt) -> Veo3Job:
+        """Submit a video generation job with the given prompt.
+
+        Args:
+            prompt: Veo3Prompt specifying variant, text, and duration.
+
+        Returns:
+            Veo3Job tracking the submitted job with initial PENDING status.
+        """
+        ...
+
+    async def poll_job(self, idempotent_key: str) -> Veo3Job:
+        """Poll the status of a previously submitted job.
+
+        Args:
+            idempotent_key: The idempotent key returned from submit_job.
+
+        Returns:
+            Updated Veo3Job with current status and video_path (if completed).
+        """
+        ...
+
+    async def download_clip(self, job: Veo3Job, dest: Path) -> Path:
+        """Download a completed video clip to the specified destination.
+
+        Args:
+            job: Veo3Job with status COMPLETED and video_path set.
+            dest: Destination Path where the clip should be written.
+
+        Returns:
+            Path to the downloaded file (same as dest).
+        """
+        ...

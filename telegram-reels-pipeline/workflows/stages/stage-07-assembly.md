@@ -45,6 +45,7 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
 3. **Determine concatenation order**:
    - **Single-moment mode**: sequential by segment number.
    - **Multi-moment mode**: reorder segments from chronological I/O order (how they were encoded) into **narrative role order** (intro → buildup → core → reaction → conclusion). Use the `moment_index` and `narrative_role` fields from `encoding-plan.json` commands to group and sort.
+4.5. **Discover B-roll clips** — if a `veo3/` folder exists in the workspace, read `veo3/jobs.json` for completed clips. Use the B-roll placer to resolve insertion points based on variant type and narrative anchors. Include B-roll details in the assembly report.
 4. **Plan transitions** — check `encoding-plan.json` for `style_transitions`. Use the `transition_kind` field to select transition type:
    - `style_change`: 0.5s slide effect (within-moment style transitions)
    - `narrative_boundary`: 1.0s dissolve effect (between-moment transitions)

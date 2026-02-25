@@ -18,9 +18,10 @@ from pipeline.domain.transitions import (
 
 class TestTransitionTable:
     def test_all_processing_stages_have_qa_pass_transition(self) -> None:
-        """Every processing stage (except DELIVERY) must have a qa_pass transition."""
+        """Every processing stage (except DELIVERY and VEO3_AWAIT) must have a qa_pass transition."""
+        non_qa_stages = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
         for stage in STAGE_ORDER:
-            if stage == PipelineStage.DELIVERY:
+            if stage in non_qa_stages:
                 continue
             assert (stage, "qa_pass") in TRANSITIONS, f"{stage.name} missing qa_pass transition"
 
@@ -28,8 +29,11 @@ class TestTransitionTable:
         assert (PipelineStage.DELIVERY, "stage_complete") in TRANSITIONS
 
     def test_qa_pass_progresses_forward(self) -> None:
-        """qa_pass on each stage leads to the NEXT stage in STAGE_ORDER."""
+        """qa_pass on each QA-gated stage leads to the NEXT stage in STAGE_ORDER."""
+        non_qa_stages = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
         for i, stage in enumerate(STAGE_ORDER[:-1]):  # exclude DELIVERY
+            if stage in non_qa_stages:
+                continue
             next_stage = TRANSITIONS[(stage, "qa_pass")]
             expected_next = STAGE_ORDER[i + 1]
             assert (
@@ -37,14 +41,16 @@ class TestTransitionTable:
             ), f"{stage.name} qa_pass -> {next_stage.name}, expected {expected_next.name}"
 
     def test_qa_rework_stays_on_same_stage(self) -> None:
+        non_qa_stages = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
         for stage in STAGE_ORDER:
-            if stage == PipelineStage.DELIVERY:
+            if stage in non_qa_stages:
                 continue
             assert TRANSITIONS.get((stage, "qa_rework")) == stage
 
     def test_qa_fail_stays_on_same_stage(self) -> None:
+        non_qa_stages = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
         for stage in STAGE_ORDER:
-            if stage == PipelineStage.DELIVERY:
+            if stage in non_qa_stages:
                 continue
             assert TRANSITIONS.get((stage, "qa_fail")) == stage
 
@@ -55,10 +61,11 @@ class TestTransitionTable:
 
     def test_all_stages_reachable_via_qa_pass(self) -> None:
         """Starting from ROUTER with qa_pass, every stage in STAGE_ORDER is reachable."""
+        stage_complete_stages = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
         current = PipelineStage.ROUTER
         visited = [current]
         for _ in range(len(STAGE_ORDER)):
-            event = "qa_pass" if current != PipelineStage.DELIVERY else "stage_complete"
+            event = "stage_complete" if current in stage_complete_stages else "qa_pass"
             next_stage = TRANSITIONS.get((current, event))
             if next_stage is None:
                 break
@@ -83,7 +90,7 @@ class TestFailureTransitions:
 
 class TestStageOrder:
     def test_stage_order_length(self) -> None:
-        assert len(STAGE_ORDER) == 8
+        assert len(STAGE_ORDER) == 9
 
     def test_starts_with_router(self) -> None:
         assert STAGE_ORDER[0] == PipelineStage.ROUTER

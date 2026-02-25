@@ -48,4 +48,10 @@ class PipelineSettings(BaseSettings):
     )
     publishing_description_variants: int = Field(default=3, ge=1, le=10, description="Number of description variants")
 
+    # Veo3 B-roll generation (Epic 17)
+    gemini_api_key: str = Field(default="", description="Gemini API key for Veo3 video generation")
+    veo3_clip_count: int = Field(default=3, ge=1, le=4, description="Maximum Veo3 clips per run")
+    veo3_timeout_s: int = Field(default=300, ge=30, description="Timeout for Veo3 await gate in seconds")
+    veo3_crop_bottom_px: int = Field(default=16, ge=0, description="Pixels to crop from bottom for watermark removal")
+
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

@@ -47,25 +47,27 @@ class TestQAPassTransition:
         assert result.updated_at != ""
 
     def test_full_forward_progression(self, fsm: PipelineStateMachine) -> None:
-        """Walk through all stages via qa_pass to verify accumulation."""
+        """Walk through all stages via qa_pass/stage_complete to verify accumulation."""
         state = RunState(
             run_id=RunId("test"),
             youtube_url="https://youtube.com/watch?v=test",
             current_stage=PipelineStage.ROUTER,
         )
-        stages = [
-            PipelineStage.RESEARCH,
-            PipelineStage.TRANSCRIPT,
-            PipelineStage.CONTENT,
-            PipelineStage.LAYOUT_DETECTIVE,
-            PipelineStage.FFMPEG_ENGINEER,
-            PipelineStage.ASSEMBLY,
-            PipelineStage.DELIVERY,
+        # (expected_next_stage, event_to_apply)
+        steps: list[tuple[PipelineStage, str]] = [
+            (PipelineStage.RESEARCH, "qa_pass"),
+            (PipelineStage.TRANSCRIPT, "qa_pass"),
+            (PipelineStage.CONTENT, "qa_pass"),
+            (PipelineStage.LAYOUT_DETECTIVE, "qa_pass"),
+            (PipelineStage.FFMPEG_ENGINEER, "qa_pass"),
+            (PipelineStage.VEO3_AWAIT, "qa_pass"),
+            (PipelineStage.ASSEMBLY, "stage_complete"),
+            (PipelineStage.DELIVERY, "qa_pass"),
         ]
-        for expected in stages:
-            state = fsm.apply_transition(state, "qa_pass")
+        for expected, event in steps:
+            state = fsm.apply_transition(state, event)
             assert state.current_stage == expected
-        assert len(state.stages_completed) == 7
+        assert len(state.stages_completed) == 8
 
 
 class TestQAReworkTransition:

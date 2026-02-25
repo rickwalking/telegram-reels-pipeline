@@ -41,6 +41,12 @@
 - **Framing mismatch at join** (Rework above): Evaluated for ALL multi-segment reels, regardless of whether xfade is used. This catches boundary-trim gaps and hard-cut style discontinuities.
 - **Multi-segment weight**: For multi-segment reels, Dimension 5 weight is **10/100** (redistributed from Dimensions 1-4, reducing each by 2.5) to account for framing mismatch checks at segment joins.
 
+### Dimension 8: B-Roll Integration (weight: 0/100 when no B-roll, 5/100 when present)
+- **Pass**: B-roll clips inserted at correct positions, audio continuity maintained, no visual glitches
+- **Rework**: B-roll present but transitions are abrupt (missing fade in/out)
+- **Fail**: B-roll causes audio dropout or video corruption
+- **Prescriptive fix template**: "B-roll clip '{clip}' at {position}s caused {issue}. Verify that the cutaway overlay preserves base audio and uses fade in/out at boundaries."
+
 ## Scoring Rubric
 
 - 90-100: Excellent — perfect dimensions, duration matches, audio synced, valid file

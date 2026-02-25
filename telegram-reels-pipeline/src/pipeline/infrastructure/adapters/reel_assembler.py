@@ -10,6 +10,7 @@ from pathlib import Path
 
 from pipeline.domain.enums import TransitionKind
 from pipeline.domain.errors import PipelineError
+from pipeline.domain.models import BrollPlacement
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,179 @@ class ReelAssembler:
             raise AssemblyError(f"FFmpeg xfade failed (exit {proc.returncode}): {stderr.decode()}")
 
         logger.info("Assembled %d segments (xfade) into %s", len(segments), output.name)
+        return output
+
+    @staticmethod
+    def _build_cutaway_filter(
+        base_segment_index: int,
+        broll_input_index: int,
+        insertion_point_s: float,
+        cutaway_duration_s: float,
+        fade_duration: float = 0.5,
+    ) -> str:
+        """Build FFmpeg filter_complex for documentary cutaway overlay.
+
+        The B-roll video replaces the base video at the insertion point
+        while the base audio continues uninterrupted.  The overlay fades
+        in/out at the boundaries for a polished cutaway look.
+
+        Audio stays as the base segment's audio — no audio from B-roll
+        (it is treated as silent visual footage).
+        """
+        start = insertion_point_s
+        end = insertion_point_s + cutaway_duration_s
+        fade_out_start = end - fade_duration
+
+        return (
+            f"[{broll_input_index}:v]setpts=PTS-STARTPTS,"
+            f"scale=1080:1920,"
+            f"format=yuva420p,"
+            f"fade=t=in:st=0:d={fade_duration}:alpha=1,"
+            f"fade=t=out:st={fade_out_start - start}:d={fade_duration}:alpha=1"
+            f"[broll{broll_input_index}];"
+            f"[{base_segment_index}:v]"
+            f"[broll{broll_input_index}]"
+            f"overlay=enable='between(t,{start},{end})'"
+            f"[v]"
+        )
+
+    async def assemble_with_broll(
+        self,
+        segments: list[Path],
+        output: Path,
+        broll_placements: tuple[BrollPlacement, ...],
+        transitions: tuple[TransitionSpec, ...] | None = None,
+    ) -> Path:
+        """Assemble segments with documentary cutaway B-roll insertion.
+
+        If *broll_placements* is empty, delegates to :meth:`assemble`.
+        For each valid B-roll clip, builds a cutaway overlay filter that
+        plays the B-roll video over the base while keeping the base audio.
+        Falls back to :meth:`assemble` without B-roll on FFmpeg failure.
+        """
+        if not broll_placements:
+            return await self.assemble(segments, output, transitions=transitions)
+
+        # Validate clip files exist — skip missing ones gracefully
+        valid_placements: list[BrollPlacement] = []
+        for bp in broll_placements:
+            clip = Path(bp.clip_path)
+            if clip.exists():
+                valid_placements.append(bp)
+            else:
+                logger.warning("B-roll clip not found, skipping: %s", bp.clip_path)
+
+        if not valid_placements:
+            logger.warning("No valid B-roll clips found — assembling without B-roll")
+            return await self.assemble(segments, output, transitions=transitions)
+
+        try:
+            return await self._assemble_with_cutaways(segments, output, valid_placements, transitions)
+        except AssemblyError as exc:
+            logger.warning("Cutaway assembly failed (%s), falling back to plain assembly", exc.message)
+            return await self.assemble(segments, output, transitions=transitions)
+
+    async def _assemble_with_cutaways(
+        self,
+        segments: list[Path],
+        output: Path,
+        placements: list[BrollPlacement],
+        transitions: tuple[TransitionSpec, ...] | None,
+    ) -> Path:
+        """Internal: build and run the FFmpeg command with cutaway overlays."""
+        if not segments:
+            raise AssemblyError("segments must not be empty")
+
+        for seg in segments:
+            if not seg.exists():
+                raise AssemblyError(f"Segment file not found: {seg}")
+
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        # Build inputs: first all base segments, then B-roll clips
+        cmd: list[str] = ["ffmpeg"]
+        for seg in segments:
+            cmd.extend(["-i", str(seg)])
+
+        broll_start_index = len(segments)
+        for bp in placements:
+            cmd.extend(["-i", bp.clip_path])
+
+        # Build the base assembly filter (xfade chain or single pass)
+        filter_parts: list[str] = []
+        base_video_label = "[0:v]"
+        base_audio_label = "[0:a]"
+
+        if len(segments) > 1 and transitions:
+            # Use xfade for base segments first, then overlay B-roll
+            xfade_filter = self._build_xfade_filter(len(segments), transitions)
+            filter_parts.append(xfade_filter)
+            base_video_label = "[v]"
+            base_audio_label = "[a]"
+
+        # For each B-roll, build an overlay on the base video
+        current_video = base_video_label
+        for i, bp in enumerate(placements):
+            broll_idx = broll_start_index + i
+            is_last = i == len(placements) - 1
+            out_label = "[v]" if is_last else f"[vcut{i}]"
+
+            start = bp.insertion_point_s
+            end = bp.insertion_point_s + bp.duration_s
+            fade_out_start = bp.duration_s - 0.5
+
+            broll_filter = (
+                f"[{broll_idx}:v]setpts=PTS-STARTPTS,"
+                f"scale=1080:1920,"
+                f"format=yuva420p,"
+                f"fade=t=in:st=0:d=0.5:alpha=1,"
+                f"fade=t=out:st={fade_out_start}:d=0.5:alpha=1"
+                f"[broll{broll_idx}];"
+                f"{current_video}"
+                f"[broll{broll_idx}]"
+                f"overlay=enable='between(t,{start},{end})'"
+                f"{out_label}"
+            )
+            filter_parts.append(broll_filter)
+            current_video = out_label
+
+        filter_graph = ";".join(filter_parts)
+        cmd.extend(
+            [
+                "-filter_complex",
+                filter_graph,
+                "-map",
+                "[v]",
+                "-map",
+                base_audio_label,
+                "-c:v",
+                "libx264",
+                "-crf",
+                "23",
+                "-preset",
+                "medium",
+                "-c:a",
+                "aac",
+                "-y",
+                str(output),
+            ]
+        )
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise AssemblyError(f"FFmpeg cutaway failed (exit {proc.returncode}): {stderr.decode()}")
+
+        logger.info(
+            "Assembled %d segments with %d B-roll cutaways into %s",
+            len(segments),
+            len(placements),
+            output.name,
+        )
         return output
 
     async def validate_duration(

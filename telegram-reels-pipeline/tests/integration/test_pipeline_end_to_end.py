@@ -121,7 +121,7 @@ class TestHappyPath:
         assert state.current_stage == PipelineStage.COMPLETED
         assert state.qa_status == QAStatus.PASSED
         assert state.escalation_state == EscalationState.NONE
-        assert len(state.stages_completed) == 8
+        assert len(state.stages_completed) == 9
 
     async def test_all_gated_stages_called(self, tmp_path: Path) -> None:
         runner, stage_runner, _, _, _ = _build_runner(tmp_path)
@@ -130,9 +130,10 @@ class TestHappyPath:
 
         await runner.run(_make_item(), workspace)
 
-        # 7 gated stages (DELIVERY has no gate)
+        # 7 gated stages (DELIVERY and VEO3_AWAIT have no gate)
         assert len(stage_runner.calls) == 7
         assert PipelineStage.DELIVERY not in stage_runner.calls
+        assert PipelineStage.VEO3_AWAIT not in stage_runner.calls
 
     async def test_state_persisted_to_disk(self, tmp_path: Path) -> None:
         runner, _, state_store, _, _ = _build_runner(tmp_path)

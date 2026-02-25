@@ -58,8 +58,18 @@ When `publishing_language` is present in the elicitation context, output `publis
   ],
   "hashtags": ["#podcast", "#tecnologia", "#inteligenciaartificial", ...],
   "veo3_prompts": [
-    {"variant": "broll", "prompt": "Cinematic slow-motion shot of abstract data streams flowing through a neural network..."},
-    {"variant": "intro", "prompt": "Aerial drone shot sweeping over a futuristic cityscape at golden hour..."}
+    {
+      "variant": "broll",
+      "prompt": "Cinematic slow-motion shot of abstract data streams flowing through a neural network, shallow depth of field",
+      "narrative_anchor": "when the host explains how neural networks process information",
+      "duration_s": 6
+    },
+    {
+      "variant": "intro",
+      "prompt": "Aerial drone shot sweeping over a futuristic cityscape at golden hour, lens flare",
+      "narrative_anchor": "",
+      "duration_s": 5
+    }
   ]
 }
 ```
@@ -70,7 +80,7 @@ When `publishing_language` is present in the elicitation context, output `publis
 |-------|------|-------------|
 | `descriptions` | array of objects | Each has `language` (matching `publishing_language`) and `text`. Number of variants from `publishing_description_variants` (default 3) |
 | `hashtags` | array of strings | 10-15, localized to target language, each starts with # |
-| `veo3_prompts` | array of objects | 1-4 items. Each has `variant` (intro/broll/outro/transition) and `prompt` (English-only). `broll` variant is always required |
+| `veo3_prompts` | array of objects | 1-4 items. Each has `variant`, `prompt` (English-only), `narrative_anchor` (story language, not timestamps), `duration_s` (5-8) |
 
 ### Veo 3 Prompt Guidelines
 
@@ -79,6 +89,10 @@ When `publishing_language` is present in the elicitation context, output `publis
 - **1-4 variants** — At minimum, always include a `broll` variant. Add `intro`, `outro`, or `transition` based on content themes
 - **Allowed variant types**: `intro`, `broll`, `outro`, `transition` — each variant type can only appear once
 - **Content-driven** — Prompts should reflect the visual themes of the podcast moment (e.g., technology → abstract data visualizations, nature → sweeping landscapes)
+- **Narrative anchors** — Describe placement in story language: "when the host discusses X", "during the explanation of Y". NEVER use timestamps like "at 1:23" or "45 seconds in"
+- **Duration** — Choose 5-8 seconds per clip based on narrative pacing. Shorter (5s) for quick cutaways, longer (7-8s) for establishing shots
+- **Intro variant** — `narrative_anchor` can be empty (always placed at reel start)
+- **Outro variant** — `narrative_anchor` can be empty (always placed at reel end)
 
 ### Language-Aware Rules
 

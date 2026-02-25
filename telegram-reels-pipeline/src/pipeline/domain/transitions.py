@@ -14,7 +14,8 @@ TRANSITIONS: MappingProxyType[tuple[PipelineStage, str], PipelineStage] = Mappin
         (PipelineStage.TRANSCRIPT, "qa_pass"): PipelineStage.CONTENT,
         (PipelineStage.CONTENT, "qa_pass"): PipelineStage.LAYOUT_DETECTIVE,
         (PipelineStage.LAYOUT_DETECTIVE, "qa_pass"): PipelineStage.FFMPEG_ENGINEER,
-        (PipelineStage.FFMPEG_ENGINEER, "qa_pass"): PipelineStage.ASSEMBLY,
+        (PipelineStage.FFMPEG_ENGINEER, "qa_pass"): PipelineStage.VEO3_AWAIT,
+        (PipelineStage.VEO3_AWAIT, "stage_complete"): PipelineStage.ASSEMBLY,
         (PipelineStage.ASSEMBLY, "qa_pass"): PipelineStage.DELIVERY,
         (PipelineStage.DELIVERY, "stage_complete"): PipelineStage.COMPLETED,
         # QA rework — stay on same stage for retry
@@ -43,6 +44,7 @@ TRANSITIONS: MappingProxyType[tuple[PipelineStage, str], PipelineStage] = Mappin
         (PipelineStage.CONTENT, "unrecoverable_error"): PipelineStage.FAILED,
         (PipelineStage.LAYOUT_DETECTIVE, "unrecoverable_error"): PipelineStage.FAILED,
         (PipelineStage.FFMPEG_ENGINEER, "unrecoverable_error"): PipelineStage.FAILED,
+        (PipelineStage.VEO3_AWAIT, "unrecoverable_error"): PipelineStage.FAILED,
         (PipelineStage.ASSEMBLY, "unrecoverable_error"): PipelineStage.FAILED,
         (PipelineStage.DELIVERY, "unrecoverable_error"): PipelineStage.FAILED,
     }
@@ -105,6 +107,7 @@ STAGE_ORDER: tuple[PipelineStage, ...] = (
     PipelineStage.CONTENT,
     PipelineStage.LAYOUT_DETECTIVE,
     PipelineStage.FFMPEG_ENGINEER,
+    PipelineStage.VEO3_AWAIT,
     PipelineStage.ASSEMBLY,
     PipelineStage.DELIVERY,
 )

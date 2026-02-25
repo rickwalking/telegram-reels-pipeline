@@ -1,4 +1,4 @@
-"""PipelineRunner — drive a full pipeline run through all 8 stages."""
+"""PipelineRunner — drive a full pipeline run through all 9 stages."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pipeline.application.delivery_handler import DeliveryHandler
     from pipeline.application.event_bus import EventBus
     from pipeline.application.stage_runner import StageRunner
-    from pipeline.domain.ports import StateStorePort
+    from pipeline.domain.ports import StateStorePort, VideoGenerationPort
     from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 
 logger = logging.getLogger(__name__)
@@ -32,6 +32,7 @@ _STAGE_SEQUENCE: tuple[PipelineStage, ...] = (
     PipelineStage.CONTENT,
     PipelineStage.LAYOUT_DETECTIVE,
     PipelineStage.FFMPEG_ENGINEER,
+    PipelineStage.VEO3_AWAIT,
     PipelineStage.ASSEMBLY,
     PipelineStage.DELIVERY,
 )
@@ -72,6 +73,7 @@ class PipelineRunner:
         workflows_dir: Path,
         cli_backend: CliBackend | None = None,
         settings: PipelineSettings | None = None,
+        veo3_adapter: VideoGenerationPort | None = None,
     ) -> None:
         self._stage_runner = stage_runner
         self._state_store = state_store
@@ -80,6 +82,8 @@ class PipelineRunner:
         self._workflows_dir = workflows_dir
         self._cli_backend = cli_backend
         self._settings = settings
+        self._veo3_adapter = veo3_adapter
+        self._veo3_task: asyncio.Task[None] | None = None
 
     async def run(self, item: QueueItem, workspace: Path) -> RunState:
         """Execute a full pipeline run for a queue item.
@@ -140,35 +144,9 @@ class PipelineRunner:
             )
             await self._state_store.save_state(state)
 
-            _, _, gate_name = _STAGE_DISPATCH[stage]
-
-            if gate_name:
-                request = self._build_request(stage, workspace, artifacts, item)
-                result = await self._stage_runner.run_stage(
-                    request,
-                    gate=GateName(gate_name),
-                    gate_criteria=await self._load_gate_criteria(gate_name),
-                )
-                artifacts = result.artifacts
-
-                if result.escalation_needed:
-                    state = RunState(
-                        run_id=state.run_id,
-                        youtube_url=state.youtube_url,
-                        current_stage=stage,
-                        current_attempt=state.current_attempt,
-                        qa_status=QAStatus.FAILED,
-                        stages_completed=state.stages_completed,
-                        escalation_state=EscalationState.QA_EXHAUSTED,
-                        created_at=state.created_at,
-                        updated_at=datetime.now(UTC).isoformat(),
-                        workspace_path=ws_path,
-                    )
-                    await self._state_store.save_state(state)
-                    logger.warning("Pipeline paused at %s — escalation needed", stage.value)
-                    return state
-            elif stage == PipelineStage.DELIVERY and self._delivery_handler is not None:
-                await self._execute_delivery(artifacts, workspace)
+            escalated, artifacts = await self._dispatch_stage(stage, workspace, artifacts, item, state)
+            if escalated is not None:
+                return escalated
 
             # Mark stage as completed
             state = RunState(
@@ -184,6 +162,10 @@ class PipelineRunner:
                 workspace_path=ws_path,
             )
             await self._state_store.save_state(state)
+
+            # Fire async Veo3 generation after CONTENT stage (non-blocking)
+            if stage == PipelineStage.CONTENT and self._veo3_adapter is not None:
+                self._veo3_task = self._fire_veo3_background(workspace, state.run_id)
 
         # Final state
         state = RunState(
@@ -215,7 +197,7 @@ class PipelineRunner:
         """Resume an interrupted pipeline run from a specific stage.
 
         Skips already-completed stages and drives the remaining stages
-        through the normal execute → QA → recovery cycle.
+        through the normal execute -> QA -> recovery cycle.
         """
         if self._cli_backend is not None:
             self._cli_backend.set_workspace(workspace)
@@ -282,35 +264,9 @@ class PipelineRunner:
             )
             await self._state_store.save_state(state)
 
-            _, _, gate_name = _STAGE_DISPATCH[stage]
-
-            if gate_name:
-                request = self._build_request(stage, workspace, artifacts, item)
-                result = await self._stage_runner.run_stage(
-                    request,
-                    gate=GateName(gate_name),
-                    gate_criteria=await self._load_gate_criteria(gate_name),
-                )
-                artifacts = result.artifacts
-
-                if result.escalation_needed:
-                    state = RunState(
-                        run_id=state.run_id,
-                        youtube_url=state.youtube_url,
-                        current_stage=stage,
-                        current_attempt=state.current_attempt,
-                        qa_status=QAStatus.FAILED,
-                        stages_completed=state.stages_completed,
-                        escalation_state=EscalationState.QA_EXHAUSTED,
-                        created_at=state.created_at,
-                        updated_at=datetime.now(UTC).isoformat(),
-                        workspace_path=str(workspace),
-                    )
-                    await self._state_store.save_state(state)
-                    logger.warning("Resumed pipeline paused at %s — escalation needed", stage.value)
-                    return state
-            elif stage == PipelineStage.DELIVERY and self._delivery_handler is not None:
-                await self._execute_delivery(artifacts, workspace)
+            escalated, artifacts = await self._dispatch_stage(stage, workspace, artifacts, item, state)
+            if escalated is not None:
+                return escalated
 
             state = RunState(
                 run_id=state.run_id,
@@ -325,6 +281,10 @@ class PipelineRunner:
                 workspace_path=str(workspace),
             )
             await self._state_store.save_state(state)
+
+            # Fire async Veo3 generation after CONTENT stage (non-blocking)
+            if stage == PipelineStage.CONTENT and self._veo3_adapter is not None:
+                self._veo3_task = self._fire_veo3_background(workspace, state.run_id)
 
         # Final state
         state = RunState(
@@ -352,8 +312,150 @@ class PipelineRunner:
         logger.info("Resumed pipeline run completed: %s", run_state.run_id)
         return state
 
+    async def _dispatch_stage(
+        self,
+        stage: PipelineStage,
+        workspace: Path,
+        artifacts: tuple[Path, ...],
+        item: QueueItem,
+        state: RunState,
+    ) -> tuple[RunState | None, tuple[Path, ...]]:
+        """Execute a single pipeline stage, returning (escalated_state, artifacts).
+
+        Returns ``(None, artifacts)`` on success; ``(state, artifacts)`` if
+        escalation paused the pipeline.
+        """
+        if stage == PipelineStage.VEO3_AWAIT:
+            await self._run_veo3_await_gate(workspace, state.run_id)
+        elif stage in _STAGE_DISPATCH:
+            _, _, gate_name = _STAGE_DISPATCH[stage]
+
+            if gate_name:
+                request = self._build_request(stage, workspace, artifacts, item)
+                result = await self._stage_runner.run_stage(
+                    request,
+                    gate=GateName(gate_name),
+                    gate_criteria=await self._load_gate_criteria(gate_name),
+                )
+                artifacts = result.artifacts
+
+                if result.escalation_needed:
+                    escalated = RunState(
+                        run_id=state.run_id,
+                        youtube_url=state.youtube_url,
+                        current_stage=stage,
+                        current_attempt=state.current_attempt,
+                        qa_status=QAStatus.FAILED,
+                        stages_completed=state.stages_completed,
+                        escalation_state=EscalationState.QA_EXHAUSTED,
+                        created_at=state.created_at,
+                        updated_at=datetime.now(UTC).isoformat(),
+                        workspace_path=state.workspace_path,
+                    )
+                    await self._state_store.save_state(escalated)
+                    logger.warning("Pipeline paused at %s \u2014 escalation needed", stage.value)
+                    return escalated, artifacts
+            elif stage == PipelineStage.DELIVERY and self._delivery_handler is not None:
+                await self._execute_delivery(artifacts, workspace)
+
+        return None, artifacts
+
+    def _fire_veo3_background(self, workspace: Path, run_id: str) -> asyncio.Task[None] | None:
+        """Create a Veo3Orchestrator and fire start_generation as a background task.
+
+        Returns the background task handle, or ``None`` on setup failure.
+        Failures are logged but never crash the pipeline.
+        """
+        try:
+            from pipeline.application.veo3_orchestrator import Veo3Orchestrator
+
+            clip_count = 3
+            timeout_s = 300
+            if self._settings is not None:
+                clip_count = self._settings.veo3_clip_count
+                timeout_s = self._settings.veo3_timeout_s
+
+            orchestrator = Veo3Orchestrator(
+                video_gen=self._veo3_adapter,  # type: ignore[arg-type]
+                clip_count=clip_count,
+                timeout_s=timeout_s,
+            )
+
+            task: asyncio.Task[None] = asyncio.create_task(
+                orchestrator.start_generation(workspace, run_id),
+                name=f"veo3-gen-{run_id}",
+            )
+            logger.info("Veo3 background generation fired for run %s", run_id)
+            return task
+        except Exception:
+            logger.warning("Veo3 generation fire failed \u2014 continuing pipeline", exc_info=True)
+            return None
+
+    async def _run_veo3_await_gate(self, workspace: Path, run_id: str) -> None:
+        """Block before Assembly until all Veo3 jobs resolve or timeout.
+
+        Awaits any background Veo3 generation task, then runs the polling
+        gate.  Failures are logged but never crash the pipeline (graceful
+        degradation).
+        """
+        from pipeline.application.veo3_await_gate import run_veo3_await_gate
+
+        now = datetime.now(UTC).isoformat()
+        await self._event_bus.publish(
+            PipelineEvent(
+                timestamp=now,
+                event_name="veo3.gate.started",
+                data={"run_id": run_id},
+            )
+        )
+
+        try:
+            # Await background generation task if it exists
+            if self._veo3_task is not None:
+                try:
+                    await self._veo3_task
+                except Exception:
+                    logger.warning("Veo3 background task failed", exc_info=True)
+                finally:
+                    self._veo3_task = None
+
+            timeout_s = 300
+            if self._settings is not None:
+                timeout_s = self._settings.veo3_timeout_s
+
+            orchestrator = None
+            if self._veo3_adapter is not None:
+                from pipeline.application.veo3_orchestrator import Veo3Orchestrator
+
+                clip_count = 3
+                if self._settings is not None:
+                    clip_count = self._settings.veo3_clip_count
+
+                orchestrator = Veo3Orchestrator(
+                    video_gen=self._veo3_adapter,
+                    clip_count=clip_count,
+                    timeout_s=timeout_s,
+                )
+
+            summary = await run_veo3_await_gate(
+                workspace=workspace,
+                orchestrator=orchestrator,
+                timeout_s=timeout_s,
+            )
+            logger.info("Veo3 await gate result: %s", summary)
+        except Exception:
+            logger.warning("Veo3 await gate failed — continuing pipeline", exc_info=True)
+
+        await self._event_bus.publish(
+            PipelineEvent(
+                timestamp=datetime.now(UTC).isoformat(),
+                event_name="veo3.gate.completed",
+                data={"run_id": run_id},
+            )
+        )
+
     async def _execute_delivery(self, artifacts: tuple[Path, ...], workspace: Path) -> None:
-        """Run the delivery stage — send video + content to user."""
+        """Run the delivery stage \u2014 send video + content to user."""
         video_files = [a for a in artifacts if a.suffix == ".mp4"]
         content_files = [a for a in artifacts if a.name == "content.json"]
 
@@ -373,7 +475,7 @@ class PipelineRunner:
             else:
                 await self._delivery_handler.deliver_video_only(video)
         elif self._delivery_handler is not None:
-            logger.warning("No content.json found — delivering video only")
+            logger.warning("No content.json found \u2014 delivering video only")
             await self._delivery_handler.deliver_video_only(video)
 
     @staticmethod

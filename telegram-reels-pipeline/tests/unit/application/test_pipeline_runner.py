@@ -112,8 +112,9 @@ class TestPipelineRunnerSuccess:
         runner, stage_runner, _, _ = _make_runner()
         await runner.run(_make_item(), tmp_path)
 
-        # All stages except DELIVERY have gates
-        gated_count = sum(1 for s in _STAGE_SEQUENCE if s != PipelineStage.DELIVERY)
+        # All stages except DELIVERY and VEO3_AWAIT have gates
+        non_gated = {PipelineStage.DELIVERY, PipelineStage.VEO3_AWAIT}
+        gated_count = sum(1 for s in _STAGE_SEQUENCE if s not in non_gated)
         assert stage_runner.run_stage.call_count == gated_count
 
 
@@ -219,7 +220,7 @@ class TestGenerateRunId:
 
 class TestStageSequence:
     def test_sequence_length(self) -> None:
-        assert len(_STAGE_SEQUENCE) == 8
+        assert len(_STAGE_SEQUENCE) == 9
 
     def test_starts_with_router(self) -> None:
         assert _STAGE_SEQUENCE[0] == PipelineStage.ROUTER

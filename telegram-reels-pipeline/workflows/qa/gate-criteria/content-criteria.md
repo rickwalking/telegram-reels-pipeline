@@ -43,6 +43,17 @@
 - **Fail**: `publishing-assets.json` MISSING when `publishing_language` is configured, OR wrong JSON structure, OR no `broll` variant, OR variant not from allowed set, OR empty descriptions/hashtags. **Score this dimension 0 and set overall decision to FAIL.**
 - **Prescriptive fix template**: "MANDATORY: publishing_language is '{lang}'. You MUST create publishing-assets.json (separate file, not inside content.json) with: (1) {n} descriptions in {lang} with language/text fields, (2) 10-15 localized hashtags starting with #, (3) 1-4 Veo 3 prompts (broll required, variants from intro/broll/outro/transition). Use the Write tool to create this file."
 
+## Veo3 Prompt Quality (when publishing-assets.json includes veo3_prompts)
+
+- Each prompt has all required fields: variant, prompt, narrative_anchor, duration_s
+- variant is one of: intro, broll, outro, transition
+- duration_s is between 5 and 8 (inclusive)
+- narrative_anchor uses descriptive story language, NOT timestamps (flag patterns like "at X:XX", "N seconds", "minute M")
+- prompt text uses cinematic language and matches the overall aesthetic
+- At least one broll variant is present
+- Each variant type appears at most once
+- Prompt count does not exceed 4
+
 ## Critical Field Validation
 
 - **Field name**: `music_suggestion` (singular string) — NOT `music_suggestions` (plural/array)

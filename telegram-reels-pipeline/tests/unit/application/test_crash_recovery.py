@@ -90,7 +90,7 @@ class TestBuildRecoveryPlan:
         assert plan is not None
         assert plan.resume_from == PipelineStage.ROUTER
         assert plan.stages_already_done == 0
-        assert len(plan.stages_remaining) == 8
+        assert len(plan.stages_remaining) == 9
 
     def test_remaining_stages_are_in_order(self) -> None:
         run = _make_run(stages_completed=("router", "research", "transcript", "content"))
@@ -101,6 +101,7 @@ class TestBuildRecoveryPlan:
         assert plan.stages_remaining == (
             PipelineStage.LAYOUT_DETECTIVE,
             PipelineStage.FFMPEG_ENGINEER,
+            PipelineStage.VEO3_AWAIT,
             PipelineStage.ASSEMBLY,
             PipelineStage.DELIVERY,
         )
@@ -113,6 +114,7 @@ class TestBuildRecoveryPlan:
             "content",
             "layout_detective",
             "ffmpeg_engineer",
+            "veo3_await",
             "assembly",
             "delivery",
         )
@@ -129,6 +131,7 @@ class TestBuildRecoveryPlan:
             "content",
             "layout_detective",
             "ffmpeg_engineer",
+            "veo3_await",
             "assembly",
         )
         run = _make_run(stages_completed=completed)
@@ -200,7 +203,7 @@ class TestScanAndRecover:
 
         assert len(messaging.notifications) == 1
         assert "transcript" in messaging.notifications[0]
-        assert "2 of 8" in messaging.notifications[0]
+        assert "2 of 9" in messaging.notifications[0]
 
     async def test_no_notification_without_messaging(self) -> None:
         run = _make_run(stages_completed=("router",))
@@ -233,6 +236,7 @@ class TestScanAndRecover:
             "content",
             "layout_detective",
             "ffmpeg_engineer",
+            "veo3_await",
             "assembly",
             "delivery",
         )

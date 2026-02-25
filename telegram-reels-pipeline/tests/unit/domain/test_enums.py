@@ -23,6 +23,7 @@ class TestPipelineStage:
             "CONTENT",
             "LAYOUT_DETECTIVE",
             "FFMPEG_ENGINEER",
+            "VEO3_AWAIT",
             "ASSEMBLY",
             "DELIVERY",
             "COMPLETED",
@@ -32,7 +33,7 @@ class TestPipelineStage:
         assert actual == expected
 
     def test_member_count(self) -> None:
-        assert len(PipelineStage) == 10
+        assert len(PipelineStage) == 11
 
     def test_values_are_snake_case(self) -> None:
         for member in PipelineStage:
