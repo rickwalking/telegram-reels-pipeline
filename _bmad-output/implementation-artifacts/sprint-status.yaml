@@ -113,13 +113,13 @@ development_status:
   9-6-smoke-test-real-services: done
   epic-9-retrospective: optional
 
-  epic-10: in-progress
-  10-1-cli-elicitation-loop-interactive-questions: in-progress
-  10-2-crop-framing-quality-side-by-side-qa-visual-composition: in-progress
+  epic-10: done
+  10-1-cli-elicitation-loop-interactive-questions: done
+  10-2-crop-framing-quality-side-by-side-qa-visual-composition: done
   10-3-segment-overlap-crop-camera-transition-fix: done
 
-  epic-11: in-progress
-  11-1-publishing-assets-localization-veo3-prompts: in-progress
+  epic-11: done
+  11-1-publishing-assets-localization-veo3-prompts: done
 
   epic-12: done
   12-1-style-selection-passthrough: done

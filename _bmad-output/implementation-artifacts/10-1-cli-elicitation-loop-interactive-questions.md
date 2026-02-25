@@ -1,6 +1,6 @@
 # Story 10.1: CLI Elicitation Loop — Interactive Questions in Terminal
 
-Status: in-progress
+Status: done
 
 ## Problem
 
@@ -66,19 +66,19 @@ so that the pipeline can proceed with my answers instead of failing.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `_handle_router_elicitation()` to `run_cli.py` — parse router output, detect questions, prompt user, merge answers into context
-- [ ] Task 2: Add TTY detection guard — if stdin is not a terminal, skip prompting and use smart defaults
-- [ ] Task 3: Implement bounded loop (max 2 rounds) with no-progress detection
-- [ ] Task 4: Persist elicitation answers to workspace as `elicitation-context.json`
-- [ ] Task 5: Update router QA gate criteria prompt to not hard-fail when `url=null` but valid elicitation questions exist (treat as "interaction-needed" state)
-- [ ] Task 6: Write tests — elicitation loop happy path, max rounds cap, non-interactive mode, empty questions skip
-- [ ] Task 7: Harden `--resume` / `--start-stage` CLI args (validated with Gemini 2.5 Pro + Codex 5.3 consensus)
-  - [ ] 7a: Add `_validate_cli_args()` — hard error if `--resume` path doesn't exist (never silently create new workspace)
-  - [ ] 7b: Hard error if `--start-stage > 1` without `--resume` (flag dependency enforcement)
-  - [ ] 7c: Range validation — `--start-stage` must be 1-7, reject 0, negatives, and > 7
-  - [ ] 7d: Auto-detect resume stage — when `--resume` is used without `--start-stage`, infer last completed stage from workspace artifacts. Reuse `crash_recovery.py` `stages_completed` logic to avoid duplicating heuristics. `--start-stage` remains as explicit override.
-  - [ ] 7e: Clear error messages to stderr with suggested correct usage (e.g., "Did you mean: --resume /path --start-stage N?")
-  - [ ] 7f: Write tests — missing resume path error, start-stage without resume error, range validation, auto-detect happy path, auto-detect with explicit override
+- [x] Task 1: Add `_handle_router_elicitation()` to `run_cli.py` — parse router output, detect questions, prompt user, merge answers into context
+- [x] Task 2: Add TTY detection guard — if stdin is not a terminal, skip prompting and use smart defaults
+- [x] Task 3: Implement bounded loop (max 2 rounds) with no-progress detection
+- [x] Task 4: Persist elicitation answers to workspace as `elicitation-context.json`
+- [x] Task 5: Update router QA gate criteria prompt to not hard-fail when `url=null` but valid elicitation questions exist (treat as "interaction-needed" state)
+- [x] Task 6: Write tests — elicitation loop happy path, max rounds cap, non-interactive mode, empty questions skip
+- [x] Task 7: Harden `--resume` / `--start-stage` CLI args (validated with Gemini 2.5 Pro + Codex 5.3 consensus)
+  - [x] 7a: Add `_validate_cli_args()` — hard error if `--resume` path doesn't exist (never silently create new workspace)
+  - [x] 7b: Hard error if `--start-stage > 1` without `--resume` (flag dependency enforcement)
+  - [x] 7c: Range validation — `--start-stage` must be 1-7, reject 0, negatives, and > 7
+  - [x] 7d: Auto-detect resume stage — when `--resume` is used without `--start-stage`, infer last completed stage from workspace artifacts. Reuse `crash_recovery.py` `stages_completed` logic to avoid duplicating heuristics. `--start-stage` remains as explicit override.
+  - [x] 7e: Clear error messages to stderr with suggested correct usage (e.g., "Did you mean: --resume /path --start-stage N?")
+  - [x] 7f: Write tests — missing resume path error, start-stage without resume error, range validation, auto-detect happy path, auto-detect with explicit override
 
 ## Edge Cases
 

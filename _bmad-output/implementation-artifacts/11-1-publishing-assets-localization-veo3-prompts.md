@@ -1,6 +1,6 @@
 # Story 11.1: Publishing Assets — Localized Descriptions & Veo 3 Prompts
 
-Status: ready-for-dev
+Status: done
 
 ## Problem
 
@@ -83,16 +83,16 @@ Constraints: 1-4 prompts, each variant type used at most once. Variant selection
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Add `publishing_language` and `publishing_description_variants` to `PipelineSettings` in `settings.py` with Pydantic validators (`publishing_description_variants`: ge=1, le=10)
-- [ ] Task 2: Add `PublishingAssets` frozen dataclass to domain models — descriptions with language tags, localized hashtags, Veo 3 prompts with variant enum. Invariant: descriptions is non-empty when `publishing_description_variants >= 1`, hashtags is non-empty, veo3_prompts has 1-4 items with unique variant values from allowed set
-- [ ] Task 3: Create `publishing_assets_parser.py` in infrastructure/adapters — parse and validate `publishing-assets.json`, return `PublishingAssets` domain model
-- [ ] Task 4: Update Content Creator agent definition (`agents/content-creator/agent.md`) — add publishing assets output contract, Veo 3 prompt guidelines, language-aware generation rules, and allowed variant enum
-- [ ] Task 5: Update stage workflow (`workflows/stages/stage-04-content.md`) — add publishing assets instructions and output spec
-- [ ] Task 6: Update QA gate criteria (`workflows/qa/gate-criteria/content-criteria.md`) — add publishing assets validation; QA evaluator checks language matches `publishing_language` and verifies Veo 3 variant structure
-- [ ] Task 7: Wire settings into content stage for CLI path — pass `publishing_language` and `publishing_description_variants` through elicitation context in `scripts/run_cli.py`
-- [ ] Task 8: Wire settings into content stage for daemon path — pass publishing settings through `PipelineRunner._build_request()` in `pipeline_runner.py` and ensure `bootstrap.py` / `create_orchestrator` propagates them
-- [ ] Task 9: Pass `publishing_language` into QA evaluation context — the QA evaluator prompt must receive the setting so it knows whether `publishing-assets.json` is required and what language to validate against
-- [ ] Task 10: Write tests — parser validation, domain model invariants, settings validation (min/max), CLI wiring, daemon-path wiring, and QA context propagation
+- [x] Task 1: Add `publishing_language` and `publishing_description_variants` to `PipelineSettings` in `settings.py` with Pydantic validators (`publishing_description_variants`: ge=1, le=10)
+- [x] Task 2: Add `PublishingAssets` frozen dataclass to domain models — descriptions with language tags, localized hashtags, Veo 3 prompts with variant enum. Invariant: descriptions is non-empty when `publishing_description_variants >= 1`, hashtags is non-empty, veo3_prompts has 1-4 items with unique variant values from allowed set
+- [x] Task 3: Create `publishing_assets_parser.py` in infrastructure/adapters — parse and validate `publishing-assets.json`, return `PublishingAssets` domain model
+- [x] Task 4: Update Content Creator agent definition (`agents/content-creator/agent.md`) — add publishing assets output contract, Veo 3 prompt guidelines, language-aware generation rules, and allowed variant enum
+- [x] Task 5: Update stage workflow (`workflows/stages/stage-04-content.md`) — add publishing assets instructions and output spec
+- [x] Task 6: Update QA gate criteria (`workflows/qa/gate-criteria/content-criteria.md`) — add publishing assets validation; QA evaluator checks language matches `publishing_language` and verifies Veo 3 variant structure
+- [x] Task 7: Wire settings into content stage for CLI path — pass `publishing_language` and `publishing_description_variants` through elicitation context in `scripts/run_cli.py`
+- [x] Task 8: Wire settings into content stage for daemon path — pass publishing settings through `PipelineRunner._build_request()` in `pipeline_runner.py` and ensure `bootstrap.py` / `create_orchestrator` propagates them
+- [x] Task 9: Pass `publishing_language` into QA evaluation context — the QA evaluator prompt must receive the setting so it knows whether `publishing-assets.json` is required and what language to validate against
+- [x] Task 10: Write tests — parser validation, domain model invariants, settings validation (min/max), CLI wiring, daemon-path wiring, and QA context propagation
 
 ## Edge Cases
 

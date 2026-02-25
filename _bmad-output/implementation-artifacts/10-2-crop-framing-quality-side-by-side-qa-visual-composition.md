@@ -1,6 +1,6 @@
 # Story 10.2: Crop Framing Quality — Face Position Intelligence & Quality Safeguards
 
-Status: in-progress
+Status: done
 
 ## Problem
 
@@ -262,7 +262,7 @@ QA Gates:
 
 ### Python Tools
 
-- [ ] Task 1: Create `scripts/parse_vtt_speakers.py` — VTT speaker timeline parser
+- [x] Task 1: Create `scripts/parse_vtt_speakers.py` — VTT speaker timeline parser
   - CLI interface: `python scripts/parse_vtt_speakers.py <vtt_file> [--start-s N] [--end-s N] [--output path]`
   - Parse VTT for `>>` (`&gt;&gt;`) speaker change markers with timestamps
   - Map speaker turns within the moment's time range (`--start-s` / `--end-s`)
@@ -272,7 +272,7 @@ QA Gates:
   - Handle edge cases: no VTT file, empty file, VTT without any `>>` markers, single-speaker content
   - Pure stdlib — no external dependencies
 
-- [ ] Task 2: Create `scripts/detect_faces.py` — Full-frame face position mapper (PROACTIVE INTELLIGENCE)
+- [x] Task 2: Create `scripts/detect_faces.py` — Full-frame face position mapper (PROACTIVE INTELLIGENCE)
   - CLI interface: `python scripts/detect_faces.py <frames_dir> [--output path] [--min-confidence 0.7] [--min-face-width 50]`
   - Scan all frame images in directory (sorted by filename/timestamp)
   - Run **YuNet DNN face detector** (`cv2.FaceDetectorYN`, included in OpenCV >=4.5.4) on each full frame
@@ -285,7 +285,7 @@ QA Gates:
   - Fallback: if YuNet model file unavailable, fall back to Haar cascade with a warning
   - Dependency: `opencv-python-headless` (Pi-friendly, no GUI, YuNet included)
 
-- [ ] Task 3: Create `scripts/check_upscale_quality.py` — Quality degradation checker
+- [x] Task 3: Create `scripts/check_upscale_quality.py` — Quality degradation checker
   - CLI interface: `python scripts/check_upscale_quality.py <segment_path> --crop-width N --target-width N [--source-frame path] [--output path]`
   - **Upscale Factor Check**: Calculate `upscale_factor = target_width / crop_width`. Flag as:
     - `quality: "good"` if factor <= 1.2 (minimal quality loss)
@@ -300,13 +300,13 @@ QA Gates:
   - `recommendation`: one of `"proceed"`, `"use_pillarbox"`, `"widen_crop"`, `"accept_with_penalty"`
   - Dependency: `opencv-python-headless` (already added in Task 4)
 
-- [ ] Task 4: Add `opencv-python-headless` dependency to `pyproject.toml`
+- [x] Task 4: Add `opencv-python-headless` dependency to `pyproject.toml`
   - Add under `[tool.poetry.dependencies]` — no version pin beyond `>=4.8` (well-tested on Pi ARM)
   - Verify installation on target Pi: `poetry install && poetry run python -c "import cv2; print(cv2.__version__)"`
 
 ### Agent Knowledge & Stage Workflow Updates
 
-- [ ] Task 5: Update `crop-playbook.md` — Integrate face position map + speaker timeline + quality rules
+- [x] Task 5: Update `crop-playbook.md` — Integrate face position map + speaker timeline + quality rules
   - Replace static "Selection rule: Crop the speaker who is currently talking" with:
     - Primary: "Read `face-position-map.json` to find exact face positions. Read `speaker-timeline.json` to know who is active. Center crop on the active speaker's face."
     - Fallback: "If no speaker timeline (confidence `none`), alternate between detected face positions every 3-5 seconds"
@@ -318,14 +318,14 @@ QA Gates:
   - Add failure mode example: describe the run `20260212-140636-ad0b2d` where single crop removed Pedro
   - Add pillarbox examples per layout type
 
-- [ ] Task 6: Update `frame-analysis.md` — Replace visual guessing with data-driven face position map
+- [x] Task 6: Update `frame-analysis.md` — Replace visual guessing with data-driven face position map
   - Remove any guidance about determining "who is talking" from still frames (consensus: unreliable)
   - Add: "Face positions come from `face-position-map.json` (detect_faces.py tool). Speaker timing comes from `speaker-timeline.json` (parse_vtt_speakers.py tool). Do NOT guess positions from visual inspection."
   - Add: "For side_by_side, your job is layout CLASSIFICATION. The face position map tells you WHERE each speaker is. The speaker timeline tells you WHEN each speaker talks. Combine them to produce precise crop regions."
   - Add: "For speaker_focus, use the face centroid from face-position-map.json as the crop center — never use a hardcoded x offset."
   - Add: "Camera angle changes are detected by face count changes between frames (e.g., 2 faces → 1 face = camera switched to single speaker)"
 
-- [ ] Task 7: Update `stage-05-layout-detective.md` — Add face detection + VTT parsing steps
+- [x] Task 7: Update `stage-05-layout-detective.md` — Add face detection + VTT parsing steps
   - Add new step after frame extraction: "Run `python scripts/detect_faces.py <frames_dir> --output <workspace>/face-position-map.json` to map all face positions"
   - Add new step: "Run `python scripts/parse_vtt_speakers.py <vtt_file> --start-s <start> --end-s <end> --output <workspace>/speaker-timeline.json`"
   - Add instruction: "Read the face-position-map.json summary. For side_by_side segments, use speaker positions to compute crop regions centered on each speaker's face."
@@ -335,7 +335,7 @@ QA Gates:
   - Add hard rule: "A single crop region for an entire side_by_side segment > 5 seconds is ALWAYS wrong"
   - Update prior artifact dependencies: add VTT subtitle file from stage 2
 
-- [ ] Task 8: Update `stage-06-ffmpeg-engineer.md` — Use face positions + quality checks in encoding plan
+- [x] Task 8: Update `stage-06-ffmpeg-engineer.md` — Use face positions + quality checks in encoding plan
   - Add instruction: "Read face-position-map.json and layout-analysis.json to understand scene composition"
   - Add instruction: "For each segment, verify crop region contains a face by checking face-position-map.json. If the proposed crop at a given timestamp has no face in range, adjust crop."
   - Add instruction: "For segments flagged as `quality: degraded` or `unacceptable` by the Layout Detective's quality prediction, apply pillarbox mode or widen crop"
@@ -346,7 +346,7 @@ QA Gates:
 
 ### QA Gate Enhancement
 
-- [ ] Task 9: Update `layout-criteria.md` — Add "Segment Structure" + "Cut Frequency" dimensions
+- [x] Task 9: Update `layout-criteria.md` — Add "Segment Structure" + "Cut Frequency" dimensions
   - **Segment Structure** (weight: 25/100):
     - **Pass**: side_by_side segments split into per-speaker sub-segments using face positions; speaker_focus crops use face centroid; face-position-map.json is present and referenced
     - **Rework**: Sub-segments exist but duration balance is poor (e.g., 3s left then 20s right); face position map present but not fully utilized
@@ -356,7 +356,7 @@ QA Gates:
     - Prescriptive fix: "Merge adjacent same-side crops or extend minimum sub-segment duration"
   - Rebalance: Frame Classification 20/100, Transition Detection 15/100, Crop Region Validity 15/100, Escalation Handling 15/100, **Segment Structure 25/100**, Face Map Coverage 10/100
 
-- [ ] Task 10: Update `ffmpeg-criteria.md` — Add "Face Validation" + "Output Quality" dimensions
+- [x] Task 10: Update `ffmpeg-criteria.md` — Add "Face Validation" + "Output Quality" dimensions
   - **Face Validation** (weight: 20/100):
     - **Pass**: All segments reference face-position-map.json; crop regions contain detected faces; encoding-plan.json includes validation results
     - **Rework**: Most segments valid but one has marginal result (face near crop edge)
@@ -372,7 +372,7 @@ QA Gates:
 
 ### Tests
 
-- [ ] Task 11: Write tests for VTT speaker timeline parser
+- [x] Task 11: Write tests for VTT speaker timeline parser
   - Test with VTT containing `>>` markers — verify correct speaker turns and timestamps
   - Test with VTT without `>>` markers — verify `confidence: "none"` output
   - Test with `--start-s` and `--end-s` range filtering — verify only moment range included
@@ -381,7 +381,7 @@ QA Gates:
   - Test with overlapping/rapid speaker changes — verify reasonable debouncing (min 2s)
   - Test CLI interface: verify `--output` flag and stdout default
 
-- [ ] Task 12: Write tests for face position mapper
+- [x] Task 12: Write tests for face position mapper
   - Test full-frame detection: provide frame with face → verify face detected with position
   - Test multi-face detection: frame with 2 faces → verify both detected, correct side labels
   - Test spatial clustering: 3 frames with face at similar X position → verify same speaker label assigned
@@ -393,7 +393,7 @@ QA Gates:
   - Test camera switch detection: frame sequence with 2→1 face count change
   - Mock-free: use actual test images (synthetic frames with drawn face patterns or workspace frames)
 
-- [ ] Task 13: Write tests for quality degradation checker
+- [x] Task 13: Write tests for quality degradation checker
   - Test upscale factor calculation: verify correct quality classification at boundaries (1.2, 1.5, 2.0)
   - Test sharpness measurement: verify Laplacian variance on known sharp vs blurry frames
   - Test sharpness ratio: verify baseline comparison and threshold flagging
