@@ -31,6 +31,10 @@ class PipelineSettings(BaseSettings):
 
     # QA
     min_qa_score: int = Field(default=40, description="Minimum QA score before escalation")
+    qa_via_clink: bool = Field(
+        default=False,
+        description="Route QA evaluation through PAL MCP clink to Gemini Pro (saves Claude tokens)",
+    )
 
     # Elicitation defaults
     default_topic_focus: str = Field(default="", description="Default topic focus when user skips elicitation")

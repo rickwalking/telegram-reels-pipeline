@@ -79,6 +79,7 @@ def create_orchestrator(settings: PipelineSettings | None = None) -> Orchestrato
     cli_backend = CliBackend(
         work_dir=settings.workspace_dir,
         timeout_seconds=settings.agent_timeout_seconds,
+        qa_via_clink=settings.qa_via_clink,
     )
 
     # Application components

@@ -42,12 +42,14 @@ class CliBackend:
         timeout_seconds: float = DEFAULT_TIMEOUT_SECONDS,
         dispatch_timeout_seconds: float = DEFAULT_DISPATCH_TIMEOUT_SECONDS,
         verbose: bool = False,
+        qa_via_clink: bool = False,
     ) -> None:
         self._work_dir = work_dir
         self._timeout_seconds = timeout_seconds
         self._dispatch_timeout_seconds = dispatch_timeout_seconds
         self._workspace_override: Path | None = None
         self._verbose = verbose
+        self._qa_via_clink = qa_via_clink
 
     def set_workspace(self, workspace: Path | None) -> None:
         """Set per-run workspace override. Pass None to clear."""
@@ -128,30 +130,38 @@ class CliBackend:
         """Send a raw prompt to Claude CLI and return the text response.
 
         Used for QA evaluation and other non-agent model calls.
-        Uses --tools "" to disable tool loading (QA doesn't need tools),
-        --model sonnet for faster evaluation, and --no-session-persistence
-        to skip session save overhead.
+
+        When ``qa_via_clink`` is enabled, uses Claude Haiku as a thin proxy
+        that forwards the evaluation to Gemini Pro via the PAL MCP ``clink``
+        tool.  This dramatically reduces Claude token usage since Haiku only
+        handles the routing while Gemini does the heavy evaluation.
+
         Raises AgentExecutionError on non-zero exit, timeout, or OS errors.
         """
         cwd = self.effective_work_dir
-        effective_model = model or "sonnet"
+
+        if self._qa_via_clink:
+            cli_args, actual_prompt = self._build_clink_dispatch(prompt)
+        else:
+            effective_model = model or "sonnet"
+            cli_args = [
+                "claude", "-p",
+                "--tools", "",
+                "--model", effective_model,
+                "--no-session-persistence",
+            ]
+            actual_prompt = prompt
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "claude",
-                "-p",
-                "--tools",
-                "",
-                "--model",
-                effective_model,
-                "--no-session-persistence",
+                *cli_args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=str(cwd),
             )
             async with asyncio.timeout(self._dispatch_timeout_seconds):
-                stdout_bytes, stderr_bytes = await proc.communicate(input=prompt.encode())
+                stdout_bytes, stderr_bytes = await proc.communicate(input=actual_prompt.encode())
         except TimeoutError as exc:
             proc.kill()
             await proc.wait()
@@ -187,6 +197,34 @@ class CliBackend:
                 stderr,
             )
         return stdout
+
+    @staticmethod
+    def _build_clink_dispatch(prompt: str) -> tuple[list[str], str]:
+        """Build CLI args and wrapped prompt for clink-based QA dispatch.
+
+        Uses Claude Haiku as a thin proxy that forwards the evaluation to
+        Gemini Pro via PAL MCP's ``clink`` tool.  Haiku only handles the
+        tool routing — the actual evaluation work is done by Gemini.
+        """
+        cli_args = [
+            "claude", "-p",
+            "--allowedTools", "mcp__pal__clink",
+            "--model", "haiku",
+            "--no-session-persistence",
+        ]
+        wrapped = (
+            "You are a QA evaluation proxy. Your ONLY job is to forward the "
+            "evaluation below to Gemini via the mcp__pal__clink tool and return "
+            "its response.\n\n"
+            "Call mcp__pal__clink with:\n"
+            '- cli_name: "gemini"\n'
+            '- prompt: the FULL evaluation text below (copy it exactly)\n\n'
+            "Return ONLY the raw text response from Gemini. Do not add any "
+            "commentary, formatting, or wrapper text.\n\n"
+            "--- EVALUATION TO FORWARD ---\n\n"
+            f"{prompt}"
+        )
+        return cli_args, wrapped
 
 
 def _save_stdout_fallback(cwd: Path, stage_name: str, stdout: str) -> tuple[Path, ...]:

@@ -697,6 +697,7 @@ async def run_pipeline(
         timeout_seconds=effective_timeout,
         dispatch_timeout_seconds=max(300.0, effective_timeout / 2),
         verbose=verbose,
+        qa_via_clink=settings.qa_via_clink,
     )
     event_bus = EventBus()
     recovery_chain = RecoveryChain(agent_port=cli_backend)
