@@ -109,8 +109,8 @@ class TestStartGeneration:
         # Only 2 submitted despite 3 prompts
         assert len(fake.submitted_jobs) == 2
 
-    async def test_parallel_submission(self, tmp_path: Path) -> None:
-        """All prompts are submitted (via asyncio.gather)."""
+    async def test_sequential_submission(self, tmp_path: Path) -> None:
+        """All prompts are submitted sequentially."""
         orch, fake = _make_orchestrator()
         prompts = [
             _prompt_dict(variant="intro", prompt="Dramatic intro sequence"),
