@@ -199,7 +199,7 @@ class TestGeminiVeo3AdapterDownloadClip:
             await adapter.download_clip(job, Path("/tmp/test.mp4"))
 
     @pytest.mark.asyncio
-    async def test_download_completed_returns_dest(self) -> None:
+    async def test_download_rejects_empty_operation_name(self) -> None:
         adapter = GeminiVeo3Adapter(api_key="test-key")
         job = Veo3Job(
             idempotent_key="run1_broll",
@@ -208,9 +208,8 @@ class TestGeminiVeo3AdapterDownloadClip:
             status=Veo3JobStatus.COMPLETED,
             video_path="veo3/broll.mp4",
         )
-        dest = Path("/tmp/test.mp4")
-        result = await adapter.download_clip(job, dest)
-        assert result == dest
+        with pytest.raises(Veo3GenerationError, match="Cannot download clip without operation_name"):
+            await adapter.download_clip(job, Path("/tmp/test.mp4"))
 
     @pytest.mark.asyncio
     async def test_download_rejects_failed_status(self) -> None:

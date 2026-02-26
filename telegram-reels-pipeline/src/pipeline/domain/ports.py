@@ -123,7 +123,9 @@ class VideoGenerationPort(Protocol):
             prompt: Veo3Prompt specifying variant, text, and duration.
 
         Returns:
-            Veo3Job tracking the submitted job with initial PENDING status.
+            Veo3Job tracking the submitted job with initial GENERATING status.
+            The returned job includes ``operation_name`` for later polling
+            and authenticated download via the Gemini API.
         """
         ...
 
