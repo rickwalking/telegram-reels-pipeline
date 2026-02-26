@@ -294,11 +294,15 @@ class ReelAssembler:
         base_reel: Path,
         placements: list[BrollPlacement],
         output: Path,
+        *,
+        fade_duration: float = 0.5,
     ) -> Path:
         """Overlay B-roll clips onto an already-assembled base reel.
 
         Builds a PTS-offset filter graph where each B-roll clip is time-shifted
         to its insertion point and chained via ``overlay=eof_action=pass``.
+        Each clip fades in/out on the alpha channel for smooth transitions.
+        Short clips are clamped so fade never exceeds 40% of clip duration.
         Audio comes exclusively from the base reel.
         """
         if not placements:
@@ -311,11 +315,18 @@ class ReelAssembler:
         for bp in placements:
             cmd.extend(["-i", bp.clip_path])
 
-        # Build filter graph
+        # Build filter graph with alpha fade + PTS-offset per clip
         filter_parts: list[str] = []
         for i, bp in enumerate(placements):
             clip_idx = i + 1  # 0 is base reel
-            filter_parts.append(f"[{clip_idx}:v]setpts=PTS-STARTPTS+{bp.insertion_point_s}/TB[clip{clip_idx}]")
+            eff_fade = round(min(fade_duration, bp.duration_s * 0.4), 4)
+            fade_out_start = round(bp.duration_s - eff_fade, 4)
+            filter_parts.append(
+                f"[{clip_idx}:v]format=yuva420p,"
+                f"fade=t=in:st=0:d={eff_fade}:alpha=1,"
+                f"fade=t=out:st={fade_out_start}:d={eff_fade}:alpha=1,"
+                f"setpts=PTS-STARTPTS+{bp.insertion_point_s}/TB[clip{clip_idx}]"
+            )
 
         # Chain overlays: [0:v][clip1]overlay -> [v1]; [v1][clip2]overlay -> [v2]; ...
         current_label = "[0:v]"
@@ -373,6 +384,7 @@ class ReelAssembler:
         output: Path,
         broll_placements: tuple[BrollPlacement, ...],
         transitions: tuple[TransitionSpec, ...] | None = None,
+        fade_duration: float = 0.5,
     ) -> Path:
         """Two-pass assembly: base reel first, then B-roll overlay.
 
@@ -380,8 +392,10 @@ class ReelAssembler:
         into a temporary base reel via :meth:`assemble`.
 
         **Pass 2** — overlay validated B-roll clips on the base reel via
-        :meth:`_overlay_broll` using PTS-offset ``overlay=eof_action=pass``.
+        :meth:`_overlay_broll` with alpha fade-in/out transitions.
 
+        *fade_duration* controls the alpha fade length (seconds) per clip.
+        Short clips are clamped to 40% of clip duration.
         Falls back to the base reel (no B-roll) when Pass 2 fails.
         """
         if not broll_placements:
@@ -417,7 +431,9 @@ class ReelAssembler:
             logger.info("Pass 1 complete: base reel at %s", tmp_path.name)
 
             # Pass 2: overlay B-roll clips onto the base reel
-            result = await self._overlay_broll(tmp_path, upscaled_placements, output)
+            result = await self._overlay_broll(
+                tmp_path, upscaled_placements, output, fade_duration=fade_duration
+            )
             tmp_path.unlink(missing_ok=True)
             logger.info("Pass 2 complete: B-roll overlay at %s", output.name)
             return result

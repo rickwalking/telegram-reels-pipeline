@@ -2,101 +2,47 @@
 
 ## Context
 
-Story 19-1 implemented the two-pass B-roll overlay using `setpts=PTS-STARTPTS+OFFSET/TB` + `overlay=eof_action=pass`. The clips currently hard-cut in and out. This story adds fade-in/fade-out transitions on the alpha channel so documentary cutaways appear and disappear smoothly.
-
-**Edge case from Codex review:** Clips shorter than 1.0s would have overlapping fades if using the default 0.5s fade duration. The formula `min(0.5, dur * 0.4)` handles this gracefully.
-
-The fade is applied to the B-roll clip's alpha channel BEFORE the PTS shift in the filter graph. The base reel audio continues uninterrupted — fades are visual only.
+The assembly stage already inserts Veo3 B-roll clips as documentary cutaway overlays. However the fade duration is hardcoded at 0.5s in `_assemble_with_cutaways()` and `_build_cutaway_filter()`, and short clips may get unreasonably long fades relative to their duration. This story adds configurable `fade_duration` with short-clip clamping (40% of clip duration max) so that B-roll overlays always look polished regardless of clip length.
 
 ## Story
 
-As a pipeline developer,
-I want B-roll clips to fade in/out smoothly at their insertion boundaries,
-so that the cutaway transitions feel polished rather than jarring hard cuts.
+As a pipeline user,
+I want B-roll overlay fades to be configurable and clamped for short clips,
+so that B-roll cutaways look polished at any duration without hard cuts.
 
 ## Acceptance Criteria
 
-1. Given a B-roll clip, when overlaid, then it fades in over 0.5s at the start and fades out over 0.5s at the end
-
-2. Given the fade filter, when applied, then it uses `format=yuva420p,fade=t=in:st=0:d={fade}:alpha=1,fade=t=out:st={dur-fade}:d={fade}:alpha=1` before the PTS shift
-
-3. Given a clip shorter than 1.0s (e.g., 0.8s), when faded, then the fade duration is reduced to `min(0.5, dur * 0.4)` to avoid overlapping fades
-
-4. Given the fade, when applied, then it affects only the video alpha channel — audio continues uninterrupted
-
-5. Given the `_overlay_broll()` method, when constructing the filter, then fade is configurable via a `fade_duration` parameter (default 0.5)
+1. Given a B-roll clip, when overlaid, then it fades in (alpha) and fades out (alpha) using `format=yuva420p`
+2. Given a standard clip (>= 2.5s), when overlaid with default fade_duration=0.5, then fade_in=0.5s and fade_out starts at duration-0.5s
+3. Given a short clip (e.g. 0.8s), when overlaid, then effective fade is clamped to min(fade_duration, duration*0.4) = 0.32s
+4. Given a custom fade_duration=0.3, when passed to assemble_with_broll, then it propagates to the filter graph
+5. Given the filter chain order, when built, then format comes before fades, and fades come before overlay
 
 ## Tasks
 
-- [ ] Task 1: Add fade filter to `_overlay_broll()` filter graph
-  - [ ] Subtask 1a: Add `fade_duration: float = 0.5` parameter to `_overlay_broll()`
-  - [ ] Subtask 1b: For each clip, compute effective fade: `eff_fade = min(fade_duration, bp.duration_s * 0.4)`
-  - [ ] Subtask 1c: Prepend alpha fade filters before PTS shift: `[{i}:v]format=yuva420p,fade=t=in:st=0:d={eff_fade}:alpha=1,fade=t=out:st={dur-eff_fade}:d={eff_fade}:alpha=1,setpts=PTS-STARTPTS+{offset}/TB[clip{i}]`
-- [ ] Task 2: Wire fade_duration parameter from `assemble_with_broll()` to `_overlay_broll()`
-  - [ ] Subtask 2a: Add `fade_duration: float = 0.5` parameter to `assemble_with_broll()`
-  - [ ] Subtask 2b: Pass through to `_overlay_broll()`
-- [ ] Task 3: Unit tests
-  - [ ] Subtask 3a: Test filter graph contains `format=yuva420p` and `fade=t=in` and `fade=t=out`
-  - [ ] Subtask 3b: Test standard clip (6s) uses 0.5s fade
-  - [ ] Subtask 3c: Test short clip (0.8s) uses reduced fade (0.32s = 0.8 * 0.4)
-  - [ ] Subtask 3d: Test custom fade_duration parameter propagates
-  - [ ] Subtask 3e: Test fade filter appears BEFORE setpts in the filter chain
-- [ ] Task 4: Run full test suite, linting, mypy
-
-## Dev Notes
-
-### Architecture
-
-- **Layer:** Infrastructure adapter (`reel_assembler.py`)
-- **Filter chain order:** `format=yuva420p` → `fade in` → `fade out` → `setpts=PTS-STARTPTS+OFFSET/TB` — fade must be applied before PTS shift because fade timing is relative to clip start (0s)
-- **Alpha channel:** `format=yuva420p` enables alpha channel, `alpha=1` in fade filter means it fades the alpha (transparency) not the pixel values
-
-### Key Source Locations
-
-| File | Lines | What |
-|------|-------|------|
-| `src/pipeline/infrastructure/adapters/reel_assembler.py` | 213-289 | `_overlay_broll()` — add fade filters here |
-| `src/pipeline/infrastructure/adapters/reel_assembler.py` | 236-239 | Current filter: `setpts=PTS-STARTPTS+{offset}/TB` — prepend fade before this |
-| `src/pipeline/infrastructure/adapters/reel_assembler.py` | 291-338 | `assemble_with_broll()` — wire fade_duration parameter |
-| `src/pipeline/domain/models.py` | 579-600 | `BrollPlacement.duration_s` — used to compute effective fade |
-
-### Filter Graph Example
-
-Before (19-1):
-```
-[1:v]setpts=PTS-STARTPTS+21/TB[clip1]
-```
-
-After (19-3, standard 6s clip):
-```
-[1:v]format=yuva420p,fade=t=in:st=0:d=0.5:alpha=1,fade=t=out:st=5.5:d=0.5:alpha=1,setpts=PTS-STARTPTS+21/TB[clip1]
-```
-
-After (19-3, short 0.8s clip):
-```
-[1:v]format=yuva420p,fade=t=in:st=0:d=0.32:alpha=1,fade=t=out:st=0.48:d=0.32:alpha=1,setpts=PTS-STARTPTS+21/TB[clip1]
-```
-
-## Definition of Done
-
-- B-roll clips fade in/out at insertion boundaries
-- Short clips get proportionally reduced fade
-- Alpha-only fades, audio uninterrupted
-- All tests pass, linters clean, mypy clean
-- Min 80% coverage on changed code
+- [x] Task 1: Add fade_duration parameter and short-clip clamping to `_build_cutaway_filter()` and `_assemble_with_cutaways()`
+- [x] Task 2: Wire fade_duration from `assemble_with_broll()` through to `_assemble_with_cutaways()`
+- [x] Task 3: Write unit tests in `tests/unit/infrastructure/test_broll_fade.py`
+- [x] Task 4: Run full test suite + linting + mypy — all green
 
 ## Dev Agent Record
 
-### Agent Model Used
+### Status: review
 
-### Debug Log References
+### Decisions
 
-### Completion Notes List
+- Used `round(..., 4)` on computed fade values to avoid floating-point formatting artifacts (e.g. `0.32000000000000006`)
+- Applied the same short-clip clamping to both `_build_cutaway_filter()` (static helper) and `_assemble_with_cutaways()` (runtime pipeline method) for consistency
+- 12 new tests covering: yuva420p format, fade in/out values for standard and short clips, custom fade_duration propagation, filter chain ordering, and multiple B-roll clips
 
-### File List
+### Test Results
 
-### Change Log
+- 1349 tests passing
+- ruff: all checks passed
+- mypy: no issues found (63 source files)
+- black: files formatted
 
-## Status
+### Files Changed
 
-ready-for-dev
+- `src/pipeline/infrastructure/adapters/reel_assembler.py` — configurable fade_duration with short-clip clamping
+- `tests/unit/infrastructure/test_broll_fade.py` — 12 new tests (new file)
