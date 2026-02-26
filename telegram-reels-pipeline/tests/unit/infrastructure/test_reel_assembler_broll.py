@@ -155,13 +155,16 @@ class TestAssembleWithBroll:
 
         placement = _make_placement(clip_path=str(clip))
 
-        # First call (cutaway) fails, second call (plain assemble) succeeds
+        # Calls: 1) ffprobe (probe resolution), 2) ffmpeg (upscale),
+        # 3) ffmpeg (cutaway — fails), 4) ffmpeg (plain concat fallback)
+        probe_proc = _mock_process(returncode=0, stdout=b'{"streams":[{"width":720,"height":1280}]}')
+        upscale_proc = _mock_process(returncode=0)
         fail_proc = _mock_process(returncode=1, stderr=b"cutaway error")
         ok_proc = _mock_process(returncode=0)
 
         assembler = ReelAssembler()
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(side_effect=[fail_proc, ok_proc])
+            mock_aio.create_subprocess_exec = AsyncMock(side_effect=[probe_proc, upscale_proc, fail_proc, ok_proc])
             mock_aio.subprocess = __import__("asyncio").subprocess
             # The cutaway will fail, then it falls back to assemble() which
             # for a single segment just copies the file.
