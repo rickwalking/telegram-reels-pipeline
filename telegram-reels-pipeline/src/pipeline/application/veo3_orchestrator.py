@@ -1,4 +1,4 @@
-"""Veo3 generation orchestrator — fire parallel async generation after CONTENT stage."""
+"""Veo3 generation orchestrator — sequential submission with rate-limit retry."""
 
 from __future__ import annotations
 
@@ -23,10 +23,12 @@ _TERMINAL_STATUSES = frozenset({Veo3JobStatus.COMPLETED, Veo3JobStatus.FAILED, V
 
 
 class Veo3Orchestrator:
-    """Fire parallel Veo3 generation jobs and poll until all complete or timeout.
+    """Fire sequential Veo3 generation jobs and poll until all complete or timeout.
 
-    Designed to run as a background ``asyncio.Task`` so the main pipeline
-    continues through later stages while clips generate.
+    Jobs are submitted one at a time with inter-submission delays and
+    exponential backoff on rate-limit errors.  Designed to run as a
+    background ``asyncio.Task`` so the main pipeline continues through
+    later stages while clips generate.
     """
 
     def __init__(
@@ -47,9 +49,9 @@ class Veo3Orchestrator:
         """Kick off Veo3 generation for prompts found in publishing-assets.json.
 
         Reads ``publishing-assets.json`` from *workspace*, extracts the
-        ``veo3_prompts`` array, caps at *clip_count*, fires all jobs in
-        parallel via the adapter's ``submit_job()``, and writes the initial
-        ``veo3/jobs.json`` with atomic writes.
+        ``veo3_prompts`` array, caps at *clip_count*, submits jobs
+        sequentially via the adapter's ``submit_job()`` with rate-limit
+        retry, and writes the initial ``veo3/jobs.json`` with atomic writes.
 
         If the prompts array is empty or missing, returns early (no-op,
         no ``veo3/`` folder created).
@@ -65,7 +67,7 @@ class Veo3Orchestrator:
 
         veo3_prompts = self._convert_prompts(capped, run_id)
 
-        # Submit all jobs in parallel
+        # Submit jobs sequentially with rate-limit retry
         submitted = await self._submit_all(veo3_prompts)
 
         # Write initial jobs.json atomically
@@ -153,26 +155,82 @@ class Veo3Orchestrator:
             )
         return result
 
-    async def _submit_all(self, prompts: list[Veo3Prompt]) -> list[Veo3Job]:
-        """Submit every prompt concurrently via asyncio.gather()."""
+    # Patterns that indicate a retryable rate-limit / server error.
+    _RETRYABLE_PATTERNS: tuple[str, ...] = ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE")
+    # Patterns that indicate a permanent client error — never retry.
+    _PERMANENT_PATTERNS: tuple[str, ...] = ("400", "INVALID_ARGUMENT")
+    _MAX_RETRIES: int = 3
+    _BACKOFF_DELAYS: tuple[int, ...] = (30, 60, 120)
+    _INTER_SUBMIT_DELAY: int = 5
 
-        async def _submit_one(prompt: Veo3Prompt) -> Veo3Job:
+    async def _submit_all(self, prompts: list[Veo3Prompt]) -> list[Veo3Job]:
+        """Submit prompts sequentially with a delay between each to avoid rate limits."""
+        results: list[Veo3Job] = []
+        for idx, prompt in enumerate(prompts):
+            job = await self._submit_with_retry(prompt)
+            results.append(job)
+            # Sleep between submissions (but not after the last one)
+            if idx < len(prompts) - 1:
+                await asyncio.sleep(self._INTER_SUBMIT_DELAY)
+        return results
+
+    async def _submit_with_retry(self, prompt: Veo3Prompt) -> Veo3Job:
+        """Submit a single job with exponential backoff on retryable errors.
+
+        Retries up to ``_MAX_RETRIES`` times for rate-limit / server errors
+        (429, RESOURCE_EXHAUSTED, 503, UNAVAILABLE).  Client errors (400,
+        INVALID_ARGUMENT) fail immediately without retry.
+        """
+        for attempt in range(1, self._MAX_RETRIES + 1):
             try:
                 result = await self._video_gen.submit_job(prompt)
                 logger.info("Veo3 job submitted: key=%s", prompt.idempotent_key)
                 return result
-            except Exception:
-                logger.exception("Veo3 submit failed for %s", prompt.idempotent_key)
+            except Exception as exc:
+                error_str = str(exc)
+                if self._is_retryable(error_str) and attempt < self._MAX_RETRIES:
+                    delay = self._BACKOFF_DELAYS[attempt - 1]
+                    logger.warning(
+                        "Veo3 submit retry %d/%d for %s, waiting %ds",
+                        attempt,
+                        self._MAX_RETRIES,
+                        prompt.variant,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                if self._is_retryable(error_str):
+                    # Final retry exhausted
+                    logger.error("Veo3 submit exhausted retries for %s: %s", prompt.variant, error_str)
+                    return Veo3Job(
+                        idempotent_key=prompt.idempotent_key,
+                        variant=prompt.variant,
+                        prompt=prompt.prompt,
+                        status=Veo3JobStatus.FAILED,
+                        error_message="rate_limited",
+                    )
+                # Permanent failure — do not retry
+                logger.error("Veo3 submit permanent failure for %s: %s", prompt.variant, error_str)
                 return Veo3Job(
                     idempotent_key=prompt.idempotent_key,
                     variant=prompt.variant,
                     prompt=prompt.prompt,
                     status=Veo3JobStatus.FAILED,
-                    error_message="submit_failed",
+                    error_message=error_str,
                 )
+        # Unreachable, but satisfies type checker
+        return Veo3Job(  # pragma: no cover
+            idempotent_key=prompt.idempotent_key,
+            variant=prompt.variant,
+            prompt=prompt.prompt,
+            status=Veo3JobStatus.FAILED,
+            error_message="rate_limited",
+        )
 
-        results = await asyncio.gather(*(_submit_one(p) for p in prompts))
-        return list(results)
+    @staticmethod
+    def _is_retryable(error_msg: str) -> bool:
+        """Return True if the error message indicates a retryable server/rate-limit error."""
+        return any(pattern in error_msg for pattern in Veo3Orchestrator._RETRYABLE_PATTERNS)
 
     @staticmethod
     def _write_jobs_json(jobs_path: Path, jobs: list[Veo3Job]) -> None:
