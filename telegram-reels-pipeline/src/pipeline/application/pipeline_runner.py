@@ -441,6 +441,7 @@ class PipelineRunner:
                 workspace=workspace,
                 orchestrator=orchestrator,
                 timeout_s=timeout_s,
+                event_bus=self._event_bus,
             )
             logger.info("Veo3 await gate result: %s", summary)
         except Exception:
