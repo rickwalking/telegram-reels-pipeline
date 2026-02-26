@@ -149,3 +149,15 @@ class VideoGenerationPort(Protocol):
             Path to the downloaded file (same as dest).
         """
         ...
+
+
+@runtime_checkable
+class ExternalClipDownloaderPort(Protocol):
+    """Download and prepare external video clips for overlay."""
+
+    async def download(self, url: str, dest_dir: Path) -> Path | None:
+        """Download video from URL, strip audio, upscale to 1080x1920.
+
+        Returns path to prepared clip, or None on failure (non-fatal).
+        """
+        ...
