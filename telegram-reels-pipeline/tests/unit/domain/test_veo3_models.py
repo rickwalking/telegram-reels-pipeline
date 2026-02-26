@@ -41,16 +41,16 @@ class TestVeo3PromptExtended:
             prompt.narrative_anchor = "modified"  # type: ignore[misc]
 
     def test_duration_s_valid_range(self) -> None:
-        for d in (5, 6, 7, 8):
+        for d in (4, 5, 6, 7, 8):
             p = Veo3Prompt(variant="broll", prompt="Test", duration_s=d)
             assert p.duration_s == d
 
     def test_duration_s_below_range(self) -> None:
-        with pytest.raises(ValueError, match="duration_s must be 5-8"):
-            Veo3Prompt(variant="broll", prompt="Test", duration_s=4)
+        with pytest.raises(ValueError, match="duration_s must be 4-8"):
+            Veo3Prompt(variant="broll", prompt="Test", duration_s=3)
 
     def test_duration_s_above_range(self) -> None:
-        with pytest.raises(ValueError, match="duration_s must be 5-8"):
+        with pytest.raises(ValueError, match="duration_s must be 4-8"):
             Veo3Prompt(variant="broll", prompt="Test", duration_s=9)
 
     def test_duration_s_zero_is_allowed(self) -> None:

@@ -283,8 +283,8 @@ class Veo3Prompt:
         # New fields are optional for backward compatibility with Epic 11 usage
         if self.narrative_anchor:
             object.__setattr__(self, "narrative_anchor", self.narrative_anchor.strip())
-        if self.duration_s and not (5 <= self.duration_s <= 8):
-            raise ValueError(f"duration_s must be 5-8 when set, got {self.duration_s}")
+        if self.duration_s and not (4 <= self.duration_s <= 8):
+            raise ValueError(f"duration_s must be 4-8 when set, got {self.duration_s}")
 
 
 def make_idempotent_key(run_id: str, variant: str) -> str:

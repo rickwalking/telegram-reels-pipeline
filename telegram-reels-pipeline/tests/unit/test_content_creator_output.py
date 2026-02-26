@@ -143,9 +143,9 @@ class TestNarrativeAnchorTimestampRejection:
 
 
 class TestDurationRange:
-    """duration_s must be 5-8 when set; 0 means unset (backward compat)."""
+    """duration_s must be 4-8 when set; 0 means unset (backward compat)."""
 
-    @pytest.mark.parametrize("d", [5, 6, 7, 8])
+    @pytest.mark.parametrize("d", [4, 5, 6, 7, 8])
     def test_valid_durations(self, d: int) -> None:
         prompt = Veo3Prompt(variant="broll", prompt="Test shot", duration_s=d)
         assert prompt.duration_s == d
@@ -156,15 +156,15 @@ class TestDurationRange:
         assert prompt.duration_s == 0
 
     def test_duration_below_minimum_rejected(self) -> None:
-        with pytest.raises(ValueError, match="duration_s must be 5-8"):
-            Veo3Prompt(variant="broll", prompt="Test shot", duration_s=4)
+        with pytest.raises(ValueError, match="duration_s must be 4-8"):
+            Veo3Prompt(variant="broll", prompt="Test shot", duration_s=3)
 
     def test_duration_above_maximum_rejected(self) -> None:
-        with pytest.raises(ValueError, match="duration_s must be 5-8"):
+        with pytest.raises(ValueError, match="duration_s must be 4-8"):
             Veo3Prompt(variant="broll", prompt="Test shot", duration_s=9)
 
     def test_duration_one_rejected(self) -> None:
-        with pytest.raises(ValueError, match="duration_s must be 5-8"):
+        with pytest.raises(ValueError, match="duration_s must be 4-8"):
             Veo3Prompt(variant="broll", prompt="Test shot", duration_s=1)
 
 

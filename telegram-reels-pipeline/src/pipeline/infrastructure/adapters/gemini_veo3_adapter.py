@@ -43,19 +43,41 @@ class GeminiVeo3Adapter:
                 ) from exc
         return self._client
 
+    @staticmethod
+    def _clamp_duration(duration_s: int) -> int:
+        """Clamp duration to an even value in [4, 8]; 0 defaults to 6.
+
+        Veo3 only accepts even-second durations between 4 and 8.
+        """
+        if duration_s == 0:
+            logger.debug("Veo3 duration unset — defaulting to 6s")
+            return 6
+        if duration_s < 4:
+            logger.info("Veo3 duration %ds below minimum — clamping to 4s", duration_s)
+            return 4
+        if duration_s > 8:
+            logger.info("Veo3 duration %ds above maximum — clamping to 8s", duration_s)
+            return 8
+        if duration_s % 2 != 0:
+            clamped = duration_s + 1
+            logger.info("Veo3 duration %ds is odd — rounding up to %ds", duration_s, clamped)
+            return clamped
+        return duration_s
+
     async def submit_job(self, prompt: Veo3Prompt) -> Veo3Job:
         """Submit a Veo3 generation request and return the initial job."""
         try:
             client = self._get_client()
             from google.genai import types  # type: ignore[import-not-found]
 
+            clamped = self._clamp_duration(prompt.duration_s)
             operation = await asyncio.to_thread(
                 client.models.generate_videos,  # type: ignore[attr-defined]
                 model=self.MODEL_ID,
                 prompt=prompt.prompt,
                 config=types.GenerateVideosConfig(
                     aspect_ratio="9:16",
-                    duration_seconds=str(prompt.duration_s) if prompt.duration_s else "6",
+                    duration_seconds=clamped,
                     number_of_videos=1,
                 ),
             )
@@ -107,9 +129,11 @@ class FakeVeo3Adapter:
         self.submitted_jobs: list[Veo3Job] = []
 
     async def submit_job(self, prompt: Veo3Prompt) -> Veo3Job:
-        """Submit a fake job — immediately returns GENERATING status."""
+        """Submit a fake job — clamps duration like the real adapter, then returns GENERATING status."""
         if self._fail_on_submit:
             raise Veo3GenerationError("Fake submit failure")
+        # Apply same clamping as the real adapter for test consistency
+        GeminiVeo3Adapter._clamp_duration(prompt.duration_s)
         job = Veo3Job(
             idempotent_key=prompt.idempotent_key,
             variant=prompt.variant,
