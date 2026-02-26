@@ -66,6 +66,51 @@ class TestAssembleWithBroll:
             mock_assemble.assert_called_once()
             assert result == output
 
+    async def test_valid_broll_invokes_two_pass(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg1.write_bytes(b"v1")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll-video")
+        output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip), insertion_point_s=5.0, duration_s=4.0)
+        assembler = ReelAssembler()
+
+        with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)) as mock_res,
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base) as mock_p1,
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output) as mock_p2,
+        ):
+            base.write_bytes(b"base")
+            result = await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
+            assert result == output
+            mock_res.assert_called_once()
+            mock_p1.assert_called_once()
+            mock_p2.assert_called_once()
+
+    async def test_overlay_failure_falls_back_to_base_reel(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg1.write_bytes(b"v1")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll")
+        output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip))
+        assembler = ReelAssembler()
+
+        with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, side_effect=AssemblyError("overlay failed")),
+        ):
+            base.write_bytes(b"base")
+            result = await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
+            assert result == output
+            assert output.exists()
+
+
     async def test_passes_transitions_on_fallback(self, tmp_path: Path) -> None:
         seg = tmp_path / "seg.mp4"
         seg.write_bytes(b"video")

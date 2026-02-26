@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import shutil
-from dataclasses import dataclass
+import tempfile
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from pipeline.domain.enums import TransitionKind
@@ -62,6 +64,83 @@ class AssemblyError(PipelineError):
 
 class ReelAssembler:
     """Concatenate encoded video segments into a single output file via FFmpeg."""
+
+    _TARGET_WIDTH: int = 1080
+    _TARGET_HEIGHT: int = 1920
+
+    @staticmethod
+    async def _probe_resolution(clip: Path) -> tuple[int, int]:
+        """Probe a video clip's resolution via ffprobe.
+
+        Returns ``(width, height)`` or ``(0, 0)`` on any failure.
+        """
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "json",
+                str(clip),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            if proc.returncode != 0:
+                logger.warning("ffprobe resolution probe failed: %s", stderr.decode())
+                return (0, 0)
+            data = json.loads(stdout.decode())
+            stream = data["streams"][0]
+            return (int(stream["width"]), int(stream["height"]))
+        except (json.JSONDecodeError, KeyError, IndexError, ValueError) as exc:
+            logger.warning("Failed to parse ffprobe resolution output: %s", exc)
+            return (0, 0)
+
+    @staticmethod
+    async def _upscale_clip(source: Path, dest: Path) -> Path:
+        """Upscale a video clip to 1080x1920 using Lanczos resampling.
+
+        Raises :class:`AssemblyError` on FFmpeg failure.
+        """
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg",
+            "-i",
+            str(source),
+            "-vf",
+            "scale=1080:1920:flags=lanczos",
+            "-c:a",
+            "copy",
+            "-y",
+            str(dest),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise AssemblyError(f"FFmpeg upscale failed (exit {proc.returncode}): {stderr.decode()}")
+        logger.info("Upscaled %s -> %s", source.name, dest.name)
+        return dest
+
+    async def _ensure_clip_resolution(self, clip_path: Path, temp_dir: Path) -> Path:
+        """Return *clip_path* if already 1080x1920, otherwise upscale into *temp_dir*."""
+        width, height = await self._probe_resolution(clip_path)
+        if width == self._TARGET_WIDTH and height == self._TARGET_HEIGHT:
+            logger.debug("Clip %s already at target resolution", clip_path.name)
+            return clip_path
+        dest = temp_dir / f"_upscaled_{clip_path.stem}.mp4"
+        logger.info(
+            "Clip %s is %dx%d — upscaling to %dx%d",
+            clip_path.name,
+            width,
+            height,
+            self._TARGET_WIDTH,
+            self._TARGET_HEIGHT,
+        )
+        return await self._upscale_clip(clip_path, dest)
 
     @staticmethod
     def _escape_concat_path(path: Path) -> str:
@@ -321,21 +400,36 @@ class ReelAssembler:
             logger.warning("No valid B-roll clips found — assembling without B-roll")
             return await self.assemble(segments, output, transitions=transitions)
 
-        # Pass 1: assemble base reel into a temp file
-        tmp_path = output.with_suffix(".base.mp4")
-        await self.assemble(segments, tmp_path, transitions=transitions)
-        logger.info("Pass 1 complete: base reel at %s", tmp_path.name)
-
-        # Pass 2: overlay B-roll clips onto the base reel
+        # Ensure all B-roll clips match target resolution before overlay
+        upscale_dir = Path(tempfile.mkdtemp(prefix="broll_upscale_"))
         try:
-            result = await self._overlay_broll(tmp_path, valid_placements, output)
+            upscaled_placements: list[BrollPlacement] = []
+            for bp in valid_placements:
+                new_path = await self._ensure_clip_resolution(Path(bp.clip_path), upscale_dir)
+                if str(new_path) != bp.clip_path:
+                    upscaled_placements.append(replace(bp, clip_path=str(new_path)))
+                else:
+                    upscaled_placements.append(bp)
+
+            # Pass 1: assemble base reel into a temp file
+            tmp_path = output.with_suffix(".base.mp4")
+            await self.assemble(segments, tmp_path, transitions=transitions)
+            logger.info("Pass 1 complete: base reel at %s", tmp_path.name)
+
+            # Pass 2: overlay B-roll clips onto the base reel
+            result = await self._overlay_broll(tmp_path, upscaled_placements, output)
             tmp_path.unlink(missing_ok=True)
             logger.info("Pass 2 complete: B-roll overlay at %s", output.name)
             return result
         except AssemblyError as exc:
             logger.warning("B-roll overlay failed (%s), falling back to base reel", exc.message)
-            shutil.move(str(tmp_path), str(output))
+            if tmp_path.exists():
+                shutil.move(str(tmp_path), str(output))
+            else:
+                return await self.assemble(segments, output, transitions=transitions)
             return output
+        finally:
+            shutil.rmtree(upscale_dir, ignore_errors=True)
 
     async def validate_duration(
         self,
