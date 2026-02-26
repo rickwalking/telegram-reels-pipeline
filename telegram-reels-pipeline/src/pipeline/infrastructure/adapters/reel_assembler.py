@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pipeline.domain.enums import TransitionKind
 from pipeline.domain.errors import PipelineError
-from pipeline.domain.models import BrollPlacement
+from pipeline.domain.models import BrollPlacement, CutawayManifest
 
 logger = logging.getLogger(__name__)
 
@@ -248,16 +248,29 @@ class ReelAssembler:
         self,
         segments: list[Path],
         output: Path,
-        broll_placements: tuple[BrollPlacement, ...],
+        manifest: CutawayManifest,
         transitions: tuple[TransitionSpec, ...] | None = None,
     ) -> Path:
         """Assemble segments with documentary cutaway B-roll insertion.
 
-        If *broll_placements* is empty, delegates to :meth:`assemble`.
-        For each valid B-roll clip, builds a cutaway overlay filter that
-        plays the B-roll video over the base while keeping the base audio.
+        Accepts a :class:`CutawayManifest` and converts its clips back to
+        :class:`BrollPlacement` for overlay compatibility.  If the manifest
+        is empty, delegates to :meth:`assemble`.
         Falls back to :meth:`assemble` without B-roll on FFmpeg failure.
         """
+        # Convert CutawayClip to BrollPlacement for overlay compatibility
+        broll_placements = tuple(
+            BrollPlacement(
+                variant=c.variant,
+                clip_path=c.clip_path,
+                insertion_point_s=c.insertion_point_s,
+                duration_s=c.duration_s,
+                narrative_anchor=c.narrative_anchor,
+                match_confidence=c.match_confidence,
+            )
+            for c in manifest.clips
+        )
+
         if not broll_placements:
             return await self.assemble(segments, output, transitions=transitions)
 

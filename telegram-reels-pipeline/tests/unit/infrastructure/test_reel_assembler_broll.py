@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from pipeline.domain.models import BrollPlacement
+from pipeline.domain.models import BrollPlacement, CutawayManifest
 from pipeline.infrastructure.adapters.reel_assembler import (
     ReelAssembler,
     TransitionSpec,
@@ -110,8 +110,9 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         assembler = ReelAssembler()
+        manifest = CutawayManifest(clips=())
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=())
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
             mock_assemble.assert_called_once_with([seg], output, transitions=None)
             assert result == output
 
@@ -121,9 +122,10 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         placement = _make_placement(clip_path=str(tmp_path / "nonexistent.mp4"))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
             mock_assemble.assert_called_once()
             assert result == output
 
@@ -135,12 +137,13 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         placement = _make_placement(clip_path=str(clip), insertion_point_s=5.0, duration_s=4.0)
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
 
         with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
             mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
             mock_aio.subprocess = __import__("asyncio").subprocess
             assembler = ReelAssembler()
-            await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
+            await assembler.assemble_with_broll([seg1], output, manifest=manifest)
 
         call_args = mock_aio.create_subprocess_exec.call_args[0]
         assert "ffmpeg" in call_args
@@ -169,7 +172,8 @@ class TestAssembleWithBroll:
             # Let's use 2 segments to force ffmpeg calls.
             seg2 = tmp_path / "seg2.mp4"
             seg2.write_bytes(b"v2")
-            result = await assembler.assemble_with_broll([seg1, seg2], output, broll_placements=(placement,))
+            manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
+            result = await assembler.assemble_with_broll([seg1, seg2], output, manifest=manifest)
             assert result == output
 
     async def test_passes_transitions_on_fallback(self, tmp_path: Path) -> None:
@@ -178,9 +182,10 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         transitions = (TransitionSpec(offset_seconds=10.0),)
+        manifest = CutawayManifest(clips=())
 
         assembler = ReelAssembler()
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(), transitions=transitions)
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest, transitions=transitions)
             mock_assemble.assert_called_once_with([seg], output, transitions=transitions)
             assert result == output
