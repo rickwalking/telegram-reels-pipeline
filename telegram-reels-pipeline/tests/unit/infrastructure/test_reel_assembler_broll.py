@@ -1,12 +1,15 @@
-"""Tests for ReelAssembler B-roll — cutaway filter and assemble_with_broll."""
+"""Tests for ReelAssembler B-roll — two-pass assembly with _overlay_broll."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from pipeline.domain.models import BrollPlacement
 from pipeline.infrastructure.adapters.reel_assembler import (
+    AssemblyError,
     ReelAssembler,
     TransitionSpec,
 )
@@ -37,70 +40,6 @@ def _make_placement(
     )
 
 
-class TestBuildCutawayFilter:
-    """Tests for _build_cutaway_filter static method."""
-
-    def test_produces_valid_filter_string(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=1,
-            insertion_point_s=10.0,
-            cutaway_duration_s=6.0,
-        )
-        assert isinstance(result, str)
-        assert len(result) > 0
-
-    def test_includes_overlay_with_time_bounds(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=1,
-            insertion_point_s=10.0,
-            cutaway_duration_s=6.0,
-        )
-        assert "overlay=" in result
-        assert "between(t,10.0,16.0)" in result
-
-    def test_references_correct_input_indices(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=2,
-            insertion_point_s=5.0,
-            cutaway_duration_s=4.0,
-        )
-        assert "[2:v]" in result
-        assert "[0:v]" in result
-        assert "[broll2]" in result
-
-    def test_includes_scale_to_1080x1920(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=1,
-            insertion_point_s=0.0,
-            cutaway_duration_s=5.0,
-        )
-        assert "scale=1080:1920" in result
-
-    def test_includes_fade_in_and_out(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=1,
-            insertion_point_s=10.0,
-            cutaway_duration_s=6.0,
-            fade_duration=0.5,
-        )
-        assert "fade=t=in" in result
-        assert "fade=t=out" in result
-
-    def test_output_label_is_v(self) -> None:
-        result = ReelAssembler._build_cutaway_filter(
-            base_segment_index=0,
-            broll_input_index=1,
-            insertion_point_s=0.0,
-            cutaway_duration_s=5.0,
-        )
-        assert result.endswith("[v]")
-
-
 class TestAssembleWithBroll:
     """Tests for assemble_with_broll method."""
 
@@ -127,51 +66,6 @@ class TestAssembleWithBroll:
             mock_assemble.assert_called_once()
             assert result == output
 
-    async def test_valid_broll_calls_ffmpeg_with_filter(self, tmp_path: Path) -> None:
-        seg1 = tmp_path / "seg1.mp4"
-        seg1.write_bytes(b"v1")
-        clip = tmp_path / "broll.mp4"
-        clip.write_bytes(b"broll-video")
-        output = tmp_path / "reel.mp4"
-
-        placement = _make_placement(clip_path=str(clip), insertion_point_s=5.0, duration_s=4.0)
-
-        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
-            mock_aio.subprocess = __import__("asyncio").subprocess
-            assembler = ReelAssembler()
-            await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
-
-        call_args = mock_aio.create_subprocess_exec.call_args[0]
-        assert "ffmpeg" in call_args
-        assert "-filter_complex" in call_args
-
-    async def test_cutaway_failure_falls_back_to_plain(self, tmp_path: Path) -> None:
-        seg1 = tmp_path / "seg1.mp4"
-        seg1.write_bytes(b"v1")
-        clip = tmp_path / "broll.mp4"
-        clip.write_bytes(b"broll")
-        output = tmp_path / "reel.mp4"
-
-        placement = _make_placement(clip_path=str(clip))
-
-        # First call (cutaway) fails, second call (plain assemble) succeeds
-        fail_proc = _mock_process(returncode=1, stderr=b"cutaway error")
-        ok_proc = _mock_process(returncode=0)
-
-        assembler = ReelAssembler()
-        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
-            mock_aio.create_subprocess_exec = AsyncMock(side_effect=[fail_proc, ok_proc])
-            mock_aio.subprocess = __import__("asyncio").subprocess
-            # The cutaway will fail, then it falls back to assemble() which
-            # for a single segment just copies the file.
-            # But the fallback assemble() does a shutil.copy, not ffmpeg, for 1 segment.
-            # Let's use 2 segments to force ffmpeg calls.
-            seg2 = tmp_path / "seg2.mp4"
-            seg2.write_bytes(b"v2")
-            result = await assembler.assemble_with_broll([seg1, seg2], output, broll_placements=(placement,))
-            assert result == output
-
     async def test_passes_transitions_on_fallback(self, tmp_path: Path) -> None:
         seg = tmp_path / "seg.mp4"
         seg.write_bytes(b"video")
@@ -184,3 +78,245 @@ class TestAssembleWithBroll:
             result = await assembler.assemble_with_broll([seg], output, broll_placements=(), transitions=transitions)
             mock_assemble.assert_called_once_with([seg], output, transitions=transitions)
             assert result == output
+
+
+class TestOverlayBroll:
+    """Tests for _overlay_broll — FFmpeg PTS-offset overlay filter graph."""
+
+    async def test_builds_correct_ffmpeg_command_single_clip(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        placement = _make_placement(clip_path="/tmp/clip1.mp4", insertion_point_s=5.0, duration_s=4.0)
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            result = await assembler._overlay_broll(base, [placement], output)
+
+        assert result == output
+        call_args = mock_aio.create_subprocess_exec.call_args[0]
+        assert call_args[0] == "ffmpeg"
+        assert "-filter_complex" in call_args
+
+        # Extract filter_complex argument
+        fc_idx = list(call_args).index("-filter_complex")
+        filter_graph = call_args[fc_idx + 1]
+
+        # Verify setpts with PTS-offset for clip at insertion_point 5.0
+        assert "setpts=PTS-STARTPTS+5.0/TB" in filter_graph
+        assert "overlay=eof_action=pass" in filter_graph
+
+    async def test_builds_correct_filter_two_clips(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        p1 = _make_placement(clip_path="/tmp/clip1.mp4", insertion_point_s=5.0, duration_s=4.0)
+        p2 = _make_placement(clip_path="/tmp/clip2.mp4", insertion_point_s=20.0, duration_s=3.0)
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            await assembler._overlay_broll(base, [p1, p2], output)
+
+        call_args = mock_aio.create_subprocess_exec.call_args[0]
+        fc_idx = list(call_args).index("-filter_complex")
+        filter_graph = call_args[fc_idx + 1]
+
+        # Two setpts lines
+        assert "[1:v]setpts=PTS-STARTPTS+5.0/TB[clip1]" in filter_graph
+        assert "[2:v]setpts=PTS-STARTPTS+20.0/TB[clip2]" in filter_graph
+
+        # Chained overlays — first produces [v1], second produces [vout]
+        assert "[0:v][clip1]overlay=eof_action=pass[v1]" in filter_graph
+        assert "[v1][clip2]overlay=eof_action=pass[vout]" in filter_graph
+
+    async def test_maps_base_audio(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        placement = _make_placement(clip_path="/tmp/clip1.mp4")
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            await assembler._overlay_broll(base, [placement], output)
+
+        call_args = list(mock_aio.create_subprocess_exec.call_args[0])
+        map_indices = [i for i, a in enumerate(call_args) if a == "-map"]
+        mapped_streams = {call_args[i + 1] for i in map_indices}
+        assert "[vout]" in mapped_streams
+        assert "0:a" in mapped_streams
+
+    async def test_encoding_params(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        placement = _make_placement(clip_path="/tmp/clip1.mp4")
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(return_value=_mock_process())
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            await assembler._overlay_broll(base, [placement], output)
+
+        call_args = list(mock_aio.create_subprocess_exec.call_args[0])
+        assert "-pix_fmt" in call_args
+        assert "yuv420p" in call_args
+        assert "-movflags" in call_args
+        assert "+faststart" in call_args
+        assert "-b:a" in call_args
+        assert "128k" in call_args
+
+    async def test_ffmpeg_failure_raises_assembly_error(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        placement = _make_placement(clip_path="/tmp/clip1.mp4")
+
+        with patch("pipeline.infrastructure.adapters.reel_assembler.asyncio") as mock_aio:
+            mock_aio.create_subprocess_exec = AsyncMock(
+                return_value=_mock_process(returncode=1, stderr=b"overlay error")
+            )
+            mock_aio.subprocess = __import__("asyncio").subprocess
+            assembler = ReelAssembler()
+            with pytest.raises(AssemblyError, match="FFmpeg B-roll overlay failed"):
+                await assembler._overlay_broll(base, [placement], output)
+
+    async def test_empty_placements_raises(self, tmp_path: Path) -> None:
+        base = tmp_path / "base.mp4"
+        base.write_bytes(b"base-video")
+        output = tmp_path / "output.mp4"
+
+        assembler = ReelAssembler()
+        with pytest.raises(AssemblyError, match="placements must not be empty"):
+            await assembler._overlay_broll(base, [], output)
+
+
+class TestTwoPassFlow:
+    """Tests for the two-pass assembly flow in assemble_with_broll."""
+
+    async def test_two_pass_calls_assemble_then_overlay(self, tmp_path: Path) -> None:
+        seg = tmp_path / "seg.mp4"
+        seg.write_bytes(b"video")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll-video")
+        output = tmp_path / "reel.mp4"
+        tmp_base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip))
+
+        assembler = ReelAssembler()
+        with (
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output) as mock_overlay,
+        ):
+            # Make tmp_base exist so unlink works
+            tmp_base.write_bytes(b"base")
+            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+
+        # Pass 1: assemble called with temp path
+        mock_assemble.assert_called_once_with([seg], tmp_base, transitions=None)
+        # Pass 2: overlay called with base reel, placements, output
+        mock_overlay.assert_called_once_with(tmp_base, [placement], output)
+        assert result == output
+
+    async def test_fallback_when_overlay_fails(self, tmp_path: Path) -> None:
+        seg = tmp_path / "seg.mp4"
+        seg.write_bytes(b"video")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll-video")
+        output = tmp_path / "reel.mp4"
+        tmp_base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip))
+
+        assembler = ReelAssembler()
+        with (
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
+            patch.object(
+                assembler,
+                "_overlay_broll",
+                new_callable=AsyncMock,
+                side_effect=AssemblyError("overlay failed"),
+            ),
+        ):
+            # Simulate the temp base file created by Pass 1
+            tmp_base.write_bytes(b"base-reel-content")
+            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+
+        mock_assemble.assert_called_once()
+        assert result == output
+        # The base reel should have been moved to output
+        assert output.read_bytes() == b"base-reel-content"
+        # Temp file should be gone (moved to output)
+        assert not tmp_base.exists()
+
+    async def test_temp_file_cleaned_on_success(self, tmp_path: Path) -> None:
+        seg = tmp_path / "seg.mp4"
+        seg.write_bytes(b"video")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll-video")
+        output = tmp_path / "reel.mp4"
+        tmp_base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip))
+
+        assembler = ReelAssembler()
+        with (
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base),
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
+        ):
+            tmp_base.write_bytes(b"base")
+            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+
+        # Temp file should be deleted after successful overlay
+        assert not tmp_base.exists()
+
+    async def test_no_valid_placements_delegates_to_assemble(self, tmp_path: Path) -> None:
+        seg = tmp_path / "seg.mp4"
+        seg.write_bytes(b"video")
+        output = tmp_path / "reel.mp4"
+
+        # All clips are missing
+        placement = _make_placement(clip_path=str(tmp_path / "missing.mp4"))
+
+        assembler = ReelAssembler()
+        with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
+            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            mock_assemble.assert_called_once_with([seg], output, transitions=None)
+            assert result == output
+
+    async def test_two_pass_with_transitions(self, tmp_path: Path) -> None:
+        seg1 = tmp_path / "seg1.mp4"
+        seg2 = tmp_path / "seg2.mp4"
+        seg1.write_bytes(b"v1")
+        seg2.write_bytes(b"v2")
+        clip = tmp_path / "broll.mp4"
+        clip.write_bytes(b"broll")
+        output = tmp_path / "reel.mp4"
+        tmp_base = output.with_suffix(".base.mp4")
+
+        placement = _make_placement(clip_path=str(clip))
+        transitions = (TransitionSpec(offset_seconds=10.0),)
+
+        assembler = ReelAssembler()
+        with (
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
+        ):
+            tmp_base.write_bytes(b"base")
+            await assembler.assemble_with_broll(
+                [seg1, seg2], output, broll_placements=(placement,), transitions=transitions
+            )
+
+        # Pass 1 should pass transitions through
+        mock_assemble.assert_called_once_with([seg1, seg2], tmp_base, transitions=transitions)

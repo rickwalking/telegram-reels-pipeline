@@ -210,39 +210,83 @@ class ReelAssembler:
         logger.info("Assembled %d segments (xfade) into %s", len(segments), output.name)
         return output
 
-    @staticmethod
-    def _build_cutaway_filter(
-        base_segment_index: int,
-        broll_input_index: int,
-        insertion_point_s: float,
-        cutaway_duration_s: float,
-        fade_duration: float = 0.5,
-    ) -> str:
-        """Build FFmpeg filter_complex for documentary cutaway overlay.
+    async def _overlay_broll(
+        self,
+        base_reel: Path,
+        placements: list[BrollPlacement],
+        output: Path,
+    ) -> Path:
+        """Overlay B-roll clips onto an already-assembled base reel.
 
-        The B-roll video replaces the base video at the insertion point
-        while the base audio continues uninterrupted.  The overlay fades
-        in/out at the boundaries for a polished cutaway look.
-
-        Audio stays as the base segment's audio — no audio from B-roll
-        (it is treated as silent visual footage).
+        Builds a PTS-offset filter graph where each B-roll clip is time-shifted
+        to its insertion point and chained via ``overlay=eof_action=pass``.
+        Audio comes exclusively from the base reel.
         """
-        start = insertion_point_s
-        end = insertion_point_s + cutaway_duration_s
-        fade_out_start = end - fade_duration
+        if not placements:
+            raise AssemblyError("placements must not be empty for overlay")
 
-        return (
-            f"[{broll_input_index}:v]setpts=PTS-STARTPTS,"
-            f"scale=1080:1920,"
-            f"format=yuva420p,"
-            f"fade=t=in:st=0:d={fade_duration}:alpha=1,"
-            f"fade=t=out:st={fade_out_start - start}:d={fade_duration}:alpha=1"
-            f"[broll{broll_input_index}];"
-            f"[{base_segment_index}:v]"
-            f"[broll{broll_input_index}]"
-            f"overlay=enable='between(t,{start},{end})'"
-            f"[v]"
+        output.parent.mkdir(parents=True, exist_ok=True)
+
+        # Build inputs: base reel first, then each B-roll clip
+        cmd: list[str] = ["ffmpeg", "-i", str(base_reel)]
+        for bp in placements:
+            cmd.extend(["-i", bp.clip_path])
+
+        # Build filter graph
+        filter_parts: list[str] = []
+        for i, bp in enumerate(placements):
+            clip_idx = i + 1  # 0 is base reel
+            filter_parts.append(f"[{clip_idx}:v]setpts=PTS-STARTPTS+{bp.insertion_point_s}/TB[clip{clip_idx}]")
+
+        # Chain overlays: [0:v][clip1]overlay -> [v1]; [v1][clip2]overlay -> [v2]; ...
+        current_label = "[0:v]"
+        for i in range(len(placements)):
+            clip_idx = i + 1
+            is_last = i == len(placements) - 1
+            out_label = "[vout]" if is_last else f"[v{clip_idx}]"
+            filter_parts.append(f"{current_label}[clip{clip_idx}]overlay=eof_action=pass{out_label}")
+            current_label = out_label
+
+        filter_graph = ";".join(filter_parts)
+
+        cmd.extend(
+            [
+                "-filter_complex",
+                filter_graph,
+                "-map",
+                "[vout]",
+                "-map",
+                "0:a",
+                "-c:v",
+                "libx264",
+                "-crf",
+                "23",
+                "-preset",
+                "medium",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-movflags",
+                "+faststart",
+                "-y",
+                str(output),
+            ]
         )
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _stdout, stderr = await proc.communicate()
+        if proc.returncode != 0:
+            raise AssemblyError(f"FFmpeg B-roll overlay failed (exit {proc.returncode}): {stderr.decode()}")
+
+        logger.info("Overlaid %d B-roll clips onto base reel -> %s", len(placements), output.name)
+        return output
 
     async def assemble_with_broll(
         self,
@@ -251,12 +295,15 @@ class ReelAssembler:
         broll_placements: tuple[BrollPlacement, ...],
         transitions: tuple[TransitionSpec, ...] | None = None,
     ) -> Path:
-        """Assemble segments with documentary cutaway B-roll insertion.
+        """Two-pass assembly: base reel first, then B-roll overlay.
 
-        If *broll_placements* is empty, delegates to :meth:`assemble`.
-        For each valid B-roll clip, builds a cutaway overlay filter that
-        plays the B-roll video over the base while keeping the base audio.
-        Falls back to :meth:`assemble` without B-roll on FFmpeg failure.
+        **Pass 1** — assemble segments (with optional xfade transitions)
+        into a temporary base reel via :meth:`assemble`.
+
+        **Pass 2** — overlay validated B-roll clips on the base reel via
+        :meth:`_overlay_broll` using PTS-offset ``overlay=eof_action=pass``.
+
+        Falls back to the base reel (no B-roll) when Pass 2 fails.
         """
         if not broll_placements:
             return await self.assemble(segments, output, transitions=transitions)
@@ -274,114 +321,21 @@ class ReelAssembler:
             logger.warning("No valid B-roll clips found — assembling without B-roll")
             return await self.assemble(segments, output, transitions=transitions)
 
+        # Pass 1: assemble base reel into a temp file
+        tmp_path = output.with_suffix(".base.mp4")
+        await self.assemble(segments, tmp_path, transitions=transitions)
+        logger.info("Pass 1 complete: base reel at %s", tmp_path.name)
+
+        # Pass 2: overlay B-roll clips onto the base reel
         try:
-            return await self._assemble_with_cutaways(segments, output, valid_placements, transitions)
+            result = await self._overlay_broll(tmp_path, valid_placements, output)
+            tmp_path.unlink(missing_ok=True)
+            logger.info("Pass 2 complete: B-roll overlay at %s", output.name)
+            return result
         except AssemblyError as exc:
-            logger.warning("Cutaway assembly failed (%s), falling back to plain assembly", exc.message)
-            return await self.assemble(segments, output, transitions=transitions)
-
-    async def _assemble_with_cutaways(
-        self,
-        segments: list[Path],
-        output: Path,
-        placements: list[BrollPlacement],
-        transitions: tuple[TransitionSpec, ...] | None,
-    ) -> Path:
-        """Internal: build and run the FFmpeg command with cutaway overlays."""
-        if not segments:
-            raise AssemblyError("segments must not be empty")
-
-        for seg in segments:
-            if not seg.exists():
-                raise AssemblyError(f"Segment file not found: {seg}")
-
-        output.parent.mkdir(parents=True, exist_ok=True)
-
-        # Build inputs: first all base segments, then B-roll clips
-        cmd: list[str] = ["ffmpeg"]
-        for seg in segments:
-            cmd.extend(["-i", str(seg)])
-
-        broll_start_index = len(segments)
-        for bp in placements:
-            cmd.extend(["-i", bp.clip_path])
-
-        # Build the base assembly filter (xfade chain or single pass)
-        filter_parts: list[str] = []
-        base_video_label = "[0:v]"
-        base_audio_label = "[0:a]"
-
-        if len(segments) > 1 and transitions:
-            # Use xfade for base segments first, then overlay B-roll
-            xfade_filter = self._build_xfade_filter(len(segments), transitions)
-            filter_parts.append(xfade_filter)
-            base_video_label = "[v]"
-            base_audio_label = "[a]"
-
-        # For each B-roll, build an overlay on the base video
-        current_video = base_video_label
-        for i, bp in enumerate(placements):
-            broll_idx = broll_start_index + i
-            is_last = i == len(placements) - 1
-            out_label = "[v]" if is_last else f"[vcut{i}]"
-
-            start = bp.insertion_point_s
-            end = bp.insertion_point_s + bp.duration_s
-            fade_out_start = bp.duration_s - 0.5
-
-            broll_filter = (
-                f"[{broll_idx}:v]setpts=PTS-STARTPTS,"
-                f"scale=1080:1920,"
-                f"format=yuva420p,"
-                f"fade=t=in:st=0:d=0.5:alpha=1,"
-                f"fade=t=out:st={fade_out_start}:d=0.5:alpha=1"
-                f"[broll{broll_idx}];"
-                f"{current_video}"
-                f"[broll{broll_idx}]"
-                f"overlay=enable='between(t,{start},{end})'"
-                f"{out_label}"
-            )
-            filter_parts.append(broll_filter)
-            current_video = out_label
-
-        filter_graph = ";".join(filter_parts)
-        cmd.extend(
-            [
-                "-filter_complex",
-                filter_graph,
-                "-map",
-                "[v]",
-                "-map",
-                base_audio_label,
-                "-c:v",
-                "libx264",
-                "-crf",
-                "23",
-                "-preset",
-                "medium",
-                "-c:a",
-                "aac",
-                "-y",
-                str(output),
-            ]
-        )
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            raise AssemblyError(f"FFmpeg cutaway failed (exit {proc.returncode}): {stderr.decode()}")
-
-        logger.info(
-            "Assembled %d segments with %d B-roll cutaways into %s",
-            len(segments),
-            len(placements),
-            output.name,
-        )
-        return output
+            logger.warning("B-roll overlay failed (%s), falling back to base reel", exc.message)
+            shutil.move(str(tmp_path), str(output))
+            return output
 
     async def validate_duration(
         self,
