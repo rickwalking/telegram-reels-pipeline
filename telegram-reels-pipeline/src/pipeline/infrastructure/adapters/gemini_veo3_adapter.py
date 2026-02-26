@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
+import os
+import tempfile
+import urllib.request
 from pathlib import Path
 
 from pipeline.domain.errors import PipelineError
@@ -38,9 +42,7 @@ class GeminiVeo3Adapter:
 
                 self._client = genai.Client(api_key=self._api_key)
             except ImportError as exc:
-                raise Veo3GenerationError(
-                    "google-genai SDK not installed — run: poetry add google-genai"
-                ) from exc
+                raise Veo3GenerationError("google-genai SDK not installed — run: poetry add google-genai") from exc
         return self._client
 
     async def submit_job(self, prompt: Veo3Prompt) -> Veo3Job:
@@ -59,12 +61,14 @@ class GeminiVeo3Adapter:
                     number_of_videos=1,
                 ),
             )
-            logger.info("Veo3 job submitted: key=%s, operation=%s", prompt.idempotent_key, operation.name)
+            op_name = str(operation.name) if operation.name else ""
+            logger.info("Veo3 job submitted: key=%s, operation=%s", prompt.idempotent_key, op_name)
             return Veo3Job(
                 idempotent_key=prompt.idempotent_key,
                 variant=prompt.variant,
                 prompt=prompt.prompt,
                 status=Veo3JobStatus.GENERATING,
+                operation_name=op_name,
             )
         except Veo3GenerationError:
             raise
@@ -81,14 +85,43 @@ class GeminiVeo3Adapter:
         raise NotImplementedError("poll_job requires operation state — use Veo3Orchestrator")
 
     async def download_clip(self, job: Veo3Job, dest: Path) -> Path:
-        """Download a completed Veo3 clip to *dest*."""
+        """Download a completed Veo3 clip to *dest* via operation polling + authenticated HTTP."""
         if job.status != Veo3JobStatus.COMPLETED:
             raise Veo3GenerationError(f"Cannot download clip with status {job.status}")
+        if not job.operation_name:
+            raise Veo3GenerationError("Cannot download clip without operation_name")
         try:
-            # In the real flow, the operation.response provides the video file.
-            # The download is done via client.files.download() + video.save().
-            logger.info("Downloading Veo3 clip: key=%s -> %s", job.idempotent_key, dest)
+            from google.genai import types  # noqa: F811
+
+            client = self._get_client()
+            op_ref = types.GenerateVideosOperation(name=job.operation_name)
+            operation = await asyncio.to_thread(
+                client.operations.get,  # type: ignore[attr-defined]
+                operation=op_ref,
+            )
+            video_uri: str = operation.result.generated_videos[0].video.uri
+            logger.info("Downloading Veo3 clip: key=%s, uri=%s -> %s", job.idempotent_key, video_uri, dest)
+
+            req = urllib.request.Request(video_uri, headers={"x-goog-api-key": self._api_key})
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(dir=str(dest.parent), suffix=".tmp")
+            try:
+                response = await asyncio.to_thread(urllib.request.urlopen, req)
+                with os.fdopen(fd, "wb") as f:
+                    while True:
+                        chunk = response.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                os.rename(tmp_path, str(dest))
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp_path)
+                raise
+
             return dest
+        except Veo3GenerationError:
+            raise
         except Exception as exc:
             raise Veo3GenerationError(f"Failed to download clip: {exc}") from exc
 
@@ -115,6 +148,7 @@ class FakeVeo3Adapter:
             variant=prompt.variant,
             prompt=prompt.prompt,
             status=Veo3JobStatus.GENERATING,
+            operation_name=f"operations/fake-op-{prompt.variant}",
         )
         self.submitted_jobs.append(job)
         return job
@@ -128,6 +162,7 @@ class FakeVeo3Adapter:
                     variant=job.variant,
                     prompt=job.prompt,
                     status=Veo3JobStatus.COMPLETED,
+                    operation_name=job.operation_name,
                     video_path=f"veo3/{job.variant}.mp4",
                 )
         raise Veo3GenerationError(f"No job found with key: {idempotent_key}")

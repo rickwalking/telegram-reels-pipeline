@@ -319,6 +319,7 @@ class Veo3Job:
     variant: str
     prompt: str
     status: Veo3JobStatus
+    operation_name: str = ""
     video_path: str | None = None
     error_message: str | None = None
 

@@ -184,6 +184,7 @@ class Veo3Orchestrator:
                     "variant": j.variant,
                     "prompt": j.prompt,
                     "status": j.status.value,
+                    "operation_name": j.operation_name,
                     "video_path": j.video_path,
                     "error_message": j.error_message,
                 }
@@ -221,6 +222,7 @@ class Veo3Orchestrator:
                         variant=entry["variant"],
                         prompt=entry["prompt"],
                         status=Veo3JobStatus(entry["status"]),
+                        operation_name=entry.get("operation_name", ""),
                         video_path=entry.get("video_path"),
                         error_message=entry.get("error_message"),
                     )
