@@ -163,3 +163,24 @@ development_status:
   17-6-veo3-clip-post-processing-quality-validation: done
   17-7-await-gate-pipeline-stage: done
   17-8-assembly-stage-broll-insertion: done
+
+  epic-18: in-progress
+  18-1-fix-veo3-duration-constraints: in-progress
+  18-2-authenticated-video-download: in-progress
+  18-3-rate-limit-handling-sequential-submission: in-progress
+  18-4-await-gate-auto-retry-failure-classification: backlog
+  18-5-qa-dispatch-timeout-clink-fallback-wiring: in-progress
+
+  epic-19: in-progress
+  19-1-two-pass-assembly-architecture: in-progress
+  19-2-auto-upscale-broll-clips: backlog
+  19-3-broll-fade-transitions: backlog
+  19-4-assembly-report-broll-section: backlog
+
+  epic-20: in-progress
+  20-1-external-clip-download-preparation: in-progress
+  20-2-cutaway-manifest-domain-model: backlog
+  20-3-cli-cutaway-flag-user-provided-clips: backlog
+  20-4-content-creator-agent-external-clip-suggestions: backlog
+  20-5-external-clip-search-resolution: backlog
+  20-6-unified-assembly-integration: backlog

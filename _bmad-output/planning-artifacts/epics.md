@@ -187,8 +187,34 @@ NFR-S4: No external network exposure — Telegram polling only, zero open ports
 | FR57 | Epic 17 | Configurable settings (VEO3_CLIP_COUNT, VEO3_TIMEOUT_S, VEO3_CROP_BOTTOM_PX) |
 | FR58 | Epic 17 | Clip quality validation (resolution, duration, black-frame) |
 | FR59 | Epic 17 | Semantic/fuzzy narrative anchor matching with skip fallback |
+| FR60 | Epic 18 | Veo3 duration_seconds must use even values only (4/6/8) |
+| FR61 | Epic 18 | Rate limit handling with exponential backoff and sequential submission |
+| FR62 | Epic 18 | Authenticated video download via Gemini Files API URI + API key |
+| FR63 | Epic 18 | Auto-retry failed Veo3 jobs in await gate (transient vs permanent failure) |
+| FR64 | Epic 18 | dispatch_timeout_seconds wired through CLI and bootstrap |
+| FR65 | Epic 19 | Two-pass B-roll overlay assembly (base reel then overlay pass) |
+| FR66 | Epic 19 | Auto-upscale B-roll clips to match segment dimensions (1080x1920) |
+| FR67 | Epic 19 | PTS-offset overlay technique for correct timeline placement |
+| FR68 | Epic 19 | Assembly QA validation for B-roll visual presence and opacity |
+| FR69 | Epic 20 | Download external video clips (YouTube Shorts, arbitrary URLs) via yt-dlp |
+| FR70 | Epic 20 | Content Creator agent auto-discovers relevant external reference clips |
+| FR71 | Epic 20 | CLI --cutaway flag for user-provided external clip URLs with timestamps |
+| FR72 | Epic 20 | Unified B-roll manifest merging Veo3 clips and external documentary clips |
+| FR73 | Epic 20 | Narrative anchor matching for external clips (transcript timestamp mapping) |
 
 ## Epic List
+
+### Epic 18: Veo3 Production Hardening
+Veo3 generation works reliably in automated pipeline runs. Duration constraints enforced (even-only: 4/6/8), rate limits handled with backoff, video download uses authenticated URI, auto-retry distinguishes transient from permanent failures.
+**FRs covered:** FR60-FR64
+
+### Epic 19: B-Roll Assembly Engine
+Reel assembler produces correct full-opacity documentary cutaways using a proven two-pass approach (base reel + overlay pass). B-roll clips auto-upscaled to match segment dimensions. Timeline placement uses PTS-offset technique.
+**FRs covered:** FR65-FR68
+
+### Epic 20: Documentary Cutaway System
+Pipeline can source external video clips (YouTube Shorts, user URLs) and auto-discover relevant reference content. Unified B-roll manifest merges Veo3 and external clips for assembly. Supports both user-directed and agent-suggested placements.
+**FRs covered:** FR69-FR73
 
 ### Epic 1: Project Foundation & Pipeline Orchestration
 Pedro has a running pipeline daemon with the complete skeleton: domain model, FSM, state persistence, agent execution, QA reflection loop, event logging, workspace isolation, and queue management. All Port Protocols defined, systemd service configured, Poetry project scaffolded.
@@ -1093,3 +1119,299 @@ so that the finished short includes animated visuals that enhance the narrative 
 - Integration tests for all placement variants + cutaway audio continuity + no-clip fallback
 
 **Files affected:** `infrastructure/adapters/reel_assembler.py` (new `_build_cutaway_filter()` method + B-roll segment splicing), `workflows/stages/stage-07-assembly.md` (B-roll step), `qa/gate-criteria/assembly-criteria.md` (B-roll validation dimension), tests
+
+## Epic 18: Veo3 Production Hardening
+
+Veo3 generation works reliably in automated pipeline runs. Every bug discovered during the first production run is fixed: duration constraints, rate limits, video download authentication, auto-retry logic, and timeout wiring. No new features — just make the existing Veo3 integration production-grade.
+
+**Production findings source:** First end-to-end run on 2026-02-25, workspace `20260225-131343-911335`
+
+**Implementation order:** 18.1 → 18.2 → 18.3 → 18.4 → 18.5 (18.1-18.3 can be parallelized)
+
+### Story 18.1: Fix Veo3 Duration Constraints
+
+As a pipeline developer,
+I want the adapter to enforce Veo3 API duration constraints (even-only values: 4, 6, 8),
+so that generation requests never fail with `INVALID_ARGUMENT` for out-of-bound durations.
+
+**Acceptance criteria:**
+- `GeminiVeo3Adapter.submit_job()` clamps `prompt.duration_s` to nearest valid even value: odd values round up (5→6, 7→8), values below 4 become 4, values above 8 become 8
+- `duration_seconds` parameter passed as `int`, not `str` (API accepts both but int is canonical)
+- Domain model `Veo3Prompt.duration_s` validation relaxed: accept 0 (auto) or 4-8 (was 5-8)
+- When `duration_s` is 0 (unset), adapter defaults to 6 (middle value)
+- `_convert_prompts()` in orchestrator passes through raw duration — clamping happens in adapter (single responsibility)
+- Unit tests for all clamping edge cases: 0→6, 3→4, 5→6, 7→8, 9→8
+
+**Files affected:** `infrastructure/adapters/gemini_veo3_adapter.py` (clamp logic), `domain/models.py` (relax validation), tests
+
+### Story 18.2: Authenticated Video Download
+
+As a pipeline developer,
+I want completed Veo3 clips to be downloaded via the Gemini Files API with proper authentication,
+so that the await gate can retrieve generated videos instead of failing with "Saving remote videos is not supported".
+
+**Acceptance criteria:**
+- `GeminiVeo3Adapter.download_clip()` fully implemented (currently stub)
+- Uses `operations.get()` with `GenerateVideosOperation(name=op_name)` to poll completed operations
+- Extracts `video.uri` from `op.result.generated_videos[0].video`
+- Downloads via SDK `httpx` client with API key header (not `?key=` query parameter — avoids credential leak in logs/referer)
+- Writes video to `veo3/{variant}.mp4` in workspace
+- `Veo3Job` domain model extended with `operation_name: str` field for resume/re-download capability
+- `Veo3GenerationPort` protocol updated: `submit_job()` returns operation name alongside job status
+- Adapter stores operation references (dict keyed by idempotent_key) for polling without re-submission
+- Handles download failure gracefully: marks job as `failed` with `error_message="download_failed"`
+- Integration test with fake HTTP server or mock
+
+**Files affected:** `infrastructure/adapters/gemini_veo3_adapter.py` (download_clip, operation storage), `domain/models.py` (Veo3Job.operation_name), `domain/ports.py` (Veo3GenerationPort return type), `application/veo3_orchestrator.py` (pass operation refs), `application/veo3_await_gate.py` (call download), tests
+
+### Story 18.3: Rate Limit Handling & Sequential Submission
+
+As a pipeline developer,
+I want Veo3 job submission to handle 429 RESOURCE_EXHAUSTED errors with exponential backoff and sequential submission with delays,
+so that the pipeline doesn't exhaust API quota by firing all jobs simultaneously.
+
+**Acceptance criteria:**
+- `Veo3Orchestrator._submit_all()` changed from `asyncio.gather()` (parallel) to sequential with 5s delay between submissions
+- On 429 RESOURCE_EXHAUSTED: exponential backoff starting at 30s, max 3 retries per job (quota — retriable)
+- On 503 UNAVAILABLE: same backoff strategy (Gemini capacity issues are transient — retriable)
+- On 400 INVALID_ARGUMENT: no retry — permanent user/config error (bad prompt, safety violation). Fail immediately with descriptive error
+- Per-job retry is independent — one job's rate limit doesn't block others beyond the backoff delay
+- After all retries exhausted, job marked as `failed` with `error_message="rate_limited"`
+- Orchestrator logs each retry attempt with delay duration
+- Unit tests for retry logic with fake adapter that simulates 429s
+
+**Files affected:** `application/veo3_orchestrator.py` (sequential submit, retry logic), tests
+
+### Story 18.4: Await Gate Auto-Retry & Failure Classification
+
+As a pipeline developer,
+I want the await gate to auto-retry all-failed job sets and distinguish transient from permanent failures,
+so that a single transient error (missing SDK, rate limit burst) doesn't permanently fail the Veo3 integration.
+
+**Acceptance criteria:**
+- Existing `_all_jobs_failed()` check retained — triggers automatic re-submission when all jobs have `submit_failed` status
+- New failure classification: `submit_failed` and `rate_limited` are retriable; `download_failed`, `generation_failed`, and `invalid_argument` are permanent
+- Auto-retry fires at most once per await gate invocation (no infinite retry loops)
+- After retry, polls normally until completion or timeout
+- If retry submission also fails, proceeds without B-roll (emergency fallback)
+- Await gate accepts `EventBus` in constructor and emits `veo3.gate.retried` event on auto-retry
+- Unit tests for retry trigger conditions and single-retry guard
+
+**Files affected:** `application/veo3_await_gate.py` (failure classification, retry guard, EventBus wiring), tests
+
+### Story 18.5: QA Dispatch Timeout & Clink Fallback Wiring
+
+As a pipeline developer,
+I want QA dispatch timeouts properly wired through CLI and bootstrap, and the clink/Gemini fallback to work reliably,
+so that QA evaluation doesn't timeout on slow hardware and token costs are optimized.
+
+**Acceptance criteria:**
+- `CliBackend` constructor accepts `dispatch_timeout_seconds` (already implemented)
+- `bootstrap.py` passes `dispatch_timeout_seconds=max(300.0, settings.agent_timeout_seconds / 2)` to `CliBackend`
+- `run_cli.py` already wires this — verify consistency with bootstrap path
+- Clink fallback: try Gemini via clink first, check for JSON `{` in response, fall back to Claude Sonnet if not (already implemented — add test coverage)
+- QA prompt size: `_MAX_INLINE_BYTES=15000` and summary-only for `face-position-map.json`, `speaker-timeline.json` (already implemented — add test coverage)
+- Integration tests for timeout propagation and fallback path
+
+**Files affected:** `app/bootstrap.py` (dispatch timeout wiring), `infrastructure/adapters/claude_cli_backend.py` (test coverage), `application/reflection_loop.py` (test coverage), tests
+
+## Epic 19: B-Roll Assembly Engine
+
+Replace the broken single-pass overlay approach in `reel_assembler.py` with a proven two-pass technique. Pass 1 builds the base reel (segments + xfade transitions). Pass 2 overlays B-roll clips at correct timeline positions using PTS-offset + `eof_action=pass`. Auto-upscales clips to match segment dimensions. This is the foundation both Veo3 and external documentary clips depend on.
+
+**Technical insight source:** Production debugging on 2026-02-25 — single-pass `overlay=enable='between(t,...)'` fails after xfade chain due to timestamp domain shift. Two-pass PTS-offset approach (`setpts=PTS-STARTPTS+OFFSET/TB` + `overlay eof_action=pass`) verified working.
+
+**Implementation order:** 19.1 → 19.2 → 19.3 → 19.4
+
+### Story 19.1: Two-Pass Assembly Architecture
+
+As a pipeline developer,
+I want `reel_assembler.py` to use a two-pass approach for B-roll overlay assembly,
+so that documentary cutaways appear at full opacity at correct timeline positions.
+
+**Acceptance criteria:**
+- `assemble_with_broll()` refactored into two explicit passes:
+  - **Pass 1:** `assemble()` builds base reel from segments with xfade transitions → writes temp file
+  - **Pass 2:** New `_overlay_broll()` method reads base reel + B-roll clips → overlays using PTS-offset technique → writes final output
+- PTS-offset overlay: each B-roll clip gets `setpts=PTS-STARTPTS+{insertion_point}/TB` to place it at the correct timeline position
+- Overlay chain: `[0:v][clip1]overlay=eof_action=pass[v1]; [v1][clip2]overlay=eof_action=pass[v2]; ...`
+- Audio from base reel only: `-map '[v]' -map '0:a'` — B-roll clips contribute video only (documentary cutaway model)
+- Temp file cleanup after successful pass 2
+- Falls back to base reel (no B-roll) if pass 2 fails
+- Existing `_build_cutaway_filter()` method removed or deprecated (broken approach)
+- Integration tests: verify full opacity at overlay timestamps via frame extraction + pixel comparison
+
+**Files affected:** `infrastructure/adapters/reel_assembler.py` (two-pass refactor), tests
+
+### Story 19.2: Auto-Upscale B-Roll Clips
+
+As a pipeline developer,
+I want B-roll clips automatically upscaled to match the base reel's dimensions before overlay,
+so that resolution mismatches (e.g., Veo3 720x1280 vs segments 1080x1920) don't cause visual artifacts.
+
+**Acceptance criteria:**
+- New `_ensure_clip_resolution()` method in `reel_assembler.py`: probes clip dimensions via ffprobe, scales to target if mismatched
+- Uses `scale={w}:{h}:flags=lanczos` for quality upscaling
+- Scaling happens before overlay pass (pre-processing step), not inside the filter graph
+- Upscaled clips written to temp directory, cleaned up after assembly
+- If clip is already at target resolution, skip scaling (no-op fast path)
+- Target resolution hardcoded to 1080x1920 (canonical vertical Reel format) — no inference from segments
+- Unit tests for resolution detection, scaling command construction, no-op path
+
+**Files affected:** `infrastructure/adapters/reel_assembler.py` (upscale method), tests
+
+### Story 19.3: B-Roll Fade Transitions
+
+As a pipeline developer,
+I want B-roll clips to fade in/out smoothly at their insertion boundaries,
+so that the cutaway transitions feel polished rather than jarring hard cuts.
+
+**Acceptance criteria:**
+- Each B-roll clip in the overlay pass gets `format=yuva420p,fade=t=in:st=0:d=0.5:alpha=1,fade=t=out:st={dur-0.5}:d=0.5:alpha=1` applied before the PTS shift
+- Edge case: clips shorter than 1.0s get reduced fade duration `min(0.5, dur * 0.4)` to avoid overlapping fades
+- Fade duration configurable (default 0.5s) via parameter on `_overlay_broll()`
+- Fade only affects the video alpha channel — audio continues uninterrupted
+- Integration test: extract frames at fade boundaries, verify gradual opacity change
+- Unit test: short clip (0.8s) gets proportionally shorter fade
+
+**Files affected:** `infrastructure/adapters/reel_assembler.py` (fade in overlay filter), tests
+
+### Story 19.4: Assembly Report B-Roll Section
+
+As a pipeline developer,
+I want the assembly report to include detailed B-roll insertion metadata,
+so that QA and debugging can verify which clips were placed where and identify any issues.
+
+**Acceptance criteria:**
+- `assembly-report.json` includes `broll_summary` section with:
+  - `clips_inserted`: count of successfully overlaid clips
+  - `placements[]`: for each clip — variant, clip_path, insertion_point_s, duration_s, narrative_anchor, original_resolution, upscaled (bool)
+  - `assembly_method`: `"two_pass_overlay"` (distinguishes from legacy approach)
+  - `pass_1_duration_ms`: time taken for base assembly
+  - `pass_2_duration_ms`: time taken for overlay pass
+- Report generated by `reel_assembler.py`, not by the agent
+- Unit tests for report structure
+
+**Files affected:** `infrastructure/adapters/reel_assembler.py` (report generation), tests
+
+## Epic 20: Documentary Cutaway System
+
+Pedro can enrich Reels with external documentary footage sourced from YouTube Shorts, user-provided URLs, or agent-discovered reference clips. The Content Creator agent suggests relevant external videos based on transcript topics. Users can also provide explicit clip URLs via CLI. All external clips merge with Veo3 clips into a unified B-roll manifest for the assembly engine (Epic 19).
+
+**Dependencies:** Epic 19 (two-pass assembly engine) must be complete before 20.6
+**Implementation order:** 20.1 → 20.2 → 20.3 → (20.4 parallel with 20.5) → 20.6
+
+### Story 20.1: External Clip Download & Preparation
+
+As a pipeline developer,
+I want a service that downloads external video clips from YouTube Shorts (and arbitrary URLs) and prepares them for overlay,
+so that external documentary footage can be integrated into the assembly pipeline.
+
+**Acceptance criteria:**
+- New `infrastructure/adapters/external_clip_downloader.py` with `ExternalClipDownloader` class
+- `download(url: str, dest_dir: Path) -> Path | None`: downloads video via `yt-dlp` subprocess (YouTube, TikTok, direct URLs)
+- Return type: `Path` on success, `None` on failure (not pipeline-fatal)
+- Strips audio track (`-an`) — documentary cutaways use base reel audio only
+- Upscales to 1080x1920 if needed (reuses logic from Story 19.2 or delegates to reel_assembler)
+- Validates: file exists, is valid video (ffprobe check), duration > 0
+- Returns path to prepared clip in `external_clips/` subfolder of workspace
+- Handles yt-dlp failures gracefully: logs warning, returns `None` (clip skipped, not pipeline-fatal)
+- `ExternalClipDownloaderPort` protocol in `domain/ports.py` for testability
+- Fake implementation for tests
+- Unit tests for download command construction, error handling
+
+**Files affected:** `infrastructure/adapters/external_clip_downloader.py` (new), `domain/ports.py` (ExternalClipDownloaderPort), tests
+
+### Story 20.2: Cutaway Manifest Domain Model
+
+As a pipeline developer,
+I want a unified `CutawayManifest` domain model that merges Veo3 clips and external clips into a single ordered list for assembly,
+so that the assembly engine has one consistent interface regardless of clip source.
+
+**Acceptance criteria:**
+- New `CutawayClip` frozen dataclass in `domain/models.py`: `source` (enum: `veo3`, `external`, `user_provided`), `variant`, `clip_path`, `insertion_point_s`, `duration_s`, `narrative_anchor`, `match_confidence`
+- New `CutawayManifest` frozen dataclass: `clips: tuple[CutawayClip, ...]`, ordered by `insertion_point_s`
+- Factory method `CutawayManifest.from_broll_and_external(broll: tuple[BrollPlacement, ...], external: tuple[CutawayClip, ...]) -> CutawayManifest` — merges, sorts, detects overlaps
+- Overlap detection: if two clips overlap in time, the one with higher `match_confidence` wins; tie-break by source priority: `user_provided` > `veo3` > `external`. Dropped clip logged at WARNING level
+- Overlap detection is a pure domain function (no I/O, no logging side effects) — returns `(kept, dropped)` tuple; caller handles logging
+- `reel_assembler.assemble_with_broll()` updated to accept `CutawayManifest` instead of `tuple[BrollPlacement, ...]`
+- Backward compatible: existing `BrollPlacement` converts to `CutawayClip` with `source=veo3`
+- Unit tests for merge, sort, overlap resolution, tie-break priority
+
+**Files affected:** `domain/models.py` (CutawayClip, CutawayManifest), `infrastructure/adapters/reel_assembler.py` (accept CutawayManifest), tests
+
+### Story 20.3: CLI --cutaway Flag for User-Provided Clips
+
+As a pipeline user,
+I want to provide external video URLs via `--cutaway` CLI flag with target timestamps,
+so that I can manually specify documentary footage to insert at specific narrative moments.
+
+**Acceptance criteria:**
+- New CLI flag: `--cutaway URL@TIMESTAMP` (repeatable), e.g., `--cutaway 'https://youtube.com/shorts/abc@30'`
+- Parses URL and insertion timestamp by splitting on the **last** `@` character (URLs can contain `@` in paths/userinfo), e.g., `https://example.com/@user/video@30` → URL=`https://example.com/@user/video`, timestamp=`30`
+- Downloads each clip via `ExternalClipDownloader` during pipeline setup (before stage 1)
+- Clip duration auto-detected from downloaded file via ffprobe
+- Creates `external_clips/cutaway-{n}.mp4` files in workspace
+- Writes `external-clips.json` manifest: `[{url, clip_path, insertion_point_s, duration_s}]`
+- Assembly stage reads `external-clips.json` + `veo3/jobs.json` → builds unified `CutawayManifest`
+- If download fails for one URL, others still proceed (partial success)
+- Help text documents the format and examples
+
+**Files affected:** `scripts/run_cli.py` (--cutaway flag, download orchestration), `external-clips.json` (new manifest), tests
+
+### Story 20.4: Content Creator Agent External Clip Suggestions
+
+As a pipeline user,
+I want the Content Creator agent to suggest relevant external reference clips based on transcript topics,
+so that documentary footage is automatically discovered without manual URL hunting.
+
+**Acceptance criteria:**
+- Content Creator agent prompt updated: after generating `veo3_prompts`, also generates `external_clip_suggestions[]`
+- Each suggestion: `{search_query, narrative_anchor, expected_content, duration_s, insertion_point_description}`
+- Agent uses transcript context to identify moments where real-world footage would enhance the narrative
+- Suggestions are advisory — a downstream service resolves them to actual URLs
+- `publishing-assets.json` schema extended with `external_clip_suggestions[]` array
+- QA gate validates suggestion structure (has search_query, has narrative_anchor)
+- Agent generates 0-3 suggestions (conservative — quality over quantity)
+
+**Files affected:** `workflows/stages/stage-04-content.md` (agent prompt update), `publishing-assets.json` schema, tests
+
+### Story 20.5: External Clip Search & Resolution
+
+As a pipeline developer,
+I want a service that resolves Content Creator clip suggestions into downloadable URLs by searching YouTube,
+so that agent-suggested documentary clips are automatically sourced without user intervention.
+
+**Acceptance criteria:**
+- New `application/external_clip_resolver.py` with `ExternalClipResolver` class
+- `resolve(suggestion: dict) -> str | None`: uses `yt-dlp --flat-playlist "ytsearch1:{query}"` to find top YouTube Short matching the search query
+- Filters: vertical format (Shorts), duration under 60s, relevance
+- Returns URL of best match, or None if no suitable result found
+- Launched as a fire-and-forget `asyncio.Task` by `pipeline_runner` after Content stage, alongside Veo3 generation
+- Task stored in `PipelineRunner._background_tasks` dict for lifecycle management (cancel on pipeline abort, await on assembly)
+- Downloads resolved clips via `ExternalClipDownloader` (Story 20.1)
+- Writes resolved clips to `external_clips/` with manifest
+- Rate-limited: max 3 searches per run, 2s delay between searches
+- Falls back gracefully: if YouTube search fails, external clips are simply not included
+- Task exception handling: unhandled errors logged + result set to empty (no clips), never crashes pipeline
+
+**Files affected:** `application/external_clip_resolver.py` (new), `application/pipeline_runner.py` (background task lifecycle), tests
+
+### Story 20.6: Unified Assembly Integration
+
+As a pipeline developer,
+I want the assembly stage to merge Veo3 clips and external documentary clips into a single cutaway manifest and overlay them in the final reel,
+so that all B-roll sources are handled consistently with correct timeline placement.
+
+**Acceptance criteria:**
+- Assembly stage (pipeline_runner or stage 7 agent) reads both `veo3/jobs.json` and `external-clips.json`
+- Converts both to `CutawayClip` instances, builds `CutawayManifest` via factory method
+- Passes manifest to `reel_assembler.assemble_with_broll()`
+- Assembly report `broll_summary.placements[]` includes source field (`veo3` vs `external` vs `user_provided`)
+- Works with any combination: Veo3 only, external only, both, neither
+- Pipeline runner wires external clip download as background task after CONTENT stage (parallel with Veo3)
+- Await gate waits for both Veo3 and external clip background tasks before proceeding to assembly
+- Cross-epic dependency: requires Epic 19 (two-pass assembly) and Stories 20.1-20.2 (downloader + manifest model)
+- Integration tests for all source combinations
+
+**Files affected:** `application/pipeline_runner.py` (unified manifest construction, background task await), `infrastructure/adapters/reel_assembler.py` (accepts CutawayManifest), `application/veo3_await_gate.py` (wait for external clips too), tests
