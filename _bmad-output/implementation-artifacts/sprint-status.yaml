@@ -163,3 +163,6 @@ development_status:
   17-6-veo3-clip-post-processing-quality-validation: done
   17-7-await-gate-pipeline-stage: done
   17-8-assembly-stage-broll-insertion: done
+
+  epic-19: in-progress
+  19-3-broll-fade-transitions: review

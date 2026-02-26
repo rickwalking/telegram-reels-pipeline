@@ -224,19 +224,22 @@ class ReelAssembler:
         while the base audio continues uninterrupted.  The overlay fades
         in/out at the boundaries for a polished cutaway look.
 
+        Short clips are clamped so fade never exceeds 40% of clip duration.
+
         Audio stays as the base segment's audio — no audio from B-roll
         (it is treated as silent visual footage).
         """
+        eff_fade = round(min(fade_duration, cutaway_duration_s * 0.4), 4)
         start = insertion_point_s
         end = insertion_point_s + cutaway_duration_s
-        fade_out_start = end - fade_duration
+        fade_out_start = round(cutaway_duration_s - eff_fade, 4)
 
         return (
             f"[{broll_input_index}:v]setpts=PTS-STARTPTS,"
             f"scale=1080:1920,"
             f"format=yuva420p,"
-            f"fade=t=in:st=0:d={fade_duration}:alpha=1,"
-            f"fade=t=out:st={fade_out_start - start}:d={fade_duration}:alpha=1"
+            f"fade=t=in:st=0:d={eff_fade}:alpha=1,"
+            f"fade=t=out:st={fade_out_start}:d={eff_fade}:alpha=1"
             f"[broll{broll_input_index}];"
             f"[{base_segment_index}:v]"
             f"[broll{broll_input_index}]"
@@ -250,6 +253,7 @@ class ReelAssembler:
         output: Path,
         broll_placements: tuple[BrollPlacement, ...],
         transitions: tuple[TransitionSpec, ...] | None = None,
+        fade_duration: float = 0.5,
     ) -> Path:
         """Assemble segments with documentary cutaway B-roll insertion.
 
@@ -257,6 +261,9 @@ class ReelAssembler:
         For each valid B-roll clip, builds a cutaway overlay filter that
         plays the B-roll video over the base while keeping the base audio.
         Falls back to :meth:`assemble` without B-roll on FFmpeg failure.
+
+        *fade_duration* controls the alpha fade-in/out length (seconds) for
+        each B-roll overlay.  Short clips are clamped to 40% of clip duration.
         """
         if not broll_placements:
             return await self.assemble(segments, output, transitions=transitions)
@@ -275,7 +282,9 @@ class ReelAssembler:
             return await self.assemble(segments, output, transitions=transitions)
 
         try:
-            return await self._assemble_with_cutaways(segments, output, valid_placements, transitions)
+            return await self._assemble_with_cutaways(
+                segments, output, valid_placements, transitions, fade_duration=fade_duration
+            )
         except AssemblyError as exc:
             logger.warning("Cutaway assembly failed (%s), falling back to plain assembly", exc.message)
             return await self.assemble(segments, output, transitions=transitions)
@@ -286,6 +295,8 @@ class ReelAssembler:
         output: Path,
         placements: list[BrollPlacement],
         transitions: tuple[TransitionSpec, ...] | None,
+        *,
+        fade_duration: float = 0.5,
     ) -> Path:
         """Internal: build and run the FFmpeg command with cutaway overlays."""
         if not segments:
@@ -325,16 +336,19 @@ class ReelAssembler:
             is_last = i == len(placements) - 1
             out_label = "[v]" if is_last else f"[vcut{i}]"
 
+            # Clamp fade for short clips: effective fade <= 40% of clip duration
+            eff_fade = round(min(fade_duration, bp.duration_s * 0.4), 4)
+
             start = bp.insertion_point_s
             end = bp.insertion_point_s + bp.duration_s
-            fade_out_start = bp.duration_s - 0.5
+            fade_out_start = round(bp.duration_s - eff_fade, 4)
 
             broll_filter = (
                 f"[{broll_idx}:v]setpts=PTS-STARTPTS,"
                 f"scale=1080:1920,"
                 f"format=yuva420p,"
-                f"fade=t=in:st=0:d=0.5:alpha=1,"
-                f"fade=t=out:st={fade_out_start}:d=0.5:alpha=1"
+                f"fade=t=in:st=0:d={eff_fade}:alpha=1,"
+                f"fade=t=out:st={fade_out_start}:d={eff_fade}:alpha=1"
                 f"[broll{broll_idx}];"
                 f"{current_video}"
                 f"[broll{broll_idx}]"
