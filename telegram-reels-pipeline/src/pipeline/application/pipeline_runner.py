@@ -339,6 +339,7 @@ class PipelineRunner:
         # Await external clips background task before assembly
         if stage == PipelineStage.ASSEMBLY:
             await self._await_external_clips()
+            await self._build_cutaway_manifest(workspace)
 
         if stage == PipelineStage.VEO3_AWAIT:
             await self._run_veo3_await_gate(workspace, state.run_id)
@@ -528,6 +529,59 @@ class PipelineRunner:
             await task
         except Exception:
             logger.warning("External clips background task failed", exc_info=True)
+
+    async def _build_cutaway_manifest(self, workspace: Path) -> None:
+        """Build a unified cutaway manifest from Veo3 and external clips.
+
+        Reads ``encoding-plan.json`` for segments and total duration, creates
+        a ``ManifestBuilder`` with ``BrollPlacer``, and writes the resulting
+        ``cutaway-manifest.json``.  Non-fatal: pipeline continues without
+        manifest on failure.
+        """
+        import json as _json
+
+        try:
+            plan_path = workspace / "encoding-plan.json"
+            raw = await asyncio.to_thread(plan_path.read_text)
+            plan = _json.loads(raw)
+        except (FileNotFoundError, _json.JSONDecodeError, OSError) as exc:
+            logger.debug("Cannot read encoding-plan.json for cutaway manifest: %s", exc)
+            return
+
+        commands = plan.get("commands", [])
+        segments: list[dict[str, object]] = []
+        for cmd in commands:
+            seg: dict[str, object] = {}
+            if "start_s" in cmd:
+                seg["start_s"] = cmd["start_s"]
+            if "end_s" in cmd:
+                seg["end_s"] = cmd["end_s"]
+            if "transcript_text" in cmd:
+                seg["transcript_text"] = cmd["transcript_text"]
+            if seg:
+                segments.append(seg)
+
+        total_duration = float(plan.get("total_duration_seconds", 0.0))
+        if total_duration <= 0 and commands:
+            # Fall back to last segment end_s
+            last_end = commands[-1].get("end_s", 0.0)
+            total_duration = float(last_end) if last_end else 0.0
+
+        try:
+            from pipeline.application.broll_placer import BrollPlacer
+            from pipeline.application.manifest_builder import ManifestBuilder
+
+            builder = ManifestBuilder(BrollPlacer())
+            manifest, dropped = await builder.build(workspace, segments, total_duration)
+            path = await builder.write_manifest(manifest, dropped, workspace)
+            logger.info(
+                "Cutaway manifest built: %d clips, %d dropped -> %s",
+                len(manifest.clips),
+                len(dropped),
+                path.name,
+            )
+        except Exception:
+            logger.warning("Cutaway manifest build failed — continuing without manifest", exc_info=True)
 
     async def _execute_delivery(self, artifacts: tuple[Path, ...], workspace: Path) -> None:
         """Run the delivery stage \u2014 send video + content to user."""

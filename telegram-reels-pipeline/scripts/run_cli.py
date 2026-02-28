@@ -664,6 +664,56 @@ async def _run_veo3_await_gate(
         print("  [VEO3] Await gate failed — continuing without B-roll")
 
 
+async def _build_cutaway_manifest(workspace: Path) -> None:
+    """Build unified cutaway manifest from Veo3 and external clips.
+
+    Reads ``encoding-plan.json`` for segments and total duration, then
+    merges Veo3 and external clips into ``cutaway-manifest.json``.
+    Non-fatal: pipeline continues without manifest on failure.
+    """
+    plan_path = workspace / "encoding-plan.json"
+    if not plan_path.exists():
+        return
+
+    try:
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.debug("Cannot read encoding-plan.json for cutaway manifest: %s", exc)
+        return
+
+    commands = plan.get("commands", [])
+    segments: list[dict[str, object]] = []
+    for cmd in commands:
+        seg: dict[str, object] = {}
+        if "start_s" in cmd:
+            seg["start_s"] = cmd["start_s"]
+        if "end_s" in cmd:
+            seg["end_s"] = cmd["end_s"]
+        if "transcript_text" in cmd:
+            seg["transcript_text"] = cmd["transcript_text"]
+        if seg:
+            segments.append(seg)
+
+    total_duration = float(plan.get("total_duration_seconds", 0.0))
+    if total_duration <= 0 and commands:
+        last_end = commands[-1].get("end_s", 0.0)
+        total_duration = float(last_end) if last_end else 0.0
+
+    try:
+        from pipeline.application.broll_placer import BrollPlacer
+        from pipeline.application.manifest_builder import ManifestBuilder
+
+        builder = ManifestBuilder(BrollPlacer())
+        manifest, dropped = await builder.build(workspace, segments, total_duration)
+        path = await builder.write_manifest(manifest, dropped, workspace)
+        print(
+            f"  [MANIFEST] Built cutaway manifest: {len(manifest.clips)} clips, {len(dropped)} dropped -> {path.name}"
+        )
+    except Exception:
+        logger.warning("Cutaway manifest build failed — continuing without manifest", exc_info=True)
+        print("  [MANIFEST] Build failed — continuing without cutaway manifest")
+
+
 async def _run_stages(
     stages: tuple[tuple[PipelineStage, str, str, str], ...],
     start_stage: int,
@@ -728,6 +778,10 @@ async def _run_stages(
             if stage == PipelineStage.ASSEMBLY and veo3_task is not None:
                 await _run_veo3_await_gate(veo3_task, veo3_adapter, workspace, settings)
                 veo3_task = None
+
+            # Pre-stage hook: build cutaway manifest before Assembly
+            if stage == PipelineStage.ASSEMBLY:
+                await _build_cutaway_manifest(workspace)
 
             if stage == PipelineStage.ROUTER:
                 result, artifacts = await _run_router_with_elicitation(
