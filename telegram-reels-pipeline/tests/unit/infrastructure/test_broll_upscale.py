@@ -241,9 +241,13 @@ class TestAssembleWithBrollUpscale:
         assembler = ReelAssembler()
 
         with (
+            patch.object(
+                assembler, "_probe_resolution", new_callable=AsyncMock, return_value=(1080, 1920)
+            ),
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(str(clip))),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
+            patch.object(assembler, "_write_broll_report"),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil") as mock_shutil,
         ):
@@ -266,6 +270,9 @@ class TestAssembleWithBrollUpscale:
         assembler = ReelAssembler()
 
         with (
+            patch.object(
+                assembler, "_probe_resolution", new_callable=AsyncMock, return_value=(1080, 1920)
+            ),
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(str(clip))),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
             patch.object(
@@ -303,9 +310,13 @@ class TestAssembleWithBrollUpscale:
             return out
 
         with (
+            patch.object(
+                assembler, "_probe_resolution", new_callable=AsyncMock, return_value=(720, 1280)
+            ),
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=upscaled_path),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
             patch.object(assembler, "_overlay_broll", side_effect=capture_overlay),
+            patch.object(assembler, "_write_broll_report"),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil"),
         ):
@@ -338,6 +349,9 @@ class TestAssembleWithBrollUpscale:
 
         with (
             patch.object(
+                assembler, "_probe_resolution", new_callable=AsyncMock, return_value=(1080, 1920)
+            ),
+            patch.object(
                 assembler,
                 "_ensure_clip_resolution",
                 new_callable=AsyncMock,
@@ -345,6 +359,7 @@ class TestAssembleWithBrollUpscale:
             ),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
             patch.object(assembler, "_overlay_broll", side_effect=capture_overlay),
+            patch.object(assembler, "_write_broll_report"),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil"),
         ):
