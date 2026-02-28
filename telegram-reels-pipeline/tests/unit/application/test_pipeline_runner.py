@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from pipeline.application.pipeline_runner import _STAGE_SEQUENCE, PipelineRunner, _generate_run_id
 from pipeline.domain.enums import EscalationState, PipelineStage, QADecision, QAStatus
@@ -381,3 +382,130 @@ class TestPipelineRunnerResume:
         calls = cli_backend.set_workspace.call_args_list
         assert calls[0].args[0] == workspace
         assert calls[1].args[0] is None
+
+
+class TestExternalClipBackgroundTask:
+    """Tests for external clip resolution background task lifecycle."""
+
+    @staticmethod
+    def _make_runner_with_downloader(
+        tmp_path: Path,
+        downloader: object | None = None,
+    ) -> PipelineRunner:
+        return PipelineRunner(
+            stage_runner=MagicMock(run_stage=AsyncMock(return_value=_make_reflection_result())),
+            state_store=MagicMock(save_state=AsyncMock()),
+            event_bus=MagicMock(publish=AsyncMock()),
+            delivery_handler=None,
+            workflows_dir=Path("/wf"),
+            external_clip_downloader=downloader,  # type: ignore[arg-type]
+        )
+
+    async def test_background_task_launched_after_content(self, tmp_path: Path) -> None:
+        downloader = AsyncMock()
+        downloader.download = AsyncMock(return_value=None)
+        runner = self._make_runner_with_downloader(tmp_path, downloader)
+
+        # Write publishing-assets.json with suggestions
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        assets = {"external_clip_suggestions": [{"search_query": "ocean"}]}
+        (workspace / "publishing-assets.json").write_text(json.dumps(assets))
+
+        # Patch _search_youtube to avoid real yt-dlp calls
+        with patch(
+            "pipeline.application.external_clip_resolver.ExternalClipResolver._search_youtube",
+            return_value=None,
+        ):
+            result = await runner.run(_make_item(), workspace)
+
+        assert result.current_stage == PipelineStage.COMPLETED
+
+    async def test_no_task_when_downloader_is_none(self, tmp_path: Path) -> None:
+        runner = self._make_runner_with_downloader(tmp_path, downloader=None)
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+
+        result = await runner.run(_make_item(), workspace)
+
+        assert result.current_stage == PipelineStage.COMPLETED
+        assert "external_clips" not in runner._background_tasks
+
+    async def test_background_task_stored_in_dict(self, tmp_path: Path) -> None:
+        downloader = AsyncMock()
+        downloader.download = AsyncMock(return_value=None)
+        runner = self._make_runner_with_downloader(tmp_path, downloader)
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        assets = {"external_clip_suggestions": [{"search_query": "nature"}]}
+        (workspace / "publishing-assets.json").write_text(json.dumps(assets))
+
+        task_seen = False
+
+        original_dispatch = runner._dispatch_stage.__func__  # type: ignore[attr-defined]
+
+        async def spy_dispatch(self_inner, stage, ws, artifacts, item, state):  # type: ignore[no-untyped-def]
+            nonlocal task_seen
+            # Check after CONTENT but before next stage
+            if stage == PipelineStage.LAYOUT_DETECTIVE:
+                task_seen = "external_clips" in self_inner._background_tasks
+            return await original_dispatch(self_inner, stage, ws, artifacts, item, state)
+
+        with (
+            patch.object(type(runner), "_dispatch_stage", spy_dispatch),
+            patch(
+                "pipeline.application.external_clip_resolver.ExternalClipResolver._search_youtube",
+                return_value=None,
+            ),
+        ):
+            await runner.run(_make_item(), workspace)
+
+        assert task_seen
+
+    async def test_background_task_failure_does_not_crash_pipeline(self, tmp_path: Path) -> None:
+        downloader = AsyncMock()
+        downloader.download = AsyncMock(return_value=None)
+        runner = self._make_runner_with_downloader(tmp_path, downloader)
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        assets = {"external_clip_suggestions": [{"search_query": "will-fail"}]}
+        (workspace / "publishing-assets.json").write_text(json.dumps(assets))
+
+        with patch(
+            "pipeline.application.external_clip_resolver.ExternalClipResolver._search_youtube",
+            side_effect=RuntimeError("Search engine down"),
+        ):
+            result = await runner.run(_make_item(), workspace)
+
+        # Pipeline should still complete despite external clip failure
+        assert result.current_stage == PipelineStage.COMPLETED
+
+    async def test_no_suggestions_is_noop(self, tmp_path: Path) -> None:
+        downloader = AsyncMock()
+        runner = self._make_runner_with_downloader(tmp_path, downloader)
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        assets = {"descriptions": [{"text": "No clips"}]}
+        (workspace / "publishing-assets.json").write_text(json.dumps(assets))
+
+        result = await runner.run(_make_item(), workspace)
+
+        assert result.current_stage == PipelineStage.COMPLETED
+        # No manifest should be written if no suggestions
+        assert not (workspace / "external-clips.json").exists()
+
+    async def test_missing_publishing_assets_is_noop(self, tmp_path: Path) -> None:
+        downloader = AsyncMock()
+        runner = self._make_runner_with_downloader(tmp_path, downloader)
+
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        # No publishing-assets.json at all
+
+        result = await runner.run(_make_item(), workspace)
+
+        assert result.current_stage == PipelineStage.COMPLETED
