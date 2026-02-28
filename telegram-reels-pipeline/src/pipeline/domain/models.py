@@ -348,13 +348,25 @@ class LocalizedDescription:
             raise ValueError("text must not be empty")
 
 
+def _validate_clip_suggestions(suggestions: tuple[Mapping[str, Any], ...]) -> None:
+    """Validate external clip suggestions — max 3, each with required keys."""
+    if len(suggestions) > 3:
+        raise ValueError(f"external_clip_suggestions must have 0-3 items, got {len(suggestions)}")
+    required_keys = {"search_query", "narrative_anchor"}
+    for i, suggestion in enumerate(suggestions):
+        missing = required_keys - set(suggestion.keys())
+        if missing:
+            raise ValueError(f"external_clip_suggestions[{i}] missing required keys: {sorted(missing)}")
+
+
 @dataclass(frozen=True)
 class PublishingAssets:
-    """Publishing assets — localized descriptions, hashtags, and Veo 3 prompts."""
+    """Publishing assets — localized descriptions, hashtags, Veo 3 prompts, and clip suggestions."""
 
     descriptions: tuple[LocalizedDescription, ...]
     hashtags: tuple[str, ...]
     veo3_prompts: tuple[Veo3Prompt, ...]
+    external_clip_suggestions: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
         if not self.descriptions:
@@ -376,6 +388,7 @@ class PublishingAssets:
             raise ValueError("veo3_prompts must have unique variants")
         if Veo3PromptVariant.BROLL.value not in variants:
             raise ValueError("veo3_prompts must include a 'broll' variant")
+        _validate_clip_suggestions(self.external_clip_suggestions)
 
 
 @dataclass(frozen=True)

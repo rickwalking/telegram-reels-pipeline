@@ -13,7 +13,7 @@ Generate an Instagram content package — descriptions, hashtags, and music sugg
 ## Expected Outputs
 
 - **content.json**: Instagram content package
-- **publishing-assets.json** (conditional): Localized descriptions, hashtags, and Veo 3 prompts — only when `publishing_language` is set in elicitation context
+- **publishing-assets.json** (conditional): Localized descriptions, hashtags, Veo 3 prompts, and optional external clip suggestions — only when `publishing_language` is set in elicitation context
 
 ```json
 {
@@ -29,6 +29,31 @@ Generate an Instagram content package — descriptions, hashtags, and music sugg
 ```
 
 **CRITICAL**: `music_suggestion` is a singular string, NOT an array. The parser reads `data.get("music_suggestion", "")`.
+
+### publishing-assets.json schema
+
+```json
+{
+  "descriptions": [
+    {"language": "pt-BR", "text": "Descricao do episodio..."}
+  ],
+  "hashtags": ["#podcast", "#tecnologia"],
+  "veo3_prompts": [
+    {"variant": "broll", "prompt": "Cinematic slow-motion..."}
+  ],
+  "external_clip_suggestions": [
+    {
+      "search_query": "SpaceX rocket landing slow motion",
+      "narrative_anchor": "they talk about the rocket landing perfectly",
+      "expected_content": "Footage of a SpaceX booster landing on a drone ship",
+      "duration_s": 8,
+      "insertion_point_description": "After the host describes the landing sequence"
+    }
+  ]
+}
+```
+
+`external_clip_suggestions` is optional (empty array or absent). Maximum 3 suggestions.
 
 ## Instructions
 
@@ -46,6 +71,12 @@ Generate an Instagram content package — descriptions, hashtags, and music sugg
 9. **Generate localized hashtags** — 10-15 hashtags relevant to the target language community. Each must start with `#`.
 10. **Generate 1-4 Veo 3 prompts** based on visual themes from the moment. Always include a `broll` variant. Prompts are always in English using cinematic language. Allowed variants: `intro`, `broll`, `outro`, `transition`. Each must have `variant` and `prompt` fields.
 11. **Output valid JSON** as `publishing-assets.json` using the Write tool. This file is SEPARATE from `content.json`. Must be parseable by `publishing_assets_parser.py`. **If this file is missing when `publishing_language` is configured, QA will FAIL the stage.**
+12. **Generate external clip suggestions** (optional, 0-3). For each moment where real-world footage would enhance the narrative, suggest a search query. Quality over quantity — only suggest clips that genuinely add documentary value. Include suggestions in `publishing-assets.json` under `external_clip_suggestions`. Each suggestion:
+    - `search_query`: YouTube search terms (e.g., "SpaceX rocket landing slow motion")
+    - `narrative_anchor`: exact transcript text this clip should accompany
+    - `expected_content`: brief description of what the clip should show
+    - `duration_s`: suggested clip duration (3-15 seconds)
+    - `insertion_point_description`: when in the reel this clip should appear (e.g., "after the host mentions the launch")
 
 ## Constraints
 
