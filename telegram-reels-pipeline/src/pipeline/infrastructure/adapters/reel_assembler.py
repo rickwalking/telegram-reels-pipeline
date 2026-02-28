@@ -12,7 +12,7 @@ from pathlib import Path
 
 from pipeline.domain.enums import TransitionKind
 from pipeline.domain.errors import PipelineError
-from pipeline.domain.models import BrollPlacement
+from pipeline.domain.models import BrollPlacement, CutawayManifest
 
 logger = logging.getLogger(__name__)
 
@@ -382,11 +382,14 @@ class ReelAssembler:
         self,
         segments: list[Path],
         output: Path,
-        broll_placements: tuple[BrollPlacement, ...],
+        manifest: CutawayManifest,
         transitions: tuple[TransitionSpec, ...] | None = None,
         fade_duration: float = 0.5,
     ) -> Path:
         """Two-pass assembly: base reel first, then B-roll overlay.
+
+        Accepts a :class:`CutawayManifest` and converts its clips to
+        :class:`BrollPlacement` for overlay compatibility.
 
         **Pass 1** — assemble segments (with optional xfade transitions)
         into a temporary base reel via :meth:`assemble`.
@@ -398,6 +401,19 @@ class ReelAssembler:
         Short clips are clamped to 40% of clip duration.
         Falls back to the base reel (no B-roll) when Pass 2 fails.
         """
+        # Convert CutawayClip to BrollPlacement for overlay compatibility
+        broll_placements = tuple(
+            BrollPlacement(
+                variant=c.variant,
+                clip_path=c.clip_path,
+                insertion_point_s=c.insertion_point_s,
+                duration_s=c.duration_s,
+                narrative_anchor=c.narrative_anchor,
+                match_confidence=c.match_confidence,
+            )
+            for c in manifest.clips
+        )
+
         if not broll_placements:
             return await self.assemble(segments, output, transitions=transitions)
 

@@ -600,6 +600,131 @@ class BrollPlacement:
             raise ValueError(f"match_confidence must be 0.0-1.0, got {self.match_confidence}")
 
 
+@unique
+class ClipSource(StrEnum):
+    """Source type for cutaway clips."""
+
+    VEO3 = "veo3"
+    EXTERNAL = "external"
+    USER_PROVIDED = "user_provided"
+
+
+@dataclass(frozen=True)
+class CutawayClip:
+    """A single cutaway clip from any source, positioned on the timeline."""
+
+    source: ClipSource
+    variant: str
+    clip_path: str
+    insertion_point_s: float
+    duration_s: float
+    narrative_anchor: str
+    match_confidence: float
+
+    def __post_init__(self) -> None:
+        if not self.clip_path:
+            raise ValueError("clip_path must not be empty")
+        if self.duration_s <= 0:
+            raise ValueError(f"duration_s must be positive, got {self.duration_s}")
+        if not (0.0 <= self.match_confidence <= 1.0):
+            raise ValueError(f"match_confidence must be in [0.0, 1.0], got {self.match_confidence}")
+
+    @property
+    def end_s(self) -> float:
+        """End time of this clip on the timeline."""
+        return self.insertion_point_s + self.duration_s
+
+
+# Source priority for overlap tie-breaking (lower = higher priority)
+_SOURCE_PRIORITY: dict[ClipSource, int] = {
+    ClipSource.USER_PROVIDED: 0,
+    ClipSource.VEO3: 1,
+    ClipSource.EXTERNAL: 2,
+}
+
+
+def resolve_overlaps(
+    clips: tuple[CutawayClip, ...],
+) -> tuple[tuple[CutawayClip, ...], tuple[CutawayClip, ...]]:
+    """Resolve overlapping clips by confidence and source priority.
+
+    Returns (kept, dropped) tuples. Pure function — no I/O, no logging.
+    """
+    if len(clips) <= 1:
+        return clips, ()
+
+    # Sort by insertion_point_s for pairwise comparison
+    sorted_clips = sorted(clips, key=lambda c: c.insertion_point_s)
+
+    dropped_ids: set[int] = set()
+
+    for i in range(len(sorted_clips)):
+        if i in dropped_ids:
+            continue
+        for j in range(i + 1, len(sorted_clips)):
+            if j in dropped_ids:
+                continue
+            a = sorted_clips[i]
+            b = sorted_clips[j]
+            # Check overlap: a starts before b ends AND b starts before a ends
+            if a.insertion_point_s < b.end_s and b.insertion_point_s < a.end_s:
+                # Determine loser
+                if a.match_confidence > b.match_confidence:
+                    dropped_ids.add(j)
+                elif b.match_confidence > a.match_confidence:
+                    dropped_ids.add(i)
+                    break  # i is dropped, stop comparing it
+                else:
+                    # Tie: lower _SOURCE_PRIORITY value wins
+                    a_priority = _SOURCE_PRIORITY.get(a.source, 99)
+                    b_priority = _SOURCE_PRIORITY.get(b.source, 99)
+                    if a_priority <= b_priority:
+                        dropped_ids.add(j)
+                    else:
+                        dropped_ids.add(i)
+                        break  # i is dropped
+
+    kept = tuple(c for idx, c in enumerate(sorted_clips) if idx not in dropped_ids)
+    dropped = tuple(c for idx, c in enumerate(sorted_clips) if idx in dropped_ids)
+    return kept, dropped
+
+
+@dataclass(frozen=True)
+class CutawayManifest:
+    """Unified manifest of all cutaway clips, sorted by insertion time."""
+
+    clips: tuple[CutawayClip, ...]
+
+    def __post_init__(self) -> None:
+        for i in range(1, len(self.clips)):
+            if self.clips[i].insertion_point_s < self.clips[i - 1].insertion_point_s:
+                raise ValueError("clips must be sorted by insertion_point_s")
+
+    @staticmethod
+    def from_broll_and_external(
+        broll: tuple[BrollPlacement, ...],
+        external: tuple[CutawayClip, ...] = (),
+    ) -> tuple[CutawayManifest, tuple[CutawayClip, ...]]:
+        """Merge, resolve overlaps, sort. Returns (manifest, dropped_clips)."""
+        # Convert BrollPlacement to CutawayClip
+        converted = tuple(
+            CutawayClip(
+                source=ClipSource.VEO3,
+                variant=bp.variant,
+                clip_path=bp.clip_path,
+                insertion_point_s=bp.insertion_point_s,
+                duration_s=bp.duration_s,
+                narrative_anchor=bp.narrative_anchor,
+                match_confidence=bp.match_confidence,
+            )
+            for bp in broll
+        )
+        combined = converted + external
+        kept, dropped = resolve_overlaps(combined)
+        kept_sorted = tuple(sorted(kept, key=lambda c: c.insertion_point_s))
+        return CutawayManifest(clips=kept_sorted), dropped
+
+
 @dataclass(frozen=True)
 class ResourceSnapshot:
     """Point-in-time system resource measurements."""

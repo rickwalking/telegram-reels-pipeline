@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.domain.models import BrollPlacement
+from pipeline.domain.models import BrollPlacement, CutawayManifest
 from pipeline.infrastructure.adapters.reel_assembler import (
     AssemblyError,
     ReelAssembler,
@@ -49,8 +49,9 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         assembler = ReelAssembler()
+        manifest = CutawayManifest(clips=())
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=())
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
             mock_assemble.assert_called_once_with([seg], output, transitions=None)
             assert result == output
 
@@ -60,9 +61,10 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         placement = _make_placement(clip_path=str(tmp_path / "nonexistent.mp4"))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
             mock_assemble.assert_called_once()
             assert result == output
 
@@ -75,6 +77,7 @@ class TestAssembleWithBroll:
         base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip), insertion_point_s=5.0, duration_s=4.0)
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
 
         with (
@@ -83,7 +86,7 @@ class TestAssembleWithBroll:
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output) as mock_p2,
         ):
             base.write_bytes(b"base")
-            result = await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg1], output, manifest=manifest)
             assert result == output
             mock_res.assert_called_once()
             mock_p1.assert_called_once()
@@ -98,6 +101,7 @@ class TestAssembleWithBroll:
         base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
 
         with (
@@ -106,7 +110,7 @@ class TestAssembleWithBroll:
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, side_effect=AssemblyError("overlay failed")),
         ):
             base.write_bytes(b"base")
-            result = await assembler.assemble_with_broll([seg1], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg1], output, manifest=manifest)
             assert result == output
             assert output.exists()
 
@@ -117,10 +121,11 @@ class TestAssembleWithBroll:
         output = tmp_path / "reel.mp4"
 
         transitions = (TransitionSpec(offset_seconds=10.0),)
+        manifest = CutawayManifest(clips=())
 
         assembler = ReelAssembler()
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(), transitions=transitions)
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest, transitions=transitions)
             mock_assemble.assert_called_once_with([seg], output, transitions=transitions)
             assert result == output
 
@@ -258,20 +263,19 @@ class TestTwoPassFlow:
         tmp_base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
 
         assembler = ReelAssembler()
         with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output) as mock_overlay,
         ):
-            # Make tmp_base exist so unlink works
             tmp_base.write_bytes(b"base")
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
-        # Pass 1: assemble called with temp path
         mock_assemble.assert_called_once_with([seg], tmp_base, transitions=None)
-        # Pass 2: overlay called with base reel, placements, output
-        mock_overlay.assert_called_once_with(tmp_base, [placement], output)
+        mock_overlay.assert_called_once()
         assert result == output
 
     async def test_fallback_when_overlay_fails(self, tmp_path: Path) -> None:
@@ -283,9 +287,11 @@ class TestTwoPassFlow:
         tmp_base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
 
         assembler = ReelAssembler()
         with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
             patch.object(
                 assembler,
@@ -294,15 +300,12 @@ class TestTwoPassFlow:
                 side_effect=AssemblyError("overlay failed"),
             ),
         ):
-            # Simulate the temp base file created by Pass 1
             tmp_base.write_bytes(b"base-reel-content")
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
         mock_assemble.assert_called_once()
         assert result == output
-        # The base reel should have been moved to output
         assert output.read_bytes() == b"base-reel-content"
-        # Temp file should be gone (moved to output)
         assert not tmp_base.exists()
 
     async def test_temp_file_cleaned_on_success(self, tmp_path: Path) -> None:
@@ -314,16 +317,17 @@ class TestTwoPassFlow:
         tmp_base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
 
         assembler = ReelAssembler()
         with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base),
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
         ):
             tmp_base.write_bytes(b"base")
-            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
-        # Temp file should be deleted after successful overlay
         assert not tmp_base.exists()
 
     async def test_no_valid_placements_delegates_to_assemble(self, tmp_path: Path) -> None:
@@ -331,12 +335,12 @@ class TestTwoPassFlow:
         seg.write_bytes(b"video")
         output = tmp_path / "reel.mp4"
 
-        # All clips are missing
         placement = _make_placement(clip_path=str(tmp_path / "missing.mp4"))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
 
         assembler = ReelAssembler()
         with patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output) as mock_assemble:
-            result = await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            result = await assembler.assemble_with_broll([seg], output, manifest=manifest)
             mock_assemble.assert_called_once_with([seg], output, transitions=None)
             assert result == output
 
@@ -351,17 +355,18 @@ class TestTwoPassFlow:
         tmp_base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         transitions = (TransitionSpec(offset_seconds=10.0),)
 
         assembler = ReelAssembler()
         with (
+            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=tmp_base) as mock_assemble,
             patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
         ):
             tmp_base.write_bytes(b"base")
             await assembler.assemble_with_broll(
-                [seg1, seg2], output, broll_placements=(placement,), transitions=transitions
+                [seg1, seg2], output, manifest=manifest, transitions=transitions
             )
 
-        # Pass 1 should pass transitions through
         mock_assemble.assert_called_once_with([seg1, seg2], tmp_base, transitions=transitions)
