@@ -1,6 +1,6 @@
 # Story 20-3: CLI --cutaway Flag for User-Provided Clips
 
-## Status: ready-for-dev
+## Status: done
 
 ## Context
 
@@ -30,14 +30,14 @@ so that I can manually specify documentary footage to insert at specific narrati
 
 ## Tasks
 
-- [ ] Task 1: Add `--cutaway` argument to argparse (action="append", repeatable)
-- [ ] Task 2: Add `_parse_cutaway_spec(spec: str) -> tuple[str, float]` to parse `URL@TIMESTAMP` by last `@`
-- [ ] Task 3: Add `_download_cutaway_clips()` async function that downloads all clips via `ExternalClipDownloader`
-- [ ] Task 4: Add ffprobe duration detection for downloaded clips
-- [ ] Task 5: Write `external-clips.json` manifest to workspace
-- [ ] Task 6: Wire cutaway download into CLI main before stage 1 execution
-- [ ] Task 7: Unit tests for URL parsing (especially URLs with `@` in path), download orchestration, manifest format
-- [ ] Task 8: Run full test suite, ruff, mypy — all pass
+- [x] Task 1: Add `--cutaway` argument to argparse (action="append", repeatable)
+- [x] Task 2: Add `_parse_cutaway_spec(spec: str) -> tuple[str, float]` to parse `URL@TIMESTAMP` by last `@`
+- [x] Task 3: Add `_download_cutaway_clips()` async function that downloads all clips via `ExternalClipDownloader`
+- [x] Task 4: Add ffprobe duration detection for downloaded clips
+- [x] Task 5: Write `external-clips.json` manifest to workspace
+- [x] Task 6: Wire cutaway download into CLI main before stage 1 execution
+- [x] Task 7: Unit tests for URL parsing (especially URLs with `@` in path), download orchestration, manifest format
+- [x] Task 8: Run full test suite, ruff, mypy — all pass
 
 ## Files Affected
 
