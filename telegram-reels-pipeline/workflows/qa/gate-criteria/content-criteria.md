@@ -43,6 +43,15 @@
 - **Fail**: `publishing-assets.json` MISSING when `publishing_language` is configured, OR wrong JSON structure, OR no `broll` variant, OR variant not from allowed set, OR empty descriptions/hashtags. **Score this dimension 0 and set overall decision to FAIL.**
 - **Prescriptive fix template**: "MANDATORY: publishing_language is '{lang}'. You MUST create publishing-assets.json (separate file, not inside content.json) with: (1) {n} descriptions in {lang} with language/text fields, (2) 10-15 localized hashtags starting with #, (3) 1-4 Veo 3 prompts (broll required, variants from intro/broll/outro/transition). Use the Write tool to create this file."
 
+### Dimension 7: External Clip Suggestions (weight: 0/100 — advisory only)
+
+**Only evaluated when `external_clip_suggestions` is present in `publishing-assets.json`.** If absent or empty, this dimension is skipped entirely (no score impact).
+
+- **Pass**: 1-3 suggestions, each with non-empty `search_query` and `narrative_anchor`. `duration_s` (when present) is 3-15 seconds. Suggestions are relevant to the selected moment content.
+- **Rework**: Suggestions present but `search_query` or `narrative_anchor` is missing or empty on any entry, OR `duration_s` is outside 3-15 range, OR more than 3 suggestions provided.
+- **Fail**: Not applicable — suggestions are advisory and never cause a stage failure.
+- **Prescriptive fix template**: "Each external_clip_suggestions entry must have non-empty 'search_query' and 'narrative_anchor'. Entry {n} is missing: {fields}. Limit to 0-3 suggestions. duration_s must be 3-15 when provided."
+
 ## Veo3 Prompt Quality (when publishing-assets.json includes veo3_prompts)
 
 - Each prompt has all required fields: variant, prompt, narrative_anchor, duration_s

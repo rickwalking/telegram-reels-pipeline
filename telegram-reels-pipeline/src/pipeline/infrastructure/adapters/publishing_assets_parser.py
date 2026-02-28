@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
+from types import MappingProxyType
 from typing import Any
 
 from pipeline.domain.models import LocalizedDescription, PublishingAssets, Veo3Prompt, Veo3PromptVariant
@@ -61,6 +63,47 @@ def _parse_veo3_prompts(raw: list[Any]) -> tuple[Veo3Prompt, ...]:
     return tuple(prompts)
 
 
+def _validate_suggestion_item(i: int, item: Any) -> MappingProxyType[str, Any]:
+    """Validate a single external clip suggestion and return an immutable mapping."""
+    if not isinstance(item, dict):
+        raise ValueError(f"external_clip_suggestions[{i}] must be an object")
+
+    search_query = item.get("search_query")
+    if not isinstance(search_query, str) or not search_query.strip():
+        raise ValueError(f"external_clip_suggestions[{i}].search_query must be a non-empty string")
+
+    narrative_anchor = item.get("narrative_anchor")
+    if not isinstance(narrative_anchor, str) or not narrative_anchor.strip():
+        raise ValueError(f"external_clip_suggestions[{i}].narrative_anchor must be a non-empty string")
+
+    duration_s = item.get("duration_s")
+    if duration_s is not None and (not isinstance(duration_s, (int, float)) or duration_s < 3 or duration_s > 15):
+        raise ValueError(f"external_clip_suggestions[{i}].duration_s must be 3-15 when set, got {duration_s}")
+
+    cleaned: dict[str, Any] = {"search_query": search_query.strip(), "narrative_anchor": narrative_anchor.strip()}
+    expected_content = item.get("expected_content")
+    if isinstance(expected_content, str) and expected_content.strip():
+        cleaned["expected_content"] = expected_content.strip()
+    if duration_s is not None:
+        cleaned["duration_s"] = int(duration_s)
+    insertion_point = item.get("insertion_point_description")
+    if isinstance(insertion_point, str) and insertion_point.strip():
+        cleaned["insertion_point_description"] = insertion_point.strip()
+    return MappingProxyType(cleaned)
+
+
+def _parse_external_clip_suggestions(raw: list[Any]) -> tuple[Mapping[str, Any], ...]:
+    """Validate and convert raw external clip suggestion entries.
+
+    Each suggestion must have ``search_query`` and ``narrative_anchor``.
+    Optional fields: ``expected_content``, ``duration_s``, ``insertion_point_description``.
+    Maximum 3 suggestions allowed.
+    """
+    if len(raw) > 3:
+        raise ValueError(f"'external_clip_suggestions' must have 0-3 items, got {len(raw)}")
+    return tuple(_validate_suggestion_item(i, item) for i, item in enumerate(raw))
+
+
 def parse_publishing_assets(raw: str) -> PublishingAssets:
     """Parse JSON output from the content creator agent for publishing assets.
 
@@ -75,6 +118,9 @@ def parse_publishing_assets(raw: str) -> PublishingAssets:
             "veo3_prompts": [
                 {"variant": "broll", "prompt": "Cinematic slow-motion..."},
                 {"variant": "intro", "prompt": "Aerial drone shot..."}
+            ],
+            "external_clip_suggestions": [
+                {"search_query": "...", "narrative_anchor": "...", ...}
             ]
         }
     """
@@ -98,8 +144,14 @@ def parse_publishing_assets(raw: str) -> PublishingAssets:
     if not isinstance(prompts_raw, list) or not prompts_raw:
         raise ValueError("'veo3_prompts' must be a non-empty list")
 
+    suggestions_raw = data.get("external_clip_suggestions")
+    suggestions: tuple[Mapping[str, Any], ...] = ()
+    if isinstance(suggestions_raw, list) and suggestions_raw:
+        suggestions = _parse_external_clip_suggestions(suggestions_raw)
+
     return PublishingAssets(
         descriptions=_parse_descriptions(descriptions_raw),
         hashtags=_parse_hashtags(hashtags_raw),
         veo3_prompts=_parse_veo3_prompts(prompts_raw),
+        external_clip_suggestions=suggestions,
     )

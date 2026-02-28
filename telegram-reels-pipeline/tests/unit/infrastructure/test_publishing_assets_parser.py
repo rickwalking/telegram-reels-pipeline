@@ -14,12 +14,15 @@ def _make_valid_payload(
     descriptions: list[dict[str, str]] | None = None,
     hashtags: list[str] | None = None,
     veo3_prompts: list[dict[str, str]] | None = None,
+    external_clip_suggestions: list[dict[str, object]] | None = None,
 ) -> str:
-    data = {
+    data: dict[str, object] = {
         "descriptions": descriptions or [{"language": "pt-BR", "text": "Descricao 1"}],
         "hashtags": hashtags or ["#podcast", "#tech"],
         "veo3_prompts": veo3_prompts or [{"variant": "broll", "prompt": "Cinematic shot of data streams"}],
     }
+    if external_clip_suggestions is not None:
+        data["external_clip_suggestions"] = external_clip_suggestions
     return json.dumps(data)
 
 
@@ -31,6 +34,7 @@ class TestParsePublishingAssetsValid:
         assert result.descriptions[0].language == "pt-BR"
         assert len(result.hashtags) == 2
         assert len(result.veo3_prompts) == 1
+        assert result.external_clip_suggestions == ()
 
     def test_multiple_descriptions(self) -> None:
         descs = [
@@ -178,3 +182,132 @@ class TestParsePublishingAssetsSanitization:
         result = parse_publishing_assets(_make_valid_payload(veo3_prompts=prompts))
         assert result.veo3_prompts[0].variant == "broll"
         assert result.veo3_prompts[0].prompt == "cinematic shot"
+
+
+def _make_suggestion(
+    search_query: str = "SpaceX rocket landing slow motion",
+    narrative_anchor: str = "they talk about the rocket landing",
+    expected_content: str = "Footage of a SpaceX booster landing",
+    duration_s: int = 8,
+    insertion_point_description: str = "After the host describes the landing",
+) -> dict[str, object]:
+    return {
+        "search_query": search_query,
+        "narrative_anchor": narrative_anchor,
+        "expected_content": expected_content,
+        "duration_s": duration_s,
+        "insertion_point_description": insertion_point_description,
+    }
+
+
+class TestExternalClipSuggestionsValid:
+    def test_single_suggestion(self) -> None:
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[_make_suggestion()]))
+        assert len(result.external_clip_suggestions) == 1
+        assert result.external_clip_suggestions[0]["search_query"] == "SpaceX rocket landing slow motion"
+        assert result.external_clip_suggestions[0]["narrative_anchor"] == "they talk about the rocket landing"
+
+    def test_three_suggestions(self) -> None:
+        suggestions = [
+            _make_suggestion(search_query="query 1", narrative_anchor="anchor 1"),
+            _make_suggestion(search_query="query 2", narrative_anchor="anchor 2"),
+            _make_suggestion(search_query="query 3", narrative_anchor="anchor 3"),
+        ]
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=suggestions))
+        assert len(result.external_clip_suggestions) == 3
+
+    def test_empty_list_returns_empty_tuple(self) -> None:
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[]))
+        assert result.external_clip_suggestions == ()
+
+    def test_missing_key_returns_empty_tuple(self) -> None:
+        """Backward compatibility: no external_clip_suggestions key at all."""
+        result = parse_publishing_assets(_make_valid_payload())
+        assert result.external_clip_suggestions == ()
+
+    def test_minimal_suggestion_only_required_fields(self) -> None:
+        suggestion = {"search_query": "AI ethics debate", "narrative_anchor": "when they discuss bias"}
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+        assert len(result.external_clip_suggestions) == 1
+        assert result.external_clip_suggestions[0]["search_query"] == "AI ethics debate"
+        assert "expected_content" not in result.external_clip_suggestions[0]
+        assert "duration_s" not in result.external_clip_suggestions[0]
+
+    def test_duration_s_at_boundaries(self) -> None:
+        low = _make_suggestion(duration_s=3)
+        high = _make_suggestion(search_query="q2", narrative_anchor="a2", duration_s=15)
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[low, high]))
+        assert result.external_clip_suggestions[0]["duration_s"] == 3
+        assert result.external_clip_suggestions[1]["duration_s"] == 15
+
+    def test_whitespace_stripped(self) -> None:
+        suggestion = {
+            "search_query": "  rocket launch  ",
+            "narrative_anchor": "  they discuss launches  ",
+            "expected_content": "  footage of launch  ",
+            "insertion_point_description": "  after the mention  ",
+        }
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+        s = result.external_clip_suggestions[0]
+        assert s["search_query"] == "rocket launch"
+        assert s["narrative_anchor"] == "they discuss launches"
+        assert s["expected_content"] == "footage of launch"
+        assert s["insertion_point_description"] == "after the mention"
+
+    def test_suggestions_are_immutable_mappings(self) -> None:
+        result = parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[_make_suggestion()]))
+        with pytest.raises(TypeError):
+            result.external_clip_suggestions[0]["new_key"] = "value"  # type: ignore[index]
+
+
+class TestExternalClipSuggestionsInvalid:
+    def test_too_many_suggestions(self) -> None:
+        suggestions = [_make_suggestion(search_query=f"q{i}", narrative_anchor=f"a{i}") for i in range(4)]
+        with pytest.raises(ValueError, match="0-3 items"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=suggestions))
+
+    def test_missing_search_query(self) -> None:
+        suggestion = {"narrative_anchor": "anchor text"}
+        with pytest.raises(ValueError, match="search_query must be a non-empty string"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_empty_search_query(self) -> None:
+        suggestion = {"search_query": "", "narrative_anchor": "anchor text"}
+        with pytest.raises(ValueError, match="search_query must be a non-empty string"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_whitespace_only_search_query(self) -> None:
+        suggestion = {"search_query": "   ", "narrative_anchor": "anchor text"}
+        with pytest.raises(ValueError, match="search_query must be a non-empty string"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_missing_narrative_anchor(self) -> None:
+        suggestion = {"search_query": "rocket launch"}
+        with pytest.raises(ValueError, match="narrative_anchor must be a non-empty string"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_empty_narrative_anchor(self) -> None:
+        suggestion = {"search_query": "rocket launch", "narrative_anchor": ""}
+        with pytest.raises(ValueError, match="narrative_anchor must be a non-empty string"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_suggestion_not_object(self) -> None:
+        with pytest.raises(ValueError, match="external_clip_suggestions\\[0\\] must be an object"):
+            parse_publishing_assets(
+                _make_valid_payload(external_clip_suggestions=["not an object"])  # type: ignore[list-item]
+            )
+
+    def test_duration_s_too_low(self) -> None:
+        suggestion = _make_suggestion(duration_s=2)
+        with pytest.raises(ValueError, match="duration_s must be 3-15"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_duration_s_too_high(self) -> None:
+        suggestion = _make_suggestion(duration_s=16)
+        with pytest.raises(ValueError, match="duration_s must be 3-15"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
+
+    def test_duration_s_negative(self) -> None:
+        suggestion = _make_suggestion(duration_s=-1)
+        with pytest.raises(ValueError, match="duration_s must be 3-15"):
+            parse_publishing_assets(_make_valid_payload(external_clip_suggestions=[suggestion]))
