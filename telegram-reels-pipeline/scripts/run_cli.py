@@ -35,6 +35,7 @@ from pipeline.domain.enums import PipelineStage
 from pipeline.domain.models import AgentRequest, ReflectionResult
 from pipeline.domain.types import GateName
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
+from pipeline.infrastructure.adapters.external_clip_downloader import ExternalClipDownloader
 from pipeline.infrastructure.adapters.ffmpeg_adapter import FFmpegAdapter
 from pipeline.infrastructure.adapters.gemini_veo3_adapter import GeminiVeo3Adapter
 
@@ -81,6 +82,146 @@ def compute_moments_requested(target_duration: int, explicit_moments: int | None
     if target_duration <= _AUTO_TRIGGER_THRESHOLD:
         return 1
     return min(5, max(2, int(target_duration / 60 + 0.5)))
+
+
+def _parse_cutaway_spec(spec: str) -> tuple[str, float]:
+    """Parse a ``URL@TIMESTAMP`` cutaway spec by splitting on the **last** ``@``.
+
+    URLs may contain ``@`` characters (e.g. ``https://example.com/@user/video``),
+    so we split on the rightmost ``@`` to separate the insertion timestamp.
+
+    Returns:
+        ``(url, timestamp_seconds)`` tuple.
+
+    Raises:
+        ValueError: If no ``@`` found, ``@`` is first character, or timestamp is
+            not a valid float.
+    """
+    idx = spec.rfind("@")
+    if idx <= 0:
+        raise ValueError(f"Invalid cutaway spec '{spec}': expected URL@TIMESTAMP")
+    url = spec[:idx]
+    try:
+        timestamp = float(spec[idx + 1 :])
+    except ValueError:
+        raise ValueError(f"Invalid cutaway timestamp in '{spec}': expected a number after '@'") from None
+    if timestamp < 0:
+        raise ValueError(f"Invalid cutaway timestamp {timestamp}: must be >= 0")
+    return url, timestamp
+
+
+async def _probe_clip_duration(clip_path: Path) -> float | None:
+    """Probe video duration in seconds via ffprobe.
+
+    Returns the duration as a float, or None if probing fails.
+    """
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(clip_path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        if proc.returncode != 0:
+            return None
+        return float(stdout.decode().strip())
+    except (OSError, ValueError):
+        return None
+
+
+async def _download_cutaway_clips(
+    cutaway_specs: list[str],
+    workspace: Path,
+) -> list[dict[str, object]]:
+    """Download cutaway clips and write ``external-clips.json`` manifest.
+
+    Downloads each clip via ``ExternalClipDownloader``, renames to
+    ``cutaway-{n}.mp4``, probes duration, and builds a manifest array.
+    Partial failures are tolerated: failed downloads are logged and skipped.
+
+    Returns:
+        List of manifest entries (one per successfully downloaded clip).
+    """
+    downloader = ExternalClipDownloader()
+    manifest: list[dict[str, object]] = []
+    clips_dir = workspace / "external_clips"
+    clips_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, spec in enumerate(cutaway_specs):
+        try:
+            url, insertion_point = _parse_cutaway_spec(spec)
+        except ValueError as exc:
+            logger.warning("Skipping invalid cutaway spec: %s", exc)
+            print(f"    [CUTAWAY] Skipping invalid spec: {exc}")
+            continue
+
+        print(f"    [CUTAWAY] Downloading clip {idx + 1}/{len(cutaway_specs)}: {url}")
+        downloaded = await downloader.download(url, workspace)
+        if downloaded is None:
+            logger.warning("Cutaway download failed for %s — skipping", url)
+            print(f"    [CUTAWAY] Download failed for {url} — skipping")
+            continue
+
+        # Rename to canonical cutaway-{n}.mp4
+        dest = clips_dir / f"cutaway-{idx}.mp4"
+        try:
+            downloaded.rename(dest)
+        except OSError:
+            # Cross-device rename — fall back to copy + unlink
+            import shutil
+
+            shutil.copy2(str(downloaded), str(dest))
+            with contextlib.suppress(OSError):
+                downloaded.unlink()
+
+        duration = await _probe_clip_duration(dest)
+        if duration is None:
+            logger.warning("Could not probe duration for %s — skipping", dest.name)
+            print(f"    [CUTAWAY] Could not probe duration for {dest.name} — skipping")
+            continue
+
+        entry: dict[str, object] = {
+            "url": url,
+            "clip_path": f"external_clips/cutaway-{idx}.mp4",
+            "insertion_point_s": insertion_point,
+            "duration_s": duration,
+        }
+        manifest.append(entry)
+        print(f"    [CUTAWAY] Ready: cutaway-{idx}.mp4 ({duration:.1f}s, insert at {insertion_point:.1f}s)")
+
+    # Write manifest (atomic write)
+    manifest_path = workspace / "external-clips.json"
+    fd, tmp_path_str = tempfile.mkstemp(dir=workspace, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(manifest, f, indent=2)
+        os.replace(tmp_path_str, manifest_path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path_str)
+        raise
+
+    logger.info("Wrote external-clips.json with %d entries", len(manifest))
+    return manifest
+
+
+async def _maybe_download_cutaways(
+    cutaway_specs: list[str] | None,
+    workspace: Path,
+) -> None:
+    """Download cutaway clips if any were specified via ``--cutaway``."""
+    if not cutaway_specs:
+        return
+    print(f"  Downloading {len(cutaway_specs)} cutaway clip(s)...")
+    cutaway_manifest = await _download_cutaway_clips(cutaway_specs, workspace)
+    print(f"  Cutaway clips ready: {len(cutaway_manifest)}/{len(cutaway_specs)} succeeded\n")
 
 
 # Signature artifacts per stage (1-indexed). A stage is "complete" if at least
@@ -681,6 +822,7 @@ async def run_pipeline(
     target_duration_seconds: int = 90,
     verbose: bool = False,
     moments_requested: int = 1,
+    cutaway_specs: list[str] | None = None,
 ) -> None:
     settings = PipelineSettings()
     project_root = Path(__file__).resolve().parent.parent
@@ -729,6 +871,7 @@ async def run_pipeline(
         print(f"  Target duration: {target_duration_seconds}s (extended narrative)")
     if moments_requested > 1:
         print(f"  Narrative moments: {moments_requested}")
+    print(f"  Cutaway clips: {len(cutaway_specs) if cutaway_specs else 0}")
     print(f"{'='*60}\n")
 
     if resume_workspace is not None:
@@ -752,6 +895,9 @@ async def run_pipeline(
         for a in artifacts:
             print(f"    - {a.name}")
         print()
+
+    # Download cutaway clips before stage 1
+    await _maybe_download_cutaways(cutaway_specs, workspace)
 
     overall_start = time.monotonic()
 
@@ -814,6 +960,13 @@ def main() -> None:
         help="Number of narrative moments (1-5). Auto-computed from target-duration when omitted.",
     )
     parser.add_argument("--verbose", "-v", action="store_true", help="Print Claude agent output to terminal")
+    parser.add_argument(
+        "--cutaway",
+        action="append",
+        default=None,
+        metavar="URL@TIMESTAMP",
+        help="External clip URL with insertion timestamp in seconds (repeatable, e.g. --cutaway URL@30)",
+    )
     args = parser.parse_args()
 
     _validate_cli_args(args, arg_parser=parser)
@@ -837,6 +990,7 @@ def main() -> None:
             args.target_duration,
             verbose=args.verbose,
             moments_requested=moments,
+            cutaway_specs=args.cutaway,
         )
     )
 
