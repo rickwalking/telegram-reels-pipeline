@@ -374,3 +374,32 @@ class TestConstants:
 
     def test_max_duration_is_60(self) -> None:
         assert _MAX_DURATION == 60
+
+
+# ---------------------------------------------------------------------------
+# Atomic write failure
+# ---------------------------------------------------------------------------
+
+
+class TestWriteJsonAtomicFailure:
+    """Verify atomic write cleans up temp file and re-raises on os.rename failure."""
+
+    def test_os_rename_failure_cleans_temp(self, tmp_path: Path) -> None:
+        """When os.rename raises, temp file is cleaned up and exception re-raised."""
+        import pytest as _pt
+
+        with (
+            patch("pipeline.application.external_clip_resolver.os.rename", side_effect=OSError("disk full")),
+            _pt.raises(OSError, match="disk full"),
+        ):
+            ExternalClipResolver._write_json_atomic(
+                tmp_path / "external-clips.json",
+                {"clips": []},
+            )
+
+        # No temp files left behind
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert tmp_files == []
+
+        # No target file written
+        assert not (tmp_path / "external-clips.json").exists()

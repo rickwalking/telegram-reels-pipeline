@@ -445,3 +445,168 @@ class TestIsRetryable:
 
     def test_empty_string_is_not_retryable(self) -> None:
         assert Veo3Orchestrator._is_retryable("") is False
+
+
+# ---------------------------------------------------------------------------
+# TestPollJobs
+# ---------------------------------------------------------------------------
+
+
+class TestPollJobs:
+    """Tests for poll_jobs() — poll active Veo3 jobs and update jobs.json."""
+
+    @staticmethod
+    def _write_jobs_json(workspace: Path, jobs: list[dict[str, Any]]) -> None:
+        veo3_dir = workspace / "veo3"
+        veo3_dir.mkdir(parents=True, exist_ok=True)
+        (veo3_dir / "jobs.json").write_text(json.dumps({"jobs": jobs}))
+
+    @staticmethod
+    def _read_jobs(workspace: Path) -> list[dict[str, Any]]:
+        return json.loads((workspace / "veo3" / "jobs.json").read_text())["jobs"]
+
+    @staticmethod
+    def _generating_job(variant: str = "broll", key: str = "run1_broll") -> dict[str, Any]:
+        return {
+            "idempotent_key": key,
+            "variant": variant,
+            "prompt": "Test prompt",
+            "status": "generating",
+            "operation_name": "",
+            "video_path": None,
+            "error_message": None,
+        }
+
+    @staticmethod
+    def _completed_job(variant: str = "broll", key: str = "run1_broll") -> dict[str, Any]:
+        return {
+            "idempotent_key": key,
+            "variant": variant,
+            "prompt": "Test prompt",
+            "status": "completed",
+            "operation_name": "",
+            "video_path": f"veo3/{variant}.mp4",
+            "error_message": None,
+        }
+
+    async def test_empty_jobs_returns_true(self, tmp_path: Path) -> None:
+        """Empty jobs list means all done — returns True."""
+        self._write_jobs_json(tmp_path, [])
+        adapter = SequenceTrackingAdapter()
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True
+        # No poll_job calls
+        assert adapter.call_log == []
+
+    async def test_all_terminal_no_poll(self, tmp_path: Path) -> None:
+        """All jobs in terminal states — returns True without polling."""
+        self._write_jobs_json(tmp_path, [self._completed_job()])
+        adapter = SequenceTrackingAdapter()
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True
+
+    async def test_poll_updates_status(self, tmp_path: Path) -> None:
+        """Generating job polled -> status updated to completed, file rewritten."""
+        self._write_jobs_json(tmp_path, [self._generating_job()])
+        adapter = SequenceTrackingAdapter()
+        # Pre-populate submitted_jobs so poll_job can find the job
+        adapter.submitted_jobs.append(
+            Veo3Job(
+                idempotent_key="run1_broll",
+                variant="broll",
+                prompt="Test prompt",
+                status=Veo3JobStatus.GENERATING,
+            )
+        )
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True
+        # File rewritten with updated status
+        jobs = self._read_jobs(tmp_path)
+        assert jobs[0]["status"] == "completed"
+        assert jobs[0]["video_path"] == "veo3/broll.mp4"
+
+    async def test_poll_exception_marks_poll_failed(self, tmp_path: Path) -> None:
+        """When poll_job raises, the job is marked as FAILED with error_message='poll_failed'."""
+        self._write_jobs_json(tmp_path, [self._generating_job()])
+        adapter = SequenceTrackingAdapter()
+        # Don't pre-populate — poll_job will raise for unknown key
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True
+        jobs = self._read_jobs(tmp_path)
+        assert jobs[0]["status"] == "failed"
+        assert jobs[0]["error_message"] == "poll_failed"
+
+    async def test_no_change_skips_write(self, tmp_path: Path) -> None:
+        """If poll returns same status, jobs.json is not rewritten (mtime unchanged)."""
+        self._write_jobs_json(tmp_path, [self._generating_job()])
+        jobs_path = tmp_path / "veo3" / "jobs.json"
+        original_content = jobs_path.read_text()
+
+        # Mock poll_job to return same GENERATING status (no change)
+        mock_adapter = AsyncMock()
+        mock_adapter.poll_job = AsyncMock(
+            return_value=Veo3Job(
+                idempotent_key="run1_broll",
+                variant="broll",
+                prompt="Test prompt",
+                status=Veo3JobStatus.GENERATING,
+            )
+        )
+        orch = Veo3Orchestrator(video_gen=mock_adapter, clip_count=3, timeout_s=300)
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is False
+        # File content unchanged (no rewrite)
+        assert jobs_path.read_text() == original_content
+
+    async def test_multiple_jobs_independent_tracking(self, tmp_path: Path) -> None:
+        """Multiple jobs: one succeeds, one fails poll — both tracked independently."""
+        self._write_jobs_json(
+            tmp_path,
+            [
+                self._generating_job(variant="intro", key="run1_intro"),
+                self._generating_job(variant="broll", key="run1_broll"),
+            ],
+        )
+        adapter = SequenceTrackingAdapter()
+        # Only intro is known — broll poll will raise
+        adapter.submitted_jobs.append(
+            Veo3Job(
+                idempotent_key="run1_intro",
+                variant="intro",
+                prompt="Test prompt",
+                status=Veo3JobStatus.GENERATING,
+            )
+        )
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True
+        jobs = self._read_jobs(tmp_path)
+        statuses = {j["variant"]: j["status"] for j in jobs}
+        assert statuses["intro"] == "completed"
+        assert statuses["broll"] == "failed"
+
+    async def test_missing_jobs_file_returns_true(self, tmp_path: Path) -> None:
+        """Missing jobs.json -> empty list -> returns True."""
+        (tmp_path / "veo3").mkdir()
+        adapter = SequenceTrackingAdapter()
+        orch = Veo3Orchestrator(video_gen=adapter, clip_count=3, timeout_s=300)  # type: ignore[arg-type]
+
+        result = await orch.poll_jobs(tmp_path)
+
+        assert result is True

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
@@ -509,3 +510,126 @@ class TestExternalClipBackgroundTask:
         result = await runner.run(_make_item(), workspace)
 
         assert result.current_stage == PipelineStage.COMPLETED
+
+
+class TestFireVeo3Background:
+    """Tests for _fire_veo3_background exception handling."""
+
+    def test_setup_exception_returns_none(self, tmp_path: Path) -> None:
+        """When Veo3Orchestrator construction fails, returns None gracefully."""
+        runner, _, _, _ = _make_runner()
+        # Patch at source module so the deferred import picks up the mock
+        with patch(
+            "pipeline.application.veo3_orchestrator.Veo3Orchestrator",
+            side_effect=RuntimeError("adapter init failed"),
+        ):
+            result = runner._fire_veo3_background(tmp_path, "run-err")
+
+        assert result is None
+
+    async def test_returns_task_on_success(self, tmp_path: Path) -> None:
+        """When setup succeeds, returns an asyncio.Task."""
+        import asyncio
+
+        runner, _, _, _ = _make_runner()
+
+        mock_orch = MagicMock()
+        mock_orch.start_generation = AsyncMock(return_value=None)
+
+        with patch(
+            "pipeline.application.veo3_orchestrator.Veo3Orchestrator",
+            return_value=mock_orch,
+        ):
+            task = runner._fire_veo3_background(tmp_path, "run-ok")
+
+        assert task is not None
+        assert isinstance(task, asyncio.Task)
+        # Clean up task
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+
+class TestRunVeo3AwaitGateException:
+    """Tests for _run_veo3_await_gate exception handling in pipeline_runner."""
+
+    async def test_gate_exception_does_not_crash_pipeline(self, tmp_path: Path) -> None:
+        """When run_veo3_await_gate raises, pipeline continues."""
+        runner, _, _, event_bus = _make_runner()
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+
+        with patch(
+            "pipeline.application.veo3_await_gate.run_veo3_await_gate",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("gate exploded"),
+        ):
+            await runner._run_veo3_await_gate(workspace, "run-fail")
+
+        # Events should still be published (started + completed)
+        events = [call.args[0].event_name for call in event_bus.publish.call_args_list]
+        assert "veo3.gate.started" in events
+        assert "veo3.gate.completed" in events
+
+    async def test_background_task_failure_handled(self, tmp_path: Path) -> None:
+        """When _veo3_task raises, gate still runs."""
+        runner, _, _, _ = _make_runner()
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+
+        # Set a failing background task
+        import asyncio
+
+        async def _raise() -> None:
+            raise RuntimeError("bg task died")
+
+        runner._veo3_task = asyncio.ensure_future(_raise())
+        # Let the task fail
+        await asyncio.sleep(0)
+
+        with patch(
+            "pipeline.application.veo3_await_gate.run_veo3_await_gate",
+            new_callable=AsyncMock,
+            return_value={"skipped": True},
+        ):
+            await runner._run_veo3_await_gate(workspace, "run-bg-fail")
+
+        # Task cleared
+        assert runner._veo3_task is None
+
+
+class TestBuildCutawayManifestException:
+    """Tests for _build_cutaway_manifest exception handling."""
+
+    async def test_manifest_build_exception_does_not_crash(self, tmp_path: Path) -> None:
+        """When ManifestBuilder.build raises, pipeline continues."""
+        runner, _, _, _ = _make_runner()
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        # Write encoding-plan so the first try block passes
+        plan = {
+            "commands": [{"start_s": 0, "end_s": 30, "transcript_text": "hello"}],
+            "total_duration_seconds": 30.0,
+        }
+        (workspace / "encoding-plan.json").write_text(json.dumps(plan))
+
+        with patch(
+            "pipeline.application.manifest_builder.ManifestBuilder",
+            side_effect=RuntimeError("builder exploded"),
+        ):
+            # Should not raise
+            await runner._build_cutaway_manifest(workspace)
+
+        # No manifest written
+        assert not (workspace / "cutaway-manifest.json").exists()
+
+    async def test_corrupt_encoding_plan_returns_silently(self, tmp_path: Path) -> None:
+        """Corrupt encoding-plan.json -> returns without crash."""
+        runner, _, _, _ = _make_runner()
+        workspace = tmp_path / "ws"
+        workspace.mkdir()
+        (workspace / "encoding-plan.json").write_text("not json{{{")
+
+        await runner._build_cutaway_manifest(workspace)
+
+        assert not (workspace / "cutaway-manifest.json").exists()

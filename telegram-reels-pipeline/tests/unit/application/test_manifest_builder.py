@@ -571,3 +571,31 @@ class TestPipelineRunnerCutawayManifest:
         assert manifest_path.exists()
         data = json.loads(manifest_path.read_text())
         assert data["total_clips"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Atomic write failure tests
+# ---------------------------------------------------------------------------
+
+
+class TestManifestBuilderAtomicWriteFailure:
+    """Verify atomic write cleans up temp file and re-raises on os.replace failure."""
+
+    def test_os_replace_failure_cleans_temp(self, tmp_path: Path) -> None:
+        """When os.replace raises, temp file is cleaned up and exception re-raised."""
+        from unittest.mock import patch as _patch
+
+        manifest = CutawayManifest(clips=())
+
+        with (
+            _patch("pipeline.application.manifest_builder.os.replace", side_effect=OSError("disk full")),
+            pytest.raises(OSError, match="disk full"),
+        ):
+            ManifestBuilder._write_manifest_sync(manifest, (), tmp_path)
+
+        # No temp files left behind
+        tmp_files = list(tmp_path.glob("*.tmp"))
+        assert tmp_files == []
+
+        # No manifest written
+        assert not (tmp_path / "cutaway-manifest.json").exists()

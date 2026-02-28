@@ -343,3 +343,161 @@ class TestRetriableConstants:
     def test_expected_members(self) -> None:
         """Verify the exact set of retriable error codes."""
         assert {"submit_failed", "rate_limited", "poll_failed"} == _RETRIABLE_ERRORS
+
+
+# ---------------------------------------------------------------------------
+# Skip paths (no veo3 folder, no jobs.json)
+# ---------------------------------------------------------------------------
+
+
+class TestSkipPaths:
+    async def test_no_veo3_folder_returns_skipped(self, tmp_path: Path) -> None:
+        """No veo3/ directory -> returns skipped immediately."""
+        result = await run_veo3_await_gate(
+            workspace=tmp_path,
+            orchestrator=_make_orchestrator_mock(),
+            timeout_s=60,
+        )
+        assert result["skipped"] is True
+        assert result["reason"] == "no_veo3_folder"
+
+    async def test_no_jobs_json_returns_skipped(self, tmp_path: Path) -> None:
+        """veo3/ exists but no jobs.json -> returns skipped."""
+        (tmp_path / "veo3").mkdir()
+        result = await run_veo3_await_gate(
+            workspace=tmp_path,
+            orchestrator=_make_orchestrator_mock(),
+            timeout_s=60,
+        )
+        assert result["skipped"] is True
+        assert result["reason"] == "no_jobs_file"
+
+
+# ---------------------------------------------------------------------------
+# No-orchestrator read-only path
+# ---------------------------------------------------------------------------
+
+
+class TestNoOrchestrator:
+    async def test_no_orchestrator_returns_summary(self, tmp_path: Path) -> None:
+        """orchestrator=None -> read current jobs.json state, no polling."""
+        _write_jobs_json(
+            tmp_path,
+            [
+                {
+                    "idempotent_key": "k1",
+                    "variant": "broll",
+                    "prompt": "Test",
+                    "status": "completed",
+                    "video_path": "veo3/broll.mp4",
+                    "error_message": None,
+                },
+                _make_failed_job("download_failed", variant="intro", key="k2"),
+            ],
+        )
+
+        result = await run_veo3_await_gate(
+            workspace=tmp_path,
+            orchestrator=None,
+            timeout_s=60,
+        )
+
+        assert result["completed"] == 1
+        assert result["failed"] == 1
+        assert result["total"] == 2
+
+    async def test_no_orchestrator_does_not_poll(self, tmp_path: Path) -> None:
+        """orchestrator=None -> no poll_jobs called."""
+        _write_jobs_json(tmp_path, [_make_failed_job("rate_limited")])
+
+        # Pass None, not a mock
+        result = await run_veo3_await_gate(
+            workspace=tmp_path,
+            orchestrator=None,
+            timeout_s=60,
+        )
+
+        # Should return summary without polling
+        assert "failed" in result
+
+
+# ---------------------------------------------------------------------------
+# Timeout path
+# ---------------------------------------------------------------------------
+
+
+class TestTimeoutPath:
+    async def test_timeout_marks_generating_as_timed_out(self, tmp_path: Path) -> None:
+        """When timeout expires, GENERATING jobs are marked TIMED_OUT."""
+        _write_jobs_json(
+            tmp_path,
+            [
+                {
+                    "idempotent_key": "k1",
+                    "variant": "broll",
+                    "prompt": "Test",
+                    "status": "generating",
+                    "video_path": None,
+                    "error_message": None,
+                }
+            ],
+        )
+
+        orch = AsyncMock()
+        # poll_jobs always returns False (never done)
+        orch.poll_jobs.return_value = False
+
+        from unittest.mock import patch as _patch
+
+        with _patch("pipeline.application.veo3_await_gate.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_veo3_await_gate(
+                workspace=tmp_path,
+                orchestrator=orch,
+                timeout_s=0,  # Immediate timeout
+            )
+
+        assert result["timed_out"] == 1
+        assert result["total"] == 1
+
+        # Verify the file was updated
+        data = json.loads((tmp_path / "veo3" / "jobs.json").read_text())
+        assert data["jobs"][0]["status"] == "timed_out"
+
+    async def test_timeout_does_not_affect_completed_jobs(self, tmp_path: Path) -> None:
+        """Timeout only marks GENERATING jobs, not already completed ones."""
+        _write_jobs_json(
+            tmp_path,
+            [
+                {
+                    "idempotent_key": "k1",
+                    "variant": "broll",
+                    "prompt": "Test",
+                    "status": "completed",
+                    "video_path": "veo3/broll.mp4",
+                    "error_message": None,
+                },
+                {
+                    "idempotent_key": "k2",
+                    "variant": "intro",
+                    "prompt": "Test",
+                    "status": "generating",
+                    "video_path": None,
+                    "error_message": None,
+                },
+            ],
+        )
+
+        orch = AsyncMock()
+        orch.poll_jobs.return_value = False
+
+        from unittest.mock import patch as _patch
+
+        with _patch("pipeline.application.veo3_await_gate.asyncio.sleep", new_callable=AsyncMock):
+            result = await run_veo3_await_gate(
+                workspace=tmp_path,
+                orchestrator=orch,
+                timeout_s=0,
+            )
+
+        assert result["completed"] == 1
+        assert result["timed_out"] == 1
