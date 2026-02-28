@@ -168,18 +168,18 @@ development_status:
   18-1-fix-veo3-duration-constraints: review
   18-2-authenticated-video-download: review
   18-3-rate-limit-handling-sequential-submission: review
-  18-4-await-gate-auto-retry-failure-classification: in-progress
+  18-4-await-gate-auto-retry-failure-classification: review
   18-5-qa-dispatch-timeout-clink-fallback-wiring: review
 
   epic-19: in-progress
   19-1-two-pass-assembly-architecture: review
-  19-2-auto-upscale-broll-clips: in-progress
-  19-3-broll-fade-transitions: in-progress
+  19-2-auto-upscale-broll-clips: review
+  19-3-broll-fade-transitions: review
   19-4-assembly-report-broll-section: backlog
 
   epic-20: in-progress
   20-1-external-clip-download-preparation: review
-  20-2-cutaway-manifest-domain-model: in-progress
+  20-2-cutaway-manifest-domain-model: review
   20-3-cli-cutaway-flag-user-provided-clips: backlog
   20-4-content-creator-agent-external-clip-suggestions: backlog
   20-5-external-clip-search-resolution: backlog
