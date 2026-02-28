@@ -1,6 +1,6 @@
 # Story 20-5: External Clip Search & Resolution
 
-## Status: ready-for-dev
+## Status: done
 
 ## Context
 
@@ -34,14 +34,14 @@ so that agent-suggested documentary clips are automatically sourced without user
 
 ## Tasks
 
-- [ ] Task 1: Create `application/external_clip_resolver.py` with `ExternalClipResolver` class
-- [ ] Task 2: Implement `_search_youtube(query: str) -> str | None` using yt-dlp ytsearch1
-- [ ] Task 3: Implement `resolve_all(suggestions: list[dict], dest_dir: Path) -> list[dict]` with rate limiting
-- [ ] Task 4: Wire into `pipeline_runner.py`: launch as background task after CONTENT stage
-- [ ] Task 5: Add task to `_background_tasks` dict, handle cancel on abort, await before assembly
-- [ ] Task 6: Write resolved clips manifest to `external-clips.json` in workspace
-- [ ] Task 7: Unit tests for search, resolve, rate limiting, error handling, background task lifecycle
-- [ ] Task 8: Run full test suite, ruff, mypy — all pass
+- [x] Task 1: Create `application/external_clip_resolver.py` with `ExternalClipResolver` class
+- [x] Task 2: Implement `_search_youtube(query: str) -> str | None` using yt-dlp ytsearch1
+- [x] Task 3: Implement `resolve_all(suggestions: list[dict], dest_dir: Path) -> list[dict]` with rate limiting
+- [x] Task 4: Wire into `pipeline_runner.py`: launch as background task after CONTENT stage
+- [x] Task 5: Add task to `_background_tasks` dict, handle cancel on abort, await before assembly
+- [x] Task 6: Write resolved clips manifest to `external-clips.json` in workspace
+- [x] Task 7: Unit tests for search, resolve, rate limiting, error handling, background task lifecycle
+- [x] Task 8: Run full test suite, ruff, mypy — all pass
 
 ## Files Affected
 

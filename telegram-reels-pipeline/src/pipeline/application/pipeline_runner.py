@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from pipeline.application.delivery_handler import DeliveryHandler
     from pipeline.application.event_bus import EventBus
     from pipeline.application.stage_runner import StageRunner
-    from pipeline.domain.ports import StateStorePort, VideoGenerationPort
+    from pipeline.domain.ports import ExternalClipDownloaderPort, StateStorePort, VideoGenerationPort
     from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ class PipelineRunner:
         cli_backend: CliBackend | None = None,
         settings: PipelineSettings | None = None,
         veo3_adapter: VideoGenerationPort | None = None,
+        external_clip_downloader: ExternalClipDownloaderPort | None = None,
     ) -> None:
         self._stage_runner = stage_runner
         self._state_store = state_store
@@ -83,7 +84,9 @@ class PipelineRunner:
         self._cli_backend = cli_backend
         self._settings = settings
         self._veo3_adapter = veo3_adapter
+        self._external_clip_downloader = external_clip_downloader
         self._veo3_task: asyncio.Task[None] | None = None
+        self._background_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def run(self, item: QueueItem, workspace: Path) -> RunState:
         """Execute a full pipeline run for a queue item.
@@ -166,6 +169,10 @@ class PipelineRunner:
             # Fire async Veo3 generation after CONTENT stage (non-blocking)
             if stage == PipelineStage.CONTENT and self._veo3_adapter is not None:
                 self._veo3_task = self._fire_veo3_background(workspace, state.run_id)
+
+            # Fire external clip resolution after CONTENT stage (non-blocking)
+            if stage == PipelineStage.CONTENT and self._external_clip_downloader is not None:
+                self._fire_external_clips_background(workspace)
 
         # Final state
         state = RunState(
@@ -286,6 +293,10 @@ class PipelineRunner:
             if stage == PipelineStage.CONTENT and self._veo3_adapter is not None:
                 self._veo3_task = self._fire_veo3_background(workspace, state.run_id)
 
+            # Fire external clip resolution after CONTENT stage (non-blocking)
+            if stage == PipelineStage.CONTENT and self._external_clip_downloader is not None:
+                self._fire_external_clips_background(workspace)
+
         # Final state
         state = RunState(
             run_id=state.run_id,
@@ -325,6 +336,10 @@ class PipelineRunner:
         Returns ``(None, artifacts)`` on success; ``(state, artifacts)`` if
         escalation paused the pipeline.
         """
+        # Await external clips background task before assembly
+        if stage == PipelineStage.ASSEMBLY:
+            await self._await_external_clips()
+
         if stage == PipelineStage.VEO3_AWAIT:
             await self._run_veo3_await_gate(workspace, state.run_id)
         elif stage in _STAGE_DISPATCH:
@@ -454,6 +469,65 @@ class PipelineRunner:
                 data={"run_id": run_id},
             )
         )
+
+    def _fire_external_clips_background(self, workspace: Path) -> None:
+        """Launch external clip resolution as a background asyncio.Task.
+
+        Reads ``publishing-assets.json`` for ``external_clip_suggestions``,
+        then resolves each via YouTube search + download.  The task is stored
+        in ``_background_tasks["external_clips"]`` and awaited before assembly.
+        Failures are logged but never crash the pipeline.
+        """
+        try:
+            task: asyncio.Task[None] = asyncio.create_task(
+                self._resolve_external_clips_safe(workspace),
+                name="external-clips",
+            )
+            self._background_tasks["external_clips"] = task
+            logger.info("External clip resolution fired as background task")
+        except Exception:
+            logger.warning("External clip resolution fire failed \u2014 continuing pipeline", exc_info=True)
+
+    async def _resolve_external_clips_safe(self, workspace: Path) -> None:
+        """Safe wrapper: resolve external clips, catching all exceptions."""
+        try:
+            await self._resolve_external_clips(workspace)
+        except Exception:
+            logger.exception("External clip resolution failed \u2014 continuing without external clips")
+
+    async def _resolve_external_clips(self, workspace: Path) -> None:
+        """Read suggestions from publishing-assets.json, search + download clips."""
+        import json as _json
+
+        assets_path = workspace / "publishing-assets.json"
+        try:
+            raw = await asyncio.to_thread(assets_path.read_text)
+            data = _json.loads(raw)
+        except (FileNotFoundError, _json.JSONDecodeError, OSError) as exc:
+            logger.debug("Cannot read publishing-assets.json for external clips: %s", exc)
+            return
+
+        suggestions = data.get("external_clip_suggestions", [])
+        if not isinstance(suggestions, list) or not suggestions:
+            logger.debug("No external_clip_suggestions found \u2014 skipping")
+            return
+
+        from pipeline.application.external_clip_resolver import ExternalClipResolver
+
+        resolver = ExternalClipResolver(self._external_clip_downloader)  # type: ignore[arg-type]
+        resolved = await resolver.resolve_all(suggestions, workspace)
+        await resolver.write_manifest(resolved, workspace)
+        logger.info("External clip resolution complete: %d clips resolved", len(resolved))
+
+    async def _await_external_clips(self) -> None:
+        """Await background external clips task if it exists.  Non-fatal on failure."""
+        task = self._background_tasks.pop("external_clips", None)
+        if task is None:
+            return
+        try:
+            await task
+        except Exception:
+            logger.warning("External clips background task failed", exc_info=True)
 
     async def _execute_delivery(self, artifacts: tuple[Path, ...], workspace: Path) -> None:
         """Run the delivery stage \u2014 send video + content to user."""
