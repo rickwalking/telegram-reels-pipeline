@@ -175,12 +175,12 @@ development_status:
   19-1-two-pass-assembly-architecture: review
   19-2-auto-upscale-broll-clips: review
   19-3-broll-fade-transitions: review
-  19-4-assembly-report-broll-section: in-progress
+  19-4-assembly-report-broll-section: review
 
   epic-20: in-progress
   20-1-external-clip-download-preparation: review
   20-2-cutaway-manifest-domain-model: review
-  20-3-cli-cutaway-flag-user-provided-clips: in-progress
-  20-4-content-creator-agent-external-clip-suggestions: in-progress
-  20-5-external-clip-search-resolution: in-progress
+  20-3-cli-cutaway-flag-user-provided-clips: review
+  20-4-content-creator-agent-external-clip-suggestions: review
+  20-5-external-clip-search-resolution: review
   20-6-unified-assembly-integration: backlog
