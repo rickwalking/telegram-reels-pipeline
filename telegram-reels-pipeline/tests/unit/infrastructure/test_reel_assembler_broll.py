@@ -81,9 +81,13 @@ class TestAssembleWithBroll:
         assembler = ReelAssembler()
 
         with (
-            patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)) as mock_res,
+            patch.object(
+                assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)
+            ) as mock_res,
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base) as mock_p1,
-            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output) as mock_p2,
+            patch.object(
+                assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output
+            ) as mock_p2,
         ):
             base.write_bytes(b"base")
             result = await assembler.assemble_with_broll([seg1], output, manifest=manifest)
@@ -107,7 +111,10 @@ class TestAssembleWithBroll:
         with (
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(clip)),
             patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
-            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, side_effect=AssemblyError("overlay failed")),
+            patch.object(
+                assembler, "_overlay_broll", new_callable=AsyncMock,
+                side_effect=AssemblyError("overlay failed"),
+            ),
         ):
             base.write_bytes(b"base")
             result = await assembler.assemble_with_broll([seg1], output, manifest=manifest)
@@ -177,9 +184,9 @@ class TestOverlayBroll:
         fc_idx = list(call_args).index("-filter_complex")
         filter_graph = call_args[fc_idx + 1]
 
-        # Two setpts lines
-        assert "[1:v]setpts=PTS-STARTPTS+5.0/TB[clip1]" in filter_graph
-        assert "[2:v]setpts=PTS-STARTPTS+20.0/TB[clip2]" in filter_graph
+        # Two clip chains with setpts
+        assert "setpts=PTS-STARTPTS+5.0/TB[clip1]" in filter_graph
+        assert "setpts=PTS-STARTPTS+20.0/TB[clip2]" in filter_graph
 
         # Chained overlays — first produces [v1], second produces [vout]
         assert "[0:v][clip1]overlay=eof_action=pass[v1]" in filter_graph

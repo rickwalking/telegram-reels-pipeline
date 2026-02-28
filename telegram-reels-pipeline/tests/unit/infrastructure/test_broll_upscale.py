@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pipeline.domain.models import BrollPlacement
+from pipeline.domain.models import BrollPlacement, CutawayManifest
 from pipeline.infrastructure.adapters.reel_assembler import (
     AssemblyError,
     ReelAssembler,
@@ -234,29 +234,23 @@ class TestAssembleWithBrollUpscale:
         clip = tmp_path / "broll.mp4"
         clip.write_bytes(b"broll")
         output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
-
-        created_dirs: list[str] = []
-
-        original_mkdtemp = __import__("tempfile").mkdtemp
-
-        def tracking_mkdtemp(**kwargs: str) -> str:
-            d = original_mkdtemp(**kwargs)
-            created_dirs.append(d)
-            return d
 
         with (
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(str(clip))),
-            patch.object(assembler, "_assemble_with_cutaways", new_callable=AsyncMock, return_value=output),
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
+            patch.object(assembler, "_overlay_broll", new_callable=AsyncMock, return_value=output),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil") as mock_shutil,
         ):
-            mock_tempfile.mkdtemp = tracking_mkdtemp
-            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            mock_tempfile.mkdtemp = MagicMock(return_value="/tmp/broll_upscale_test")
+            base.write_bytes(b"base")
+            await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
-            # shutil.rmtree should have been called to clean up
             mock_shutil.rmtree.assert_called_once()
 
     async def test_upscale_temp_dir_cleaned_on_failure(self, tmp_path: Path) -> None:
@@ -265,55 +259,59 @@ class TestAssembleWithBrollUpscale:
         clip = tmp_path / "broll.mp4"
         clip.write_bytes(b"broll")
         output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
 
         with (
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=Path(str(clip))),
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
             patch.object(
-                assembler, "_assemble_with_cutaways", new_callable=AsyncMock, side_effect=AssemblyError("boom")
+                assembler, "_overlay_broll", new_callable=AsyncMock, side_effect=AssemblyError("boom")
             ),
-            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=output),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil") as mock_shutil,
         ):
             mock_tempfile.mkdtemp = MagicMock(return_value="/tmp/broll_upscale_test")
-            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            base.write_bytes(b"base")
+            await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
-            # rmtree called even when cutaway fails
+            # rmtree called even when overlay fails
             mock_shutil.rmtree.assert_called_once_with(Path("/tmp/broll_upscale_test"), ignore_errors=True)
 
-    async def test_upscaled_clip_path_used_in_placement(self, tmp_path: Path) -> None:
+    async def test_upscaled_clip_path_used_in_overlay(self, tmp_path: Path) -> None:
         seg = tmp_path / "seg.mp4"
         seg.write_bytes(b"video")
         clip = tmp_path / "broll.mp4"
         clip.write_bytes(b"broll")
         output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
         upscaled_path = tmp_path / "_upscaled_broll.mp4"
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
 
         captured_placements: list[list[BrollPlacement]] = []
 
-        async def capture_cutaways(
-            segments: list[Path],
-            out: Path,
-            placements: list[BrollPlacement],
-            transitions: tuple[object, ...] | None,
+        async def capture_overlay(
+            base_reel: Path, placements: list[BrollPlacement], out: Path, **kwargs: object
         ) -> Path:
             captured_placements.append(placements)
             return out
 
         with (
             patch.object(assembler, "_ensure_clip_resolution", new_callable=AsyncMock, return_value=upscaled_path),
-            patch.object(assembler, "_assemble_with_cutaways", side_effect=capture_cutaways),
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
+            patch.object(assembler, "_overlay_broll", side_effect=capture_overlay),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil"),
         ):
             mock_tempfile.mkdtemp = MagicMock(return_value="/tmp/broll_upscale_test")
-            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            base.write_bytes(b"base")
+            await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
         assert len(captured_placements) == 1
         assert captured_placements[0][0].clip_path == str(upscaled_path)
@@ -324,17 +322,16 @@ class TestAssembleWithBrollUpscale:
         clip = tmp_path / "broll.mp4"
         clip.write_bytes(b"broll")
         output = tmp_path / "reel.mp4"
+        base = output.with_suffix(".base.mp4")
 
         placement = _make_placement(clip_path=str(clip))
+        manifest, _ = CutawayManifest.from_broll_and_external(broll=(placement,))
         assembler = ReelAssembler()
 
         captured_placements: list[list[BrollPlacement]] = []
 
-        async def capture_cutaways(
-            segments: list[Path],
-            out: Path,
-            placements: list[BrollPlacement],
-            transitions: tuple[object, ...] | None,
+        async def capture_overlay(
+            base_reel: Path, placements: list[BrollPlacement], out: Path, **kwargs: object
         ) -> Path:
             captured_placements.append(placements)
             return out
@@ -346,12 +343,14 @@ class TestAssembleWithBrollUpscale:
                 new_callable=AsyncMock,
                 return_value=Path(str(clip)),
             ),
-            patch.object(assembler, "_assemble_with_cutaways", side_effect=capture_cutaways),
+            patch.object(assembler, "assemble", new_callable=AsyncMock, return_value=base),
+            patch.object(assembler, "_overlay_broll", side_effect=capture_overlay),
             patch("pipeline.infrastructure.adapters.reel_assembler.tempfile") as mock_tempfile,
             patch("pipeline.infrastructure.adapters.reel_assembler.shutil"),
         ):
             mock_tempfile.mkdtemp = MagicMock(return_value="/tmp/broll_upscale_test")
-            await assembler.assemble_with_broll([seg], output, broll_placements=(placement,))
+            base.write_bytes(b"base")
+            await assembler.assemble_with_broll([seg], output, manifest=manifest)
 
         assert len(captured_placements) == 1
         # clip_path should be unchanged since _ensure returned the same path
