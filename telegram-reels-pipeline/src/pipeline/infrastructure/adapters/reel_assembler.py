@@ -5,9 +5,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import tempfile
-from dataclasses import dataclass, replace
+import time
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from pipeline.domain.enums import TransitionKind
@@ -56,6 +58,31 @@ def make_transition(
         duration=_STYLE_CHANGE_DURATION,
         kind=kind,
     )
+
+
+@dataclass(frozen=True)
+class BrollReportEntry:
+    """Single B-roll clip placement entry for the assembly report."""
+
+    variant: str
+    clip_path: str
+    insertion_point_s: float
+    duration_s: float
+    narrative_anchor: str
+    source: str
+    original_resolution: tuple[int, int]
+    upscaled: bool
+
+
+@dataclass(frozen=True)
+class BrollSummary:
+    """B-roll summary section of the assembly report."""
+
+    clips_inserted: int
+    placements: tuple[BrollReportEntry, ...]
+    assembly_method: str
+    pass_1_duration_ms: int
+    pass_2_duration_ms: int
 
 
 class AssemblyError(PipelineError):
@@ -124,6 +151,28 @@ class ReelAssembler:
             raise AssemblyError(f"FFmpeg upscale failed (exit {proc.returncode}): {stderr.decode()}")
         logger.info("Upscaled %s -> %s", source.name, dest.name)
         return dest
+
+    @staticmethod
+    def _write_broll_report(output: Path, summary: BrollSummary) -> None:
+        """Write assembly-report.json alongside *output* using atomic write."""
+        report_path = output.with_name("assembly-report.json")
+        report_data = {"broll_summary": asdict(summary)}
+        report_json = json.dumps(report_data, indent=2)
+        fd, tmp_path_str = tempfile.mkstemp(
+            dir=str(report_path.parent), suffix=".tmp", prefix=".assembly-report-",
+        )
+        closed = False
+        try:
+            os.write(fd, report_json.encode())
+            os.close(fd)
+            closed = True
+            os.replace(tmp_path_str, str(report_path))
+            logger.info("Wrote assembly report to %s", report_path.name)
+        except BaseException:
+            if not closed:
+                os.close(fd)
+            Path(tmp_path_str).unlink(missing_ok=True)
+            raise
 
     async def _ensure_clip_resolution(self, clip_path: Path, temp_dir: Path) -> Path:
         """Return *clip_path* if already 1080x1920, otherwise upscale into *temp_dir*."""
@@ -400,6 +449,10 @@ class ReelAssembler:
         *fade_duration* controls the alpha fade length (seconds) per clip.
         Short clips are clamped to 40% of clip duration.
         Falls back to the base reel (no B-roll) when Pass 2 fails.
+
+        Writes ``assembly-report.json`` alongside *output* with a
+        ``broll_summary`` section documenting clip placements, timing,
+        and upscale state.
         """
         # Convert CutawayClip to BrollPlacement for overlay compatibility
         broll_placements = tuple(
@@ -415,7 +468,18 @@ class ReelAssembler:
         )
 
         if not broll_placements:
-            return await self.assemble(segments, output, transitions=transitions)
+            result = await self.assemble(segments, output, transitions=transitions)
+            self._write_broll_report(
+                output,
+                BrollSummary(
+                    clips_inserted=0,
+                    placements=(),
+                    assembly_method="two_pass_overlay",
+                    pass_1_duration_ms=0,
+                    pass_2_duration_ms=0,
+                ),
+            )
+            return result
 
         # Validate clip files exist — skip missing ones gracefully
         valid_placements: list[BrollPlacement] = []
@@ -428,30 +492,79 @@ class ReelAssembler:
 
         if not valid_placements:
             logger.warning("No valid B-roll clips found — assembling without B-roll")
-            return await self.assemble(segments, output, transitions=transitions)
+            result = await self.assemble(segments, output, transitions=transitions)
+            self._write_broll_report(
+                output,
+                BrollSummary(
+                    clips_inserted=0,
+                    placements=(),
+                    assembly_method="two_pass_overlay",
+                    pass_1_duration_ms=0,
+                    pass_2_duration_ms=0,
+                ),
+            )
+            return result
 
         # Ensure all B-roll clips match target resolution before overlay
         upscale_dir = Path(tempfile.mkdtemp(prefix="broll_upscale_"))
         try:
             upscaled_placements: list[BrollPlacement] = []
+            # Track per-clip original resolution and upscale state
+            clip_resolutions: list[tuple[int, int]] = []
+            clip_upscaled: list[bool] = []
             for bp in valid_placements:
+                original_res = await self._probe_resolution(Path(bp.clip_path))
+                clip_resolutions.append(original_res)
                 new_path = await self._ensure_clip_resolution(Path(bp.clip_path), upscale_dir)
-                if str(new_path) != bp.clip_path:
+                was_upscaled = str(new_path) != bp.clip_path
+                clip_upscaled.append(was_upscaled)
+                if was_upscaled:
                     upscaled_placements.append(replace(bp, clip_path=str(new_path)))
                 else:
                     upscaled_placements.append(bp)
 
             # Pass 1: assemble base reel into a temp file
             tmp_path = output.with_suffix(".base.mp4")
+            t0 = time.monotonic()
             await self.assemble(segments, tmp_path, transitions=transitions)
-            logger.info("Pass 1 complete: base reel at %s", tmp_path.name)
+            pass_1_ms = int((time.monotonic() - t0) * 1000)
+            logger.info("Pass 1 complete: base reel at %s (%d ms)", tmp_path.name, pass_1_ms)
 
             # Pass 2: overlay B-roll clips onto the base reel
+            t1 = time.monotonic()
             result = await self._overlay_broll(
                 tmp_path, upscaled_placements, output, fade_duration=fade_duration
             )
+            pass_2_ms = int((time.monotonic() - t1) * 1000)
             tmp_path.unlink(missing_ok=True)
-            logger.info("Pass 2 complete: B-roll overlay at %s", output.name)
+            logger.info("Pass 2 complete: B-roll overlay at %s (%d ms)", output.name, pass_2_ms)
+
+            # Build report entries from manifest clips + tracked metadata
+            report_entries = tuple(
+                BrollReportEntry(
+                    variant=mc.variant,
+                    clip_path=mc.clip_path,
+                    insertion_point_s=mc.insertion_point_s,
+                    duration_s=mc.duration_s,
+                    narrative_anchor=mc.narrative_anchor,
+                    source=str(mc.source),
+                    original_resolution=clip_resolutions[i],
+                    upscaled=clip_upscaled[i],
+                )
+                for i, mc in enumerate(
+                    c for c in manifest.clips if Path(c.clip_path).exists()
+                )
+            )
+            self._write_broll_report(
+                output,
+                BrollSummary(
+                    clips_inserted=len(report_entries),
+                    placements=report_entries,
+                    assembly_method="two_pass_overlay",
+                    pass_1_duration_ms=pass_1_ms,
+                    pass_2_duration_ms=pass_2_ms,
+                ),
+            )
             return result
         except AssemblyError as exc:
             logger.warning("B-roll overlay failed (%s), falling back to base reel", exc.message)
