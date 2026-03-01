@@ -60,6 +60,14 @@ FR40: System can store pipeline run history in human-readable format (markdown f
 FR41: System can auto-start on Pi boot and auto-restart after crashes via the process manager
 FR42: System can monitor resource usage (memory, CPU, thermal) and defer processing when the Pi is under stress
 FR43: User can inspect run history, QA feedback, and knowledge base through the filesystem
+FR-AI1: User can pass additional instructions via a CLI flag (e.g., --instructions) containing free-form text with creative directives for the short
+FR-AI2: Router agent can parse additional instructions and extract structured directive categories: overlay images, cutaway video clips, transition effects, and narrative overrides
+FR-AI3: Router agent can validate referenced media files (images, videos) exist and are accessible before forwarding to downstream agents
+FR-AI4: Router agent can produce structured directive fields in router-output.json that downstream agents consume (overlay_images, cutaway_clips, transition_preferences, narrative_overrides)
+FR-AI5: Content Creator agent can consume narrative override directives to adjust tone, structure, pacing, and story arc of the generated content
+FR-AI6: FFmpeg Engineer agent can consume transition effect directives to apply user-specified transitions (wipes, fades, custom effects) to segments
+FR-AI7: FFmpeg Engineer agent can consume overlay image directives to insert user-provided images at specified moments in the short
+FR-AI8: Assembly stage can incorporate user-provided video clips as documentary-style cutaways, integrating with the existing B-roll/cutaway system (Epic 20)
 
 ### NonFunctional Requirements
 
@@ -85,6 +93,8 @@ NFR-S1: API credentials stored as environment variables, zero secrets in code
 NFR-S2: Telegram CHAT_ID validation — only process authorized messages
 NFR-S3: File permissions 600/700 on sensitive paths
 NFR-S4: No external network exposure — Telegram polling only, zero open ports
+NFR-AI1: Additional instructions parsing must not add more than 2 seconds to Router agent execution time
+NFR-AI2: Media file validation (existence, format, size) must happen at the Router stage to fail fast before expensive downstream processing
 
 ### Additional Requirements
 
@@ -201,6 +211,14 @@ NFR-S4: No external network exposure — Telegram polling only, zero open ports
 | FR71 | Epic 20 | CLI --cutaway flag for user-provided external clip URLs with timestamps |
 | FR72 | Epic 20 | Unified B-roll manifest merging Veo3 clips and external documentary clips |
 | FR73 | Epic 20 | Narrative anchor matching for external clips (transcript timestamp mapping) |
+| FR-AI1 | Epic 21 | CLI --instructions flag for free-form creative directives |
+| FR-AI2 | Epic 21 | Router parses additional instructions into structured directive categories |
+| FR-AI3 | Epic 21 | Router validates referenced media files exist and are accessible |
+| FR-AI4 | Epic 21 | Router produces structured directive fields in router-output.json |
+| FR-AI5 | Epic 21 | Content Creator consumes narrative overrides (tone, structure, pacing) |
+| FR-AI6 | Epic 21 | FFmpeg Engineer applies user-specified transition effects |
+| FR-AI7 | Epic 21 | FFmpeg Engineer inserts overlay images at specified moments |
+| FR-AI8 | Epic 21 | Assembly incorporates user-provided documentary-style cutaway clips |
 
 ## Epic List
 
@@ -215,6 +233,10 @@ Reel assembler produces correct full-opacity documentary cutaways using a proven
 ### Epic 20: Documentary Cutaway System
 Pipeline can source external video clips (YouTube Shorts, user URLs) and auto-discover relevant reference content. Unified B-roll manifest merges Veo3 and external clips for assembly. Supports both user-directed and agent-suggested placements.
 **FRs covered:** FR69-FR73
+
+### Epic 21: Additional Creative Instructions
+User can pass creative directives (images, videos, transitions, narrative changes) via the CLI. Includes full CLI refactoring to Command pattern (DI, interfaces, separation of concerns, command history). Router parses and structures directives. Downstream agents (Content Creator, FFmpeg Engineer, Assembly) consume them. No source file exceeds 500 lines.
+**FRs covered:** FR-AI1 through FR-AI8
 
 ### Epic 1: Project Foundation & Pipeline Orchestration
 Pedro has a running pipeline daemon with the complete skeleton: domain model, FSM, state persistence, agent execution, QA reflection loop, event logging, workspace isolation, and queue management. All Port Protocols defined, systemd service configured, Poetry project scaffolded.
@@ -1415,3 +1437,148 @@ so that all B-roll sources are handled consistently with correct timeline placem
 - Integration tests for all source combinations
 
 **Files affected:** `application/pipeline_runner.py` (unified manifest construction, background task await), `infrastructure/adapters/reel_assembler.py` (accepts CutawayManifest), `application/veo3_await_gate.py` (wait for external clips too), tests
+
+## Epic 21: Additional Creative Instructions
+
+**Goal:** Enable users to pass creative directives (images, videos, transitions, narrative changes) via the CLI, with the pipeline interpreting, validating, and applying them across relevant stages. Includes a full CLI refactoring to Command pattern for scalability.
+
+**Global rule:** No source file in `src/` or `scripts/` exceeds 500 lines. Test files are exempt.
+
+**FRs covered:** FR-AI1, FR-AI2, FR-AI3, FR-AI4, FR-AI5, FR-AI6, FR-AI7, FR-AI8
+**NFRs addressed:** NFR-AI1, NFR-AI2
+**Dependencies:** Epic 20 (cutaway manifest), Epics 12-13 (transitions/styles)
+
+### Story 21.1: CLI Command Infrastructure — Protocols, Context, Invoker, History
+
+As a pipeline developer,
+I want a Command pattern infrastructure with protocols, a shared context, an invoker, and command history,
+so that the CLI has a scalable, testable foundation where each concern is isolated and all executions are traceable.
+
+**Acceptance criteria:**
+- New package `src/pipeline/application/cli/` with `protocols.py`, `context.py`, `invoker.py`, `history.py`
+- `protocols.py` defines `Command` protocol with `name` property and `async execute(context) -> CommandResult`, `StageHook` protocol with `should_run(stage, phase) -> bool` and `async execute(context) -> None`, `InputReader` protocol abstracting stdin, `ClipDurationProber` protocol abstracting ffprobe
+- `context.py` defines `PipelineContext` dataclass holding: workspace, artifacts, settings, stage_runner, event_bus, and accumulated state — replaces the current 11-argument `run_pipeline()` signature
+- `invoker.py` defines `PipelineInvoker` that executes commands, records results in `CommandHistory`, catches and records exceptions with status `failed` before re-raising
+- `history.py` defines `CommandHistory` — debug stack persisted to `command-history.json` in workspace via atomic write, queryable: list all, filter by status, get last N
+- `domain/models.py` extended with `CommandRecord` frozen dataclass: `name: str`, `started_at: str`, `finished_at: str`, `status: str`, `error: str | None` — uses `tuple` per project conventions
+- `infrastructure/adapters/ffprobe_adapter.py` (new) implements `ClipDurationProber` protocol, extracts current `_probe_clip_duration` logic — only file that depends on `asyncio.create_subprocess_exec` for ffprobe
+- `infrastructure/adapters/stdin_reader.py` (new) implements `InputReader` protocol, extracts current `_timed_input` logic — only file that depends on `sys.stdin`
+- No source file exceeds 500 lines
+- Comprehensive tests in `tests/unit/application/cli/`: `test_invoker.py`, `test_history.py`, `test_context.py`
+
+**Files affected:** `application/cli/` (new package), `domain/models.py`, `infrastructure/adapters/ffprobe_adapter.py` (new), `infrastructure/adapters/stdin_reader.py` (new), tests
+
+### Story 21.2: CLI Command Extraction — Commands, Hooks, Comprehensive Tests
+
+As a pipeline developer,
+I want each CLI concern extracted into its own ConcreteCommand and StageHook file with dependency injection,
+so that every piece of logic is independently testable, no source file exceeds 500 lines, and the original `run_cli.py` becomes a thin composition root.
+
+**Acceptance criteria:**
+- Each command in its own file under `application/cli/commands/`:
+  - `validate_args.py` — `ValidateArgsCommand`: validates CLI argument combinations, resolves defaults
+  - `setup_workspace.py` — `SetupWorkspaceCommand`: creates new or opens resumed workspace, runs preflight
+  - `download_cutaways.py` — `DownloadCutawaysCommand`: parses cutaway specs, downloads clips, writes manifest. Depends on `ClipDownloader` and `ClipDurationProber` protocols, not concrete classes
+  - `run_elicitation.py` — `RunElicitationCommand`: interactive router Q&A loop. Depends on `InputReader` protocol, not `sys.stdin`
+  - `run_stage.py` — `RunStageCommand`: runs a single pipeline stage through the reflection loop. Receives `tuple[StageHook, ...]` via constructor for pre/post hooks
+  - `run_pipeline.py` — `RunPipelineCommand`: composes the above commands in sequence via the `PipelineInvoker`
+- Each hook in its own file under `application/cli/hooks/`:
+  - `veo3_fire_hook.py` — `Veo3FireHook`: fires Veo3 background task (post-Content)
+  - `veo3_await_hook.py` — `Veo3AwaitHook`: awaits Veo3 completion (pre-Assembly)
+  - `manifest_hook.py` — `ManifestBuildHook`: builds cutaway manifest (pre-Assembly)
+  - `encoding_hook.py` — `EncodingPlanHook`: executes FFmpeg encoding plan (post-FFmpeg)
+- Each hook implements `StageHook` protocol with `should_run()` self-selection — no if/elif chains in `RunStageCommand`
+- All commands receive dependencies through constructor injection (protocols, not implementations)
+- `scripts/run_cli.py` becomes a thin composition root (~50 lines): parse args, instantiate adapters, inject into commands, hand to invoker — zero business logic
+- No source file in `src/` or `scripts/` exceeds 500 lines (test files exempt)
+- Every command has its own test file in `tests/unit/application/cli/commands/`
+- Every hook has its own test file in `tests/unit/application/cli/hooks/`
+- Every branch covered: happy path, validation failures, partial failures, timeouts, non-interactive fallback, resume detection, empty workspace, all-stages-complete
+- All tests use fakes/protocols for dependencies (no mocking of concrete classes)
+- Existing test behavior from `test_run_cli.py`, `test_run_cli_atomic_write.py`, `test_cli_cutaway.py` preserved and reorganized
+
+**Files affected:** `application/cli/commands/` (6 new files), `application/cli/hooks/` (4 new files), `scripts/run_cli.py` (rewrite), `tests/unit/application/cli/` (10+ new test files), old test files removed after migration
+
+### Story 21.3: Instructions Flag & Domain Model
+
+As a pipeline user,
+I want to pass additional creative instructions via a `--instructions` flag when running the CLI,
+so that I can provide specific directives about images, video clips, transitions, and narrative that shape the final short.
+
+**Acceptance criteria:**
+- `--instructions` added to `arg_parser.py` as an optional string argument
+- `ValidateArgsCommand` validates the flag (non-empty when provided)
+- Instructions string stored in `PipelineContext` and forwarded to the Router stage as input
+- Omitting `--instructions` produces identical behavior to current pipeline runs
+- Frozen dataclasses added to `domain/models.py`: `CreativeDirectives` (top-level container), `OverlayImage` (path, timestamp, duration), `DocumentaryClip` (path or query, placement hint), `TransitionPreference` (effect type, timing), `NarrativeOverride` (tone, structure, pacing, arc changes)
+- All domain models use `tuple` (not list) and `Mapping` (not dict) per project conventions
+- `CreativeDirectives` has class method `empty()` returning a no-op instance for backward compatibility
+- No source file exceeds 500 lines
+- Comprehensive tests: domain model constructors, immutability, `empty()` factory, CLI flag parsing, validation branches, backward compatibility
+
+**Files affected:** `application/cli/arg_parser.py`, `application/cli/commands/validate_args.py`, `application/cli/context.py`, `domain/models.py`, tests
+
+### Story 21.4: Router Directive Parsing & Validation
+
+As a pipeline developer,
+I want the Router agent to parse additional instructions into structured directive categories and validate referenced media files,
+so that downstream agents receive clean, typed data and invalid references fail fast before expensive processing.
+
+**Acceptance criteria:**
+- Router agent extracts and categorizes directives into: `overlay_images`, `cutaway_clips`, `transition_preferences`, `narrative_overrides`
+- Structured directives written as new fields in `router-output.json`
+- Referenced local files (images, videos) validated for existence and accessibility at Router stage
+- Invalid references flagged with warnings in `router-output.json` (non-fatal)
+- Validation adds no more than 2 seconds to Router execution time (NFR-AI1)
+- When no `--instructions` provided, `router-output.json` contains empty directive fields (backward compatible)
+- Comprehensive tests: parsing each directive category, mixed directives, malformed input, missing files, empty instructions, backward compatibility, schema validation
+
+**Files affected:** `workflows/stages/stage-01-router.md`, `agents/router/agent.md`, `application/cli/commands/run_stage.py` (forwards instructions), tests
+
+### Story 21.5: Content Creator Narrative Overrides
+
+As a pipeline user,
+I want the Content Creator agent to apply my narrative directives (tone, structure, pacing, story arc),
+so that the generated descriptions, hashtags, and content direction reflect my creative vision.
+
+**Acceptance criteria:**
+- Content Creator stage (Stage 4) reads `narrative_overrides` from `router-output.json`
+- Agent adjusts: tone (e.g. humorous, dramatic, educational), structure (e.g. hook-first, chronological), pacing cues, story arc modifications
+- Generated `content.json` reflects the overrides
+- When no narrative overrides exist, behavior is identical to current pipeline (backward compatible)
+- Comprehensive tests: each override type, combined overrides, empty overrides, partial overrides, backward compatibility
+
+**Files affected:** `workflows/stages/stage-04-content.md`, `agents/content-creator/agent.md`, tests
+
+### Story 21.6: FFmpeg Transition & Image Overlay Directives
+
+As a pipeline user,
+I want the FFmpeg Engineer agent to apply my transition effects and overlay images at specified moments,
+so that the final short includes the visual style I requested.
+
+**Acceptance criteria:**
+- FFmpeg Engineer stage (Stage 6) reads `transition_preferences` from `router-output.json` and incorporates user-specified transitions (fades, wipes, dissolves) into `encoding-plan.json`
+- User transitions override default style-change transitions at specified points
+- FFmpeg Engineer reads `overlay_images` from `router-output.json` and adds FFmpeg overlay filter commands to `encoding-plan.json` for each image at specified timestamp and duration
+- Images validated (format, resolution) before inclusion
+- When no transition or image directives exist, behavior is identical to current pipeline (backward compatible)
+- Comprehensive tests: custom transitions, image overlays, combined directives, invalid images, missing files, conflicting transitions, backward compatibility
+
+**Files affected:** `workflows/stages/stage-06-ffmpeg-engineer.md`, `agents/ffmpeg-engineer/agent.md`, `infrastructure/adapters/ffmpeg_adapter.py` (overlay support), tests
+
+### Story 21.7: Assembly Documentary Clip Integration
+
+As a pipeline user,
+I want the Assembly stage to incorporate user-provided documentary-style video clips into the final short,
+so that my additional video content is woven into the reel at the specified moments.
+
+**Acceptance criteria:**
+- Assembly stage (Stage 7) reads `cutaway_clips` directives from `router-output.json`
+- User-provided documentary clips added to `CutawayManifest` (Epic 20) with source type `user_instructed`
+- Clips placed at user-specified insertion points
+- Assembly report `broll_summary.placements[]` includes source field
+- Documentary clips referenced by URL are downloaded via `ExternalClipDownloader` (Epic 20 infrastructure)
+- When no documentary clip directives exist, behavior is identical to current pipeline (backward compatible)
+- Comprehensive tests: user-provided clips, URL-referenced clips, mixed sources (Veo3 + external + user), no-clips, integration with Epic 20 `CutawayManifest`
+
+**Files affected:** `application/cli/hooks/manifest_hook.py` (extend for user clips), `infrastructure/adapters/reel_assembler.py`, `workflows/stages/stage-07-assembly.md`, tests
