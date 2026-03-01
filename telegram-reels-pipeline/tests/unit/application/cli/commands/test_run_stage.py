@@ -13,6 +13,7 @@ from pipeline.application.cli.commands.run_stage import (
     RunStageCommand,
     stage_name,
 )
+from pipeline.application.cli.context import PipelineState
 from pipeline.domain.enums import PipelineStage, QADecision
 from pipeline.domain.models import QACritique, ReflectionResult
 from pipeline.domain.types import GateName
@@ -86,12 +87,10 @@ def _make_context(
     ctx = MagicMock()
     ctx.require_workspace.return_value = tmp_path
     ctx.artifacts = ()
-    ctx.state = {
-        "current_stage_num": stage_num,
-        "stage_spec": (stage, tmp_path / "step.md", tmp_path / "agent.md", gate_name),
-        "gate_criteria": "",
-        "elicitation": {},
-    }
+    ctx.state = PipelineState(
+        current_stage_num=stage_num,
+        stage_spec=(stage, str(tmp_path / "step.md"), str(tmp_path / "agent.md"), gate_name),
+    )
     return ctx
 
 

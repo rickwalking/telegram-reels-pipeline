@@ -187,7 +187,7 @@ class ValidateArgsCommand:
         """
         from pipeline.application.cli.protocols import CommandResult
 
-        args = context.state.get("args")
+        args = context.state.args
         if args is None:
             return CommandResult(success=False, message="No args in context state")
 
@@ -228,12 +228,12 @@ class ValidateArgsCommand:
         framing_style = STYLE_MAP.get(style) if style else None
 
         # Populate context state
-        context.state["start_stage"] = resolved_start
-        context.state["moments_requested"] = moments_requested
-        context.state["framing_style"] = framing_style
-        context.state["stages"] = stages
-        context.state["target_duration"] = target_duration
-        context.state["instructions"] = instructions.strip() if instructions else ""
+        context.state.start_stage = resolved_start
+        context.state.moments_requested = moments_requested
+        context.state.framing_style = framing_style
+        context.state.stages = stages
+        context.state.target_duration = target_duration
+        context.state.instructions = instructions.strip() if instructions else ""
 
         return CommandResult(
             success=True,

@@ -68,7 +68,7 @@ class SetupWorkspaceCommand:
         from pipeline.application.workspace_manager import WorkspaceManager
 
         resume_path = context.resume_workspace
-        start_stage = context.state.get("start_stage", context.start_stage or 1)
+        start_stage = context.state.start_stage or context.start_stage or 1
 
         if resume_path:
             workspace = Path(resume_path) if not isinstance(resume_path, Path) else resume_path

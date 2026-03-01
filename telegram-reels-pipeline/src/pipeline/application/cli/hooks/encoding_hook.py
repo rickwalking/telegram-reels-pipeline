@@ -9,7 +9,7 @@ from pipeline.domain.enums import PipelineStage
 
 if TYPE_CHECKING:
     from pipeline.application.cli.context import PipelineContext
-    from pipeline.application.cli.protocols import StageHook
+    from pipeline.application.cli.protocols import ArtifactCollector, StageHook
     from pipeline.infrastructure.adapters.ffmpeg_adapter import FFmpegAdapter
 
 logger = logging.getLogger(__name__)
@@ -29,8 +29,9 @@ class EncodingPlanHook:
     if TYPE_CHECKING:
         _protocol_check: StageHook
 
-    def __init__(self, ffmpeg_adapter: FFmpegAdapter) -> None:
+    def __init__(self, ffmpeg_adapter: FFmpegAdapter, artifact_collector: ArtifactCollector) -> None:
         self._ffmpeg_adapter = ffmpeg_adapter
+        self._artifact_collector = artifact_collector
 
     def should_run(self, stage: PipelineStage, phase: Literal["pre", "post"]) -> bool:
         """Return True only for FFMPEG_ENGINEER + post."""
@@ -56,6 +57,4 @@ class EncodingPlanHook:
             print(f"      - {seg.name}")
 
         # Re-collect artifacts so downstream stages see the segment files
-        from pipeline.infrastructure.adapters.artifact_collector import collect_artifacts
-
-        context.artifacts = collect_artifacts(workspace)
+        context.artifacts = self._artifact_collector(workspace)

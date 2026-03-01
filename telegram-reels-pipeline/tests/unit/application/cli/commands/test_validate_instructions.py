@@ -51,7 +51,7 @@ class TestValidateInstructionsNone:
     def test_none_instructions_pass(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions=None)
+        ctx.state.args = _make_args(instructions=None)
         cmd = ValidateArgsCommand()
 
         # Act
@@ -63,14 +63,14 @@ class TestValidateInstructionsNone:
     def test_none_instructions_stores_empty_string(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions=None)
+        ctx.state.args = _make_args(instructions=None)
         cmd = ValidateArgsCommand()
 
         # Act
         asyncio.run(cmd.execute(ctx))
 
         # Assert
-        assert ctx.state["instructions"] == ""
+        assert ctx.state.instructions == ""
 
 
 class TestValidateInstructionsNonEmpty:
@@ -79,7 +79,7 @@ class TestValidateInstructionsNonEmpty:
     def test_nonempty_instructions_pass(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="overlay a logo at 5s")
+        ctx.state.args = _make_args(instructions="overlay a logo at 5s")
         cmd = ValidateArgsCommand()
 
         # Act
@@ -91,26 +91,26 @@ class TestValidateInstructionsNonEmpty:
     def test_nonempty_instructions_stored_in_context(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="overlay a logo at 5s")
+        ctx.state.args = _make_args(instructions="overlay a logo at 5s")
         cmd = ValidateArgsCommand()
 
         # Act
         asyncio.run(cmd.execute(ctx))
 
         # Assert
-        assert ctx.state["instructions"] == "overlay a logo at 5s"
+        assert ctx.state.instructions == "overlay a logo at 5s"
 
     def test_instructions_stripped_before_storage(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="  use dramatic transitions  ")
+        ctx.state.args = _make_args(instructions="  use dramatic transitions  ")
         cmd = ValidateArgsCommand()
 
         # Act
         asyncio.run(cmd.execute(ctx))
 
         # Assert
-        assert ctx.state["instructions"] == "use dramatic transitions"
+        assert ctx.state.instructions == "use dramatic transitions"
 
 
 class TestValidateInstructionsEmpty:
@@ -119,7 +119,7 @@ class TestValidateInstructionsEmpty:
     def test_empty_string_fails(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="")
+        ctx.state.args = _make_args(instructions="")
         cmd = ValidateArgsCommand()
 
         # Act
@@ -132,7 +132,7 @@ class TestValidateInstructionsEmpty:
     def test_whitespace_only_fails(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="   ")
+        ctx.state.args = _make_args(instructions="   ")
         cmd = ValidateArgsCommand()
 
         # Act
@@ -145,7 +145,7 @@ class TestValidateInstructionsEmpty:
     def test_tabs_and_newlines_only_fails(self) -> None:
         # Arrange
         ctx = _make_context()
-        ctx.state["args"] = _make_args(instructions="\t\n  ")
+        ctx.state.args = _make_args(instructions="\t\n  ")
         cmd = ValidateArgsCommand()
 
         # Act
@@ -172,7 +172,7 @@ class TestValidateInstructionsBackwardCompat:
             moments=None,
             style=None,
         )
-        ctx.state["args"] = args
+        ctx.state.args = args
         cmd = ValidateArgsCommand()
 
         # Act
@@ -180,4 +180,4 @@ class TestValidateInstructionsBackwardCompat:
 
         # Assert
         assert result.success is True
-        assert ctx.state["instructions"] == ""
+        assert ctx.state.instructions == ""

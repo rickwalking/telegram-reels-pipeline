@@ -1,4 +1,4 @@
-"""Tests for PipelineContext — construction, properties, snapshot."""
+"""Tests for PipelineContext and PipelineState — construction, properties, snapshot."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pipeline.application.cli.context import PipelineContext
+from pipeline.application.cli.context import PipelineContext, PipelineState
 
 # --- Helpers ---
 
@@ -22,7 +22,37 @@ def _make_context(**overrides: object) -> PipelineContext:
     return PipelineContext(**defaults)  # type: ignore[arg-type]
 
 
-# --- Tests ---
+# --- PipelineState ---
+
+
+class TestPipelineState:
+    """Verify PipelineState defaults and mutability."""
+
+    def test_default_construction(self) -> None:
+        state = PipelineState()
+        assert state.args is None
+        assert state.cutaway_specs is None
+        assert state.instructions == ""
+        assert state.start_stage == 1
+        assert state.moments_requested == 1
+        assert state.framing_style is None
+        assert state.stages == 7
+        assert state.target_duration == 90
+        assert state.current_stage_num == 0
+        assert state.stage_spec is None
+        assert state.gate_criteria == ""
+        assert state.elicitation == {}
+        assert state.veo3_task is None
+
+    def test_fields_are_mutable(self) -> None:
+        state = PipelineState()
+        state.start_stage = 3
+        state.instructions = "make it dramatic"
+        assert state.start_stage == 3
+        assert state.instructions == "make it dramatic"
+
+
+# --- PipelineContext ---
 
 
 class TestPipelineContextConstruction:
@@ -33,7 +63,7 @@ class TestPipelineContextConstruction:
         ctx = _make_context()
         assert ctx.workspace is None
         assert ctx.artifacts == ()
-        assert ctx.state == {}
+        assert isinstance(ctx.state, PipelineState)
         assert ctx.youtube_url == ""
         assert ctx.user_message == ""
         assert ctx.max_stages == 0
@@ -44,7 +74,6 @@ class TestPipelineContextConstruction:
         ctx = _make_context(
             workspace=tmp_path,
             artifacts=(tmp_path / "a.json",),
-            state={"key": "val"},
             youtube_url="https://youtube.com/watch?v=test",
             user_message="hello",
             max_stages=3,
@@ -54,7 +83,6 @@ class TestPipelineContextConstruction:
         )
         assert ctx.workspace == tmp_path
         assert len(ctx.artifacts) == 1
-        assert ctx.state == {"key": "val"}
         assert ctx.youtube_url == "https://youtube.com/watch?v=test"
         assert ctx.max_stages == 3
         assert ctx.timeout_seconds == 600.0
@@ -95,15 +123,15 @@ class TestPipelineContextSnapshot:
     """Verify snapshot method."""
 
     def test_snapshot_with_workspace(self, tmp_path: Path) -> None:
-        """Snapshot includes workspace string and state keys."""
+        """Snapshot includes workspace string and state summary."""
         ctx = _make_context(
             workspace=tmp_path,
             youtube_url="https://example.com",
             user_message="test",
             max_stages=5,
         )
-        ctx.state["foo"] = "bar"
-        ctx.state["baz"] = 42
+        ctx.state.start_stage = 2
+        ctx.state.stages = 5
 
         snap = ctx.snapshot()
 
@@ -112,7 +140,8 @@ class TestPipelineContextSnapshot:
         assert snap["youtube_url"] == "https://example.com"
         assert snap["user_message"] == "test"
         assert snap["max_stages"] == 5
-        assert snap["state_keys"] == ["baz", "foo"]
+        assert snap["state"]["start_stage"] == 2
+        assert snap["state"]["stages"] == 5
 
     def test_snapshot_without_workspace(self) -> None:
         """Snapshot with None workspace returns None for workspace."""
@@ -120,11 +149,11 @@ class TestPipelineContextSnapshot:
         snap = ctx.snapshot()
         assert snap["workspace"] is None
 
-    def test_snapshot_empty_state(self) -> None:
-        """Snapshot with empty state returns empty state_keys."""
+    def test_snapshot_default_state(self) -> None:
+        """Snapshot with default state returns zeros."""
         ctx = _make_context()
         snap = ctx.snapshot()
-        assert snap["state_keys"] == []
+        assert snap["state"]["current_stage_num"] == 0
 
 
 class TestPipelineContextMutability:
@@ -143,8 +172,8 @@ class TestPipelineContextMutability:
         ctx.artifacts = (tmp_path / "a.json", tmp_path / "b.json")
         assert len(ctx.artifacts) == 2
 
-    def test_state_can_be_updated(self) -> None:
-        """State dict can be mutated."""
+    def test_state_fields_can_be_updated(self) -> None:
+        """State fields can be mutated."""
         ctx = _make_context()
-        ctx.state["key"] = "value"
-        assert ctx.state["key"] == "value"
+        ctx.state.instructions = "value"
+        assert ctx.state.instructions == "value"

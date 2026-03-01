@@ -163,11 +163,11 @@ class TestDetectResumeStage:
 class TestValidateArgsCommandDefaults:
     def test_valid_defaults_pass(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args()
+        ctx.state.args = _make_args()
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["start_stage"] == 1
+        assert ctx.state.start_stage == 1
 
     def test_no_args_returns_failure(self) -> None:
         ctx = _make_context()
@@ -189,7 +189,7 @@ class TestValidateArgsCommandDefaults:
 class TestValidateArgsCommandResume:
     def test_resume_nonexistent_path_fails(self, tmp_path: Path) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path / "nonexistent")
+        ctx.state.args = _make_args(resume=tmp_path / "nonexistent")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -197,7 +197,7 @@ class TestValidateArgsCommandResume:
 
     def test_resume_existing_path_passes(self, tmp_path: Path) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path)
+        ctx.state.args = _make_args(resume=tmp_path)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
@@ -206,7 +206,7 @@ class TestValidateArgsCommandResume:
         f = tmp_path / "somefile.txt"
         f.write_text("not a dir")
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=f)
+        ctx.state.args = _make_args(resume=f)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -221,7 +221,7 @@ class TestValidateArgsCommandResume:
 class TestValidateArgsCommandStartStage:
     def test_start_stage_without_resume_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(start_stage=3)
+        ctx.state.args = _make_args(start_stage=3)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -229,7 +229,7 @@ class TestValidateArgsCommandStartStage:
 
     def test_start_stage_zero_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(start_stage=0)
+        ctx.state.args = _make_args(start_stage=0)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -237,7 +237,7 @@ class TestValidateArgsCommandStartStage:
 
     def test_start_stage_too_high_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(start_stage=99)
+        ctx.state.args = _make_args(start_stage=99)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -245,7 +245,7 @@ class TestValidateArgsCommandStartStage:
 
     def test_start_stage_negative_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(start_stage=-1)
+        ctx.state.args = _make_args(start_stage=-1)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -253,43 +253,43 @@ class TestValidateArgsCommandStartStage:
 
     def test_valid_resume_with_start_stage_passes(self, tmp_path: Path) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path, start_stage=5)
+        ctx.state.args = _make_args(resume=tmp_path, start_stage=5)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["start_stage"] == 5
+        assert ctx.state.start_stage == 5
 
     def test_auto_detect_sets_start_stage(self, tmp_path: Path) -> None:
         (tmp_path / "router-output.json").write_text("{}")
         (tmp_path / "research-output.json").write_text("{}")
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path)
+        ctx.state.args = _make_args(resume=tmp_path)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["start_stage"] == 3
+        assert ctx.state.start_stage == 3
 
     def test_auto_detect_skipped_when_start_stage_explicit(self, tmp_path: Path) -> None:
         (tmp_path / "router-output.json").write_text("{}")
         (tmp_path / "research-output.json").write_text("{}")
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path, start_stage=1)
+        ctx.state.args = _make_args(resume=tmp_path, start_stage=1)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["start_stage"] == 1
+        assert ctx.state.start_stage == 1
 
     def test_auto_detect_empty_workspace_stays_at_1(self, tmp_path: Path) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path)
+        ctx.state.args = _make_args(resume=tmp_path)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["start_stage"] == 1
+        assert ctx.state.start_stage == 1
 
     def test_start_stage_greater_than_stages_fails(self, tmp_path: Path) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(stages=3, start_stage=5, resume=tmp_path)
+        ctx.state.args = _make_args(stages=3, start_stage=5, resume=tmp_path)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -304,7 +304,7 @@ class TestValidateArgsCommandStartStage:
 class TestValidateArgsCommandStages:
     def test_stages_zero_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(stages=0)
+        ctx.state.args = _make_args(stages=0)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -312,7 +312,7 @@ class TestValidateArgsCommandStages:
 
     def test_stages_negative_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(stages=-1)
+        ctx.state.args = _make_args(stages=-1)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -320,7 +320,7 @@ class TestValidateArgsCommandStages:
 
     def test_stages_too_high_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(stages=99)
+        ctx.state.args = _make_args(stages=99)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -335,7 +335,7 @@ class TestValidateArgsCommandStages:
 class TestValidateArgsCommandDuration:
     def test_target_duration_too_low_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(target_duration=10)
+        ctx.state.args = _make_args(target_duration=10)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -343,7 +343,7 @@ class TestValidateArgsCommandDuration:
 
     def test_target_duration_too_high_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(target_duration=500)
+        ctx.state.args = _make_args(target_duration=500)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -351,11 +351,11 @@ class TestValidateArgsCommandDuration:
 
     def test_target_duration_valid_passes(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(target_duration=120)
+        ctx.state.args = _make_args(target_duration=120)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["target_duration"] == 120
+        assert ctx.state.target_duration == 120
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ class TestValidateArgsCommandDuration:
 class TestValidateArgsCommandMoments:
     def test_moments_too_low_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(moments=0)
+        ctx.state.args = _make_args(moments=0)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -374,7 +374,7 @@ class TestValidateArgsCommandMoments:
 
     def test_moments_too_high_fails(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(moments=10)
+        ctx.state.args = _make_args(moments=10)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -382,11 +382,11 @@ class TestValidateArgsCommandMoments:
 
     def test_moments_computed_and_stored(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(target_duration=180, moments=None)
+        ctx.state.args = _make_args(target_duration=180, moments=None)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["moments_requested"] == 3
+        assert ctx.state.moments_requested == 3
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ class TestValidateArgsCommandAllComplete:
         ):
             (tmp_path / name).write_text("{}")
         ctx = _make_context()
-        ctx.state["args"] = _make_args(resume=tmp_path)
+        ctx.state.args = _make_args(resume=tmp_path)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
@@ -424,62 +424,62 @@ class TestValidateArgsCommandAllComplete:
 class TestValidateArgsCommandStyle:
     def test_style_none_maps_to_none(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style=None)
+        ctx.state.args = _make_args(style=None)
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] is None
+        assert ctx.state.framing_style is None
 
     def test_style_split_maps_to_split_horizontal(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="split")
+        ctx.state.args = _make_args(style="split")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] == "split_horizontal"
+        assert ctx.state.framing_style == "split_horizontal"
 
     def test_style_pip_maps_to_pip(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="pip")
+        ctx.state.args = _make_args(style="pip")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] == "pip"
+        assert ctx.state.framing_style == "pip"
 
     def test_style_auto_maps_to_auto(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="auto")
+        ctx.state.args = _make_args(style="auto")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] == "auto"
+        assert ctx.state.framing_style == "auto"
 
     def test_style_default_maps_to_default(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="default")
+        ctx.state.args = _make_args(style="default")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] == "default"
+        assert ctx.state.framing_style == "default"
 
     def test_unknown_style_maps_to_none(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="unknown_value")
+        ctx.state.args = _make_args(style="unknown_value")
         cmd = ValidateArgsCommand()
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
-        assert ctx.state["framing_style"] is None
+        assert ctx.state.framing_style is None
 
     def test_style_stored_in_context(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(style="auto")
+        ctx.state.args = _make_args(style="auto")
         cmd = ValidateArgsCommand()
         asyncio.run(cmd.execute(ctx))
-        assert "framing_style" in ctx.state
+        assert hasattr(ctx.state, "framing_style")
 
     def test_stages_stored_in_context(self) -> None:
         ctx = _make_context()
-        ctx.state["args"] = _make_args(stages=5)
+        ctx.state.args = _make_args(stages=5)
         cmd = ValidateArgsCommand()
         asyncio.run(cmd.execute(ctx))
-        assert ctx.state["stages"] == 5
+        assert ctx.state.stages == 5

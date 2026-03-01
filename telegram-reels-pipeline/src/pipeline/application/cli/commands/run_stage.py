@@ -54,6 +54,18 @@ def print_stage_result(
         print(f"      - {a.name}")
 
 
+def _build_elicitation_context(state: object) -> dict[str, str]:
+    """Build elicitation context dict, merging in creative instructions."""
+    from pipeline.application.cli.context import PipelineState
+
+    if not isinstance(state, PipelineState):
+        return {}
+    result = dict(state.elicitation)
+    if state.instructions:
+        result["instructions"] = state.instructions
+    return result
+
+
 class RunStageCommand:
     """Run a single pipeline stage with pre/post hooks."""
 
@@ -88,16 +100,13 @@ class RunStageCommand:
         from pipeline.application.cli.protocols import CommandResult
         from pipeline.domain.types import GateName
 
-        stage_num: int = context.state["current_stage_num"]
-        stage_spec: tuple[PipelineStage, Path, Path, str] = context.state["stage_spec"]
+        stage_num: int = context.state.current_stage_num
+        stage_spec = context.state.stage_spec
+        if stage_spec is None:
+            return CommandResult(success=False, message="No stage_spec in context state")
         stage, step_file, agent_def, gate_name = stage_spec
-        gate_criteria: str = context.state.get("gate_criteria", "")
-        elicitation: dict[str, str] = context.state.get("elicitation", {})
-
-        # Forward creative instructions to elicitation context if present
-        instructions = context.state.get("instructions", "")
-        if instructions:
-            elicitation["instructions"] = instructions
+        gate_criteria: str = context.state.gate_criteria
+        elicitation = _build_elicitation_context(context.state)
 
         print(f"  [{stage.value.upper()}] Starting...")
         stage_start = time.monotonic()

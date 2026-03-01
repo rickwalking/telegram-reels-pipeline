@@ -37,8 +37,8 @@ def parse_cutaway_spec(spec: str) -> tuple[str, float]:
     url = spec[:idx]
     try:
         timestamp = float(spec[idx + 1 :])
-    except ValueError:
-        raise ValueError(f"Invalid cutaway timestamp in '{spec}': expected a number after '@'") from None
+    except ValueError as exc:
+        raise ValueError(f"Invalid cutaway timestamp in '{spec}': expected a number after '@'") from exc
     if timestamp < 0:
         raise ValueError(f"Invalid cutaway timestamp {timestamp}: must be >= 0")
     return url, timestamp
@@ -148,7 +148,7 @@ class DownloadCutawaysCommand:
         """
         from pipeline.application.cli.protocols import CommandResult
 
-        cutaway_specs: list[str] | None = context.state.get("cutaway_specs")
+        cutaway_specs: list[str] | None = context.state.cutaway_specs
         if not cutaway_specs:
             return CommandResult(success=True, message="No cutaway clips specified")
 

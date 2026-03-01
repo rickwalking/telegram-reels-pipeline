@@ -23,7 +23,8 @@ from pipeline.application.cli.commands.run_elicitation import (
     save_elicitation_context,
     validate_questions,
 )
-from pipeline.domain.enums import QADecision
+from pipeline.application.cli.context import PipelineState
+from pipeline.domain.enums import PipelineStage, QADecision
 from pipeline.domain.models import QACritique, ReflectionResult
 from pipeline.domain.types import GateName
 
@@ -347,13 +348,10 @@ class TestRunElicitationCommand:
         ctx = MagicMock()
         ctx.require_workspace.return_value = tmp_path
         ctx.artifacts = ()
-        ctx.state = {
-            "step_file": tmp_path / "step.md",
-            "agent_def": tmp_path / "agent.md",
-            "gate": GateName("router"),
-            "gate_criteria": "",
-            "elicitation": {"telegram_message": "test"},
-        }
+        ctx.state = PipelineState(
+            stage_spec=(PipelineStage.ROUTER, str(tmp_path / "step.md"), str(tmp_path / "agent.md"), "router"),
+            elicitation={"telegram_message": "test"},
+        )
         return ctx
 
     def test_passes_through_on_success(self, tmp_path: Path) -> None:

@@ -37,6 +37,7 @@ from pipeline.application.event_bus import EventBus  # noqa: E402
 from pipeline.application.recovery_chain import RecoveryChain  # noqa: E402
 from pipeline.application.reflection_loop import ReflectionLoop  # noqa: E402
 from pipeline.application.stage_runner import StageRunner  # noqa: E402
+from pipeline.infrastructure.adapters.artifact_collector import collect_artifacts  # noqa: E402
 from pipeline.infrastructure.adapters.claude_cli_backend import CliBackend  # noqa: E402
 from pipeline.infrastructure.adapters.ffmpeg_adapter import FFmpegAdapter  # noqa: E402
 from pipeline.infrastructure.adapters.ffprobe_adapter import FfprobeAdapter  # noqa: E402
@@ -136,7 +137,7 @@ async def _run(args: argparse.Namespace) -> None:
         Veo3FireHook(veo3_adapter=veo3_adapter),
         Veo3AwaitHook(veo3_adapter=veo3_adapter, settings=settings),
         ManifestBuildHook(),
-        EncodingPlanHook(ffmpeg_adapter=FFmpegAdapter()),
+        EncodingPlanHook(ffmpeg_adapter=FFmpegAdapter(), artifact_collector=collect_artifacts),
     )
 
     # --- Commands (dependency injection) ---
@@ -172,12 +173,9 @@ async def _run(args: argparse.Namespace) -> None:
         timeout_seconds=effective_timeout,
         resume_workspace=str(args.resume) if args.resume else "",
     )
-    context.state["args"] = args
-    context.state["cutaway_specs"] = args.cutaway
-    context.state["instructions"] = args.instructions
-    context.state["cli_backend"] = cli_backend
-    context.state["workflows_dir"] = str(project_root / "workflows")
-    context.state["agents_dir"] = str(project_root / "agents")
+    context.state.args = args
+    context.state.cutaway_specs = args.cutaway
+    context.state.instructions = args.instructions or ""
 
     try:
         result = await invoker.execute(pipeline_cmd, context)

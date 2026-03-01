@@ -6,10 +6,46 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from pipeline.domain.enums import PipelineStage
+
 if TYPE_CHECKING:
+    import asyncio
+
     from pipeline.app.settings import PipelineSettings
     from pipeline.application.event_bus import EventBus
     from pipeline.application.stage_runner import StageRunner
+
+
+@dataclass
+class PipelineState:
+    """Typed state accumulated during pipeline CLI execution.
+
+    Replaces the untyped ``dict[str, Any]`` with explicit fields so that
+    inter-command contracts are enforced at the type level.
+    """
+
+    # --- Set by composition root (run_cli.py) ---
+    args: Any = None  # argparse.Namespace, consumed only by ValidateArgs
+    cutaway_specs: list[str] | None = None
+    instructions: str = ""
+
+    # --- Set by ValidateArgsCommand ---
+    start_stage: int = 1
+    moments_requested: int = 1
+    framing_style: str | None = None
+    stages: int = 7
+    target_duration: int = 90
+
+    # --- Set per-stage by RunPipelineCommand ---
+    current_stage_num: int = 0
+    stage_spec: tuple[PipelineStage, str, str, str] | None = None
+
+    # --- Set by RunStageCommand / RunElicitationCommand ---
+    gate_criteria: str = ""
+    elicitation: dict[str, str] = field(default_factory=dict)
+
+    # --- Set by Veo3FireHook ---
+    veo3_task: asyncio.Task[None] | None = None
 
 
 @dataclass
@@ -29,7 +65,7 @@ class PipelineContext:
     # --- Accumulated during execution ---
     workspace: Path | None = None
     artifacts: tuple[Path, ...] = field(default_factory=tuple)
-    state: dict[str, Any] = field(default_factory=dict)
+    state: PipelineState = field(default_factory=PipelineState)
 
     # --- Optional overrides ---
     youtube_url: str = ""
@@ -62,5 +98,9 @@ class PipelineContext:
             "youtube_url": self.youtube_url,
             "user_message": self.user_message,
             "max_stages": self.max_stages,
-            "state_keys": sorted(self.state.keys()),
+            "state": {
+                "start_stage": self.state.start_stage,
+                "stages": self.state.stages,
+                "current_stage_num": self.state.current_stage_num,
+            },
         }

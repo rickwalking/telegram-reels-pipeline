@@ -57,9 +57,9 @@ def _make_context(**overrides: object) -> PipelineContext:
     }
     defaults.update(overrides)
     ctx = PipelineContext(**defaults)  # type: ignore[arg-type]
-    ctx.state["args"] = MagicMock()
-    ctx.state["stages"] = 7
-    ctx.state["start_stage"] = 1
+    ctx.state.args = MagicMock()
+    ctx.state.stages = 7
+    ctx.state.start_stage = 1
     return ctx
 
 
@@ -137,7 +137,7 @@ class TestRunPipelineCommandHappyPath:
         """Full pipeline runs validate → setup → download → stages."""
         cmd = _make_pipeline()
         ctx = _make_context()
-        ctx.state["stages"] = 0  # Skip all stages for fast test
+        ctx.state.stages = 0  # Skip all stages for fast test
         result = await cmd.execute(ctx)
         assert result.success is True
         assert "completed" in result.message.lower()

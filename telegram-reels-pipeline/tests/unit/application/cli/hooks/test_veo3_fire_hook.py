@@ -92,11 +92,10 @@ class TestVeo3FireHookExecute:
         ):
             await hook.execute(ctx)
 
-        assert "veo3_task" in ctx.state
-        task = ctx.state["veo3_task"]
-        assert isinstance(task, asyncio.Task)
+        assert ctx.state.veo3_task is not None
+        assert isinstance(ctx.state.veo3_task, asyncio.Task)
         # Wait for the background task to complete
-        await task
+        await ctx.state.veo3_task
 
     @pytest.mark.asyncio
     async def test_execute_with_none_adapter_is_noop(self, tmp_path: Path) -> None:
@@ -106,7 +105,7 @@ class TestVeo3FireHookExecute:
 
         await hook.execute(ctx)
 
-        assert "veo3_task" not in ctx.state
+        assert ctx.state.veo3_task is None
 
     @pytest.mark.asyncio
     async def test_execute_handles_exception_gracefully(self, tmp_path: Path) -> None:
@@ -123,4 +122,4 @@ class TestVeo3FireHookExecute:
             await hook.execute(ctx)
 
         # No task stored on failure
-        assert "veo3_task" not in ctx.state
+        assert ctx.state.veo3_task is None

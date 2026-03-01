@@ -319,6 +319,58 @@ class TestNarrativeOverrides:
         assert result.narrative_overrides == ()
 
 
+class TestNanInfRejection:
+    """Verify nan/inf values are rejected by the domain model via the parser."""
+
+    def test_nan_timestamp_overlay_skipped(self) -> None:
+        result = parse_directives(
+            {"overlay_images": [{"path": "/img/a.png", "timestamp_s": float("nan"), "duration_s": 1.0}]}
+        )
+        assert result.overlay_images == ()
+
+    def test_inf_timestamp_overlay_skipped(self) -> None:
+        result = parse_directives(
+            {"overlay_images": [{"path": "/img/a.png", "timestamp_s": float("inf"), "duration_s": 1.0}]}
+        )
+        assert result.overlay_images == ()
+
+    def test_nan_duration_overlay_skipped(self) -> None:
+        result = parse_directives(
+            {"overlay_images": [{"path": "/img/a.png", "timestamp_s": 0.0, "duration_s": float("nan")}]}
+        )
+        assert result.overlay_images == ()
+
+    def test_nan_timing_transition_skipped(self) -> None:
+        result = parse_directives(
+            {"transition_preferences": [{"effect_type": "fade", "timing_s": float("nan")}]}
+        )
+        assert result.transition_preferences == ()
+
+    def test_inf_timing_transition_skipped(self) -> None:
+        result = parse_directives(
+            {"transition_preferences": [{"effect_type": "fade", "timing_s": float("inf")}]}
+        )
+        assert result.transition_preferences == ()
+
+    def test_neg_inf_timing_transition_skipped(self) -> None:
+        result = parse_directives(
+            {"transition_preferences": [{"effect_type": "fade", "timing_s": float("-inf")}]}
+        )
+        assert result.transition_preferences == ()
+
+    def test_valid_entries_survive_alongside_nan(self) -> None:
+        result = parse_directives(
+            {
+                "overlay_images": [
+                    {"path": "/img/good.png", "timestamp_s": 1.0, "duration_s": 2.0},
+                    {"path": "/img/bad.png", "timestamp_s": float("nan"), "duration_s": 1.0},
+                ],
+            }
+        )
+        assert len(result.overlay_images) == 1
+        assert result.overlay_images[0].path == "/img/good.png"
+
+
 class TestMixedValidAndInvalid:
     """Mixed valid/invalid entries -- only valid ones parsed."""
 

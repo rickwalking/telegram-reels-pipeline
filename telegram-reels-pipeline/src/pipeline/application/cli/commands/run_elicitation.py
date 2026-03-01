@@ -281,14 +281,18 @@ class RunElicitationCommand:
         from pipeline.application.cli.protocols import CommandResult
 
         workspace = context.require_workspace()
-        step_file: Path = context.state["step_file"]
-        agent_def: Path = context.state["agent_def"]
-        gate: GateName = context.state["gate"]
-        gate_criteria: str = context.state["gate_criteria"]
-        elicitation: dict[str, str] = context.state.get("elicitation", {})
+        stage_spec = context.state.stage_spec
+        if stage_spec is None:
+            return CommandResult(success=False, message="No stage_spec in context state")
+        _stage, step_file_name, agent_def_name, gate_name = stage_spec
+        step_file = Path(step_file_name)
+        agent_def = Path(agent_def_name)
+        gate = GateName(gate_name)
+        gate_criteria: str = context.state.gate_criteria
+        elicitation: dict[str, str] = dict(context.state.elicitation)
 
         # Forward creative instructions to elicitation context if present
-        instructions = context.state.get("instructions", "")
+        instructions = context.state.instructions
         if instructions:
             elicitation["instructions"] = instructions
 

@@ -73,8 +73,8 @@ class RunPipelineCommand:
 
         # --- Phase 5: Execute stages ---
         overall_start = time.monotonic()
-        stages = ALL_STAGES[: context.state.get("stages", 7)]
-        start_stage = context.state.get("start_stage", 1)
+        stages = ALL_STAGES[: context.state.stages]
+        start_stage = context.state.start_stage
 
         for stage_idx, stage_spec in enumerate(stages, 1):
             if stage_idx < start_stage:
@@ -82,8 +82,8 @@ class RunPipelineCommand:
                 continue
 
             stage = stage_spec[0]
-            context.state["current_stage_num"] = stage_idx
-            context.state["stage_spec"] = stage_spec
+            context.state.current_stage_num = stage_idx
+            context.state.stage_spec = stage_spec
 
             # Router stage uses elicitation command
             from pipeline.domain.enums import PipelineStage
@@ -108,11 +108,11 @@ class RunPipelineCommand:
 
 def _print_header(context: PipelineContext) -> None:
     """Print the pipeline run header."""
-    stages_count = context.state.get("stages", 7)
-    start_stage = context.state.get("start_stage", 1)
+    stages_count = context.state.stages
+    start_stage = context.state.start_stage
     start_label = stage_name(start_stage)
-    target_duration = context.state.get("target_duration", 90)
-    moments = context.state.get("moments_requested", 1)
+    target_duration = context.state.target_duration
+    moments = context.state.moments_requested
 
     print(f"\n{'=' * 60}")
     print(f"  PIPELINE RUN — {stages_count} stages (starting at stage {start_stage}: {start_label})")
@@ -124,7 +124,7 @@ def _print_header(context: PipelineContext) -> None:
         print(f"  Target duration: {target_duration}s (extended narrative)")
     if moments > 1:
         print(f"  Narrative moments: {moments}")
-    cutaway_specs = context.state.get("cutaway_specs")
+    cutaway_specs = context.state.cutaway_specs
     print(f"  Cutaway clips: {len(cutaway_specs) if cutaway_specs else 0}")
     print(f"{'=' * 60}\n")
 

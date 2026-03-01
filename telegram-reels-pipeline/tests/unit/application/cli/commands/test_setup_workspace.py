@@ -88,7 +88,7 @@ class TestSetupWorkspaceCommandResume:
         workspace = tmp_path / "existing-workspace"
         workspace.mkdir()
         ctx = _make_context(resume_workspace=str(workspace))
-        ctx.state["start_stage"] = 1
+        ctx.state.start_stage = 1
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
@@ -101,7 +101,7 @@ class TestSetupWorkspaceCommandResume:
         (workspace / "router-output.json").write_text("{}")
         (workspace / "research-output.json").write_text("{}")
         ctx = _make_context(resume_workspace=str(workspace))
-        ctx.state["start_stage"] = 3
+        ctx.state.start_stage = 3
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is True
@@ -112,7 +112,7 @@ class TestSetupWorkspaceCommandResume:
         workspace.mkdir()
         (workspace / "router-output.json").write_text("{}")
         ctx = _make_context(resume_workspace=str(workspace))
-        ctx.state["start_stage"] = 1
+        ctx.state.start_stage = 1
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         asyncio.run(cmd.execute(ctx))
         # start_stage == 1 means no artifact loading
@@ -120,7 +120,7 @@ class TestSetupWorkspaceCommandResume:
 
     def test_resume_missing_dir_fails(self, tmp_path: Path) -> None:
         ctx = _make_context(resume_workspace=str(tmp_path / "nonexistent"))
-        ctx.state["start_stage"] = 1
+        ctx.state.start_stage = 1
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         result = asyncio.run(cmd.execute(ctx))
         assert result.success is False
@@ -130,7 +130,7 @@ class TestSetupWorkspaceCommandResume:
         workspace = tmp_path / "ws"
         workspace.mkdir()
         ctx = _make_context(resume_workspace=str(workspace))
-        ctx.state["start_stage"] = 1
+        ctx.state.start_stage = 1
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         asyncio.run(cmd.execute(ctx))
         assert ctx.workspace == workspace
@@ -141,7 +141,7 @@ class TestSetupWorkspaceCommandResume:
         workspace.mkdir()
         (workspace / "router-output.json").write_text("{}")
         ctx = _make_context(resume_workspace=str(workspace))
-        ctx.state["start_stage"] = 2
+        ctx.state.start_stage = 2
         cmd = SetupWorkspaceCommand(workspace_base=tmp_path)
         asyncio.run(cmd.execute(ctx))
         out = capsys.readouterr().out

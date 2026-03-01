@@ -52,6 +52,22 @@ class TestOverlayImage:
         with pytest.raises(ValueError, match="duration_s must be positive"):
             OverlayImage(path="/tmp/logo.png", timestamp_s=0.0, duration_s=-2.0)
 
+    def test_nan_timestamp_raises(self) -> None:
+        with pytest.raises(ValueError, match="timestamp_s must be finite"):
+            OverlayImage(path="/tmp/logo.png", timestamp_s=float("nan"), duration_s=1.0)
+
+    def test_inf_timestamp_raises(self) -> None:
+        with pytest.raises(ValueError, match="timestamp_s must be finite"):
+            OverlayImage(path="/tmp/logo.png", timestamp_s=float("inf"), duration_s=1.0)
+
+    def test_nan_duration_raises(self) -> None:
+        with pytest.raises(ValueError, match="duration_s must be finite"):
+            OverlayImage(path="/tmp/logo.png", timestamp_s=0.0, duration_s=float("nan"))
+
+    def test_inf_duration_raises(self) -> None:
+        with pytest.raises(ValueError, match="duration_s must be finite"):
+            OverlayImage(path="/tmp/logo.png", timestamp_s=0.0, duration_s=float("inf"))
+
 
 # ---------------------------------------------------------------------------
 # DocumentaryClip
@@ -111,6 +127,18 @@ class TestTransitionPreference:
     def test_zero_timing_valid(self) -> None:
         pref = TransitionPreference(effect_type="fade", timing_s=0.0)
         assert pref.timing_s == 0.0
+
+    def test_nan_timing_raises(self) -> None:
+        with pytest.raises(ValueError, match="timing_s must be finite"):
+            TransitionPreference(effect_type="fade", timing_s=float("nan"))
+
+    def test_inf_timing_raises(self) -> None:
+        with pytest.raises(ValueError, match="timing_s must be finite"):
+            TransitionPreference(effect_type="fade", timing_s=float("inf"))
+
+    def test_neg_inf_timing_raises(self) -> None:
+        with pytest.raises(ValueError, match="timing_s must be finite"):
+            TransitionPreference(effect_type="fade", timing_s=float("-inf"))
 
 
 # ---------------------------------------------------------------------------

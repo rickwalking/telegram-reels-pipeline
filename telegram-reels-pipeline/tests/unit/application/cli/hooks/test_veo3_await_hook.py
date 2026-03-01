@@ -30,7 +30,8 @@ def _make_context(workspace: Path | None = None, **state_items: object) -> Pipel
         event_bus=MagicMock(),
         workspace=workspace,
     )
-    ctx.state.update(state_items)
+    for key, value in state_items.items():
+        setattr(ctx.state, key, value)
     return ctx
 
 

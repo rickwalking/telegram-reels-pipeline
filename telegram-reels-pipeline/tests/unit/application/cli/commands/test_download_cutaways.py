@@ -453,7 +453,7 @@ class TestDownloadCutawaysCommand:
 
     def test_none_cutaway_specs_returns_early(self, tmp_path: Path) -> None:
         ctx = _make_context(workspace=tmp_path)
-        ctx.state["cutaway_specs"] = None
+        ctx.state.cutaway_specs = None
         downloader = StubClipDownloader([])
         prober = StubDurationProber([])
         cmd = DownloadCutawaysCommand(clip_downloader=downloader, duration_prober=prober)
@@ -463,7 +463,7 @@ class TestDownloadCutawaysCommand:
 
     def test_empty_list_cutaway_specs_returns_early(self, tmp_path: Path) -> None:
         ctx = _make_context(workspace=tmp_path)
-        ctx.state["cutaway_specs"] = []
+        ctx.state.cutaway_specs = []
         downloader = StubClipDownloader([])
         prober = StubDurationProber([])
         cmd = DownloadCutawaysCommand(clip_downloader=downloader, duration_prober=prober)
@@ -478,7 +478,7 @@ class TestDownloadCutawaysCommand:
         clip.write_bytes(b"fake")
 
         ctx = _make_context(workspace=tmp_path)
-        ctx.state["cutaway_specs"] = ["https://example.com/video@30"]
+        ctx.state.cutaway_specs = ["https://example.com/video@30"]
 
         downloader = StubClipDownloader([clip])
         prober = StubDurationProber([10.0])
@@ -490,7 +490,7 @@ class TestDownloadCutawaysCommand:
 
     def test_requires_workspace(self) -> None:
         ctx = _make_context()
-        ctx.state["cutaway_specs"] = ["https://example.com/video@30"]
+        ctx.state.cutaway_specs = ["https://example.com/video@30"]
         downloader = StubClipDownloader([])
         prober = StubDurationProber([])
         cmd = DownloadCutawaysCommand(clip_downloader=downloader, duration_prober=prober)

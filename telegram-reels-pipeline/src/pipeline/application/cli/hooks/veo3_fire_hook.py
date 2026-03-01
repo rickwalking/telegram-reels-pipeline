@@ -62,7 +62,7 @@ class Veo3FireHook:
                 orchestrator.start_generation(workspace, run_id),
                 name=f"veo3-gen-{run_id}",
             )
-            context.state["veo3_task"] = task
+            context.state.veo3_task = task
             logger.info("Veo3 background generation fired for run %s", run_id)
             print("  [VEO3] Background generation started")
         except Exception:

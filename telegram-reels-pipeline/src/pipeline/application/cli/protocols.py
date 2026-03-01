@@ -58,3 +58,10 @@ class ClipDurationProber(Protocol):
     """Abstraction over ffprobe for clip duration queries."""
 
     async def probe(self, clip_path: Path) -> float | None: ...
+
+
+@runtime_checkable
+class ArtifactCollector(Protocol):
+    """Scan a workspace directory for output artifacts."""
+
+    def __call__(self, work_dir: Path) -> tuple[Path, ...]: ...

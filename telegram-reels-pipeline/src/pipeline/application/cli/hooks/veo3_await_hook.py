@@ -56,7 +56,7 @@ class Veo3AwaitHook:
 
         print("  [VEO3] Awaiting generation completion...")
         try:
-            veo3_task: asyncio.Task[None] | None = context.state.get("veo3_task")
+            veo3_task: asyncio.Task[None] | None = context.state.veo3_task
             if veo3_task is not None:
                 try:
                     await veo3_task
