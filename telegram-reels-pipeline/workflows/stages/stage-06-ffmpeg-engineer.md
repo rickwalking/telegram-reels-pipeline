@@ -112,6 +112,19 @@ The FFmpeg Engineer **plans** encoding commands. The pipeline runner calls `FFmp
 
 14. **Generate style transitions journal** — if `framing_style` is `auto` or visual effects were applied, record all style transitions in the `style_transitions` array of `encoding-plan.json`. Each entry includes `timestamp`, `from_state`, `to_state`, `trigger` (the FSM event), `effect` (the visual effect applied, or null), and `transition_kind` (`style_change` for within-moment style transitions, `narrative_boundary` for transitions between moments). In multi-moment mode, FSM state persists across moment boundaries. Transitions between moments always use `transition_kind: "narrative_boundary"` with a 1.0s dissolve effect. This journal is used by the Assembly stage for narrative reordering, transition type selection, and QA reporting.
 
+14.5. **Apply Creative Directives**:
+    1. Read `transition_preferences` and `overlay_images` from `router-output.json`
+    2. For each transition preference:
+       - Map `effect_type` to FFmpeg xfade transition type
+       - Insert into `style_transitions` array with `trigger: "user_directive"` and `transition_kind` matching the effect
+       - User directives override default `style_change` transitions at the same point; `narrative_boundary` transitions take precedence
+    3. For each overlay image:
+       - Validate the image file exists and is a supported format (PNG, JPG, WEBP)
+       - Add overlay filter to the affected segment's filter_complex chain
+       - Use `enable='between(t,TIMESTAMP,TIMESTAMP+DURATION)'` for timing
+       - Log a warning for invalid images but continue encoding
+    4. If no directives exist, skip this step (backward compatible)
+
 15. **Output `encoding-plan.json`** with all commands, style transitions, and segment paths.
 
 ### Pre-Encoding Validation (steps 16-19, performed BEFORE the plan is written)

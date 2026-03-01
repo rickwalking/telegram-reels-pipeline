@@ -82,6 +82,30 @@ Output valid JSON written to `encoding-plan.json`:
 | `style_transitions[].trigger` | string | Event that caused the transition (e.g., `face_count_increase`) |
 | `style_transitions[].effect` | string or null | Visual effect applied at this transition (`focus_pull`, `pulse_zoom`, `spotlight_dim`, or null) |
 
+## Creative Directive Support
+
+### Transition Preferences
+
+When `transition_preferences` is present in `router-output.json`, incorporate user-specified transitions:
+
+- User transitions OVERRIDE default style-change transitions at the specified timing points
+- Supported effect types: `fade` (crossfade), `wipe` (directional wipe), `dissolve` (blend dissolve)
+- Include the transition in the `style_transitions` array with `trigger: "user_directive"`
+- If `timing_s` is specified, place the transition at that point in the timeline
+- If the user transition conflicts with a narrative_boundary transition, the narrative_boundary takes precedence (structural integrity)
+
+### Image Overlays
+
+When `overlay_images` is present in `router-output.json`, add FFmpeg overlay filter commands:
+
+- Validate image format (PNG, JPG, WEBP) and that the file exists at the specified path
+- Add `overlay` filter to the filter_complex chain at the specified `timestamp_s` for `duration_s`
+- Position: centered by default, scaled to fit within 1080x1920 without exceeding 50% of frame area
+- Use `enable='between(t,START,END)'` to time the overlay
+- Flag invalid images with a warning in the encoding plan -- do not fail the stage
+
+When no transition or image directives exist, use default encoding behavior. This ensures backward compatibility.
+
 ## Behavioral Rules
 
 1. **You PLAN commands, you do NOT execute them**. The FFmpegAdapter handles execution via `asyncio.create_subprocess_exec`.
