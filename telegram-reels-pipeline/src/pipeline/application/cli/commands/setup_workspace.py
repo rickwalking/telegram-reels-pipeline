@@ -67,7 +67,7 @@ class SetupWorkspaceCommand:
         # Create new workspace
         workspace_mgr = WorkspaceManager(base_dir=self._workspace_base)
         workspace = workspace_mgr.create_workspace()
-        context.workspace = workspace
+        context.set_workspace(workspace)
         logger.info("Created workspace: %s", workspace)
         self._output(f"  New workspace: {workspace}\n")
 
@@ -92,7 +92,7 @@ class SetupWorkspaceCommand:
                 success=False,
                 message=f"Resume workspace is not a valid directory: {workspace}",
             )
-        context.workspace = workspace
+        context.set_workspace(workspace)
         logger.info("Resuming workspace: %s", workspace)
         self._output(f"  Resuming workspace: {workspace}")
         print_resume_preflight(workspace, start_stage, output=self._output)

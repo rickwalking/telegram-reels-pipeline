@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -70,6 +71,9 @@ class PipelineContext:
     # --- Path resolution ---
     project_root: Path = Path()
 
+    # --- Workspace lifecycle callback ---
+    _on_workspace_set: Callable[[Path | None], None] | None = field(default=None, repr=False)
+
     # --- Optional overrides ---
     youtube_url: str = ""
     user_message: str = ""
@@ -77,6 +81,12 @@ class PipelineContext:
     timeout_seconds: float = 300.0
     resume_workspace: str = ""
     start_stage: int = 0
+
+    def set_workspace(self, workspace: Path | None) -> None:
+        """Set workspace and notify infrastructure via callback."""
+        self.workspace = workspace
+        if self._on_workspace_set is not None:
+            self._on_workspace_set(workspace)
 
     @property
     def has_workspace(self) -> bool:

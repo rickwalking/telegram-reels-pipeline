@@ -169,6 +169,7 @@ async def _run(args: argparse.Namespace) -> None:
         stage_runner=stage_runner,
         event_bus=event_bus,
         project_root=project_root,
+        _on_workspace_set=cli_backend.set_workspace,
         youtube_url=args.url,
         user_message=message,
         timeout_seconds=effective_timeout,
@@ -184,7 +185,7 @@ async def _run(args: argparse.Namespace) -> None:
             print(f"\nPipeline failed: {result.message}", file=sys.stderr)
             sys.exit(1)
     finally:
-        cli_backend.set_workspace(None)
+        context.set_workspace(None)
 
 
 def main() -> None:
