@@ -185,11 +185,11 @@ development_status:
   20-5-external-clip-search-resolution: review
   20-6-unified-assembly-integration: review
 
-  epic-21: in-progress
+  epic-21: done
   21-1-cli-command-infrastructure-protocols-context-invoker-history: done
   21-2-cli-command-extraction-commands-hooks-tests: done
-  21-3-instructions-flag-domain-model: backlog
-  21-4-router-directive-parsing-validation: backlog
-  21-5-content-creator-narrative-overrides: backlog
-  21-6-ffmpeg-transition-image-overlay-directives: backlog
-  21-7-assembly-documentary-clip-integration: backlog
+  21-3-instructions-flag-domain-model: done
+  21-4-router-directive-parsing-validation: done
+  21-5-content-creator-narrative-overrides: done
+  21-6-ffmpeg-transition-image-overlay-directives: done
+  21-7-assembly-documentary-clip-integration: done
