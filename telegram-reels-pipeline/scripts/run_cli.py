@@ -83,6 +83,12 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Number of narrative moments (1-5). Auto-computed from target-duration when omitted.",
     )
+    parser.add_argument(
+        "--instructions",
+        type=str,
+        default=None,
+        help="Additional creative instructions (images, transitions, narrative directives).",
+    )
     parser.add_argument("--verbose", "-v", action="store_true", help="Print Claude agent output to terminal")
     parser.add_argument(
         "--cutaway",
@@ -168,6 +174,7 @@ async def _run(args: argparse.Namespace) -> None:
     )
     context.state["args"] = args
     context.state["cutaway_specs"] = args.cutaway
+    context.state["instructions"] = args.instructions
     context.state["cli_backend"] = cli_backend
     context.state["workflows_dir"] = str(project_root / "workflows")
     context.state["agents_dir"] = str(project_root / "agents")

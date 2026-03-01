@@ -197,11 +197,15 @@ class ValidateArgsCommand:
         target_duration = getattr(args, "target_duration", 90)
         moments = getattr(args, "moments", None)
         style = getattr(args, "style", None)
+        instructions = getattr(args, "instructions", None)
 
         # Validate individual argument ranges
         error = _validate_ranges(start_stage_raw, resume, stages, target_duration, moments)
         if error is not None:
             return CommandResult(success=False, message=error)
+
+        if instructions is not None and not instructions.strip():
+            return CommandResult(success=False, message="--instructions must not be empty when provided")
 
         # Resolve start stage (auto-detect or default)
         resolved_start, all_complete = _resolve_start_stage(start_stage_raw, resume)
@@ -229,6 +233,7 @@ class ValidateArgsCommand:
         context.state["framing_style"] = framing_style
         context.state["stages"] = stages
         context.state["target_duration"] = target_duration
+        context.state["instructions"] = instructions.strip() if instructions else ""
 
         return CommandResult(
             success=True,
