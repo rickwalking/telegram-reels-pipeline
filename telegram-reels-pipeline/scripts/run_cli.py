@@ -168,6 +168,7 @@ async def _run(args: argparse.Namespace) -> None:
         settings=settings,
         stage_runner=stage_runner,
         event_bus=event_bus,
+        project_root=project_root,
         youtube_url=args.url,
         user_message=message,
         timeout_seconds=effective_timeout,

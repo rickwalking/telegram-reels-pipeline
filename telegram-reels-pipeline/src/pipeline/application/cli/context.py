@@ -67,6 +67,9 @@ class PipelineContext:
     artifacts: tuple[Path, ...] = field(default_factory=tuple)
     state: PipelineState = field(default_factory=PipelineState)
 
+    # --- Path resolution ---
+    project_root: Path = Path()
+
     # --- Optional overrides ---
     youtube_url: str = ""
     user_message: str = ""

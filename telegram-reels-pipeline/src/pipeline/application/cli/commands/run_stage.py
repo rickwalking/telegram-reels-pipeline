@@ -111,7 +111,9 @@ class RunStageCommand:
         stage_spec = context.state.stage_spec
         if stage_spec is None:
             return CommandResult(success=False, message="No stage_spec in context state")
-        stage, step_file, agent_def, gate_name = stage_spec
+        stage, step_file_name, agent_def_name, gate_name = stage_spec
+        step_file = context.project_root / "workflows" / "stages" / step_file_name
+        agent_def = context.project_root / "agents" / agent_def_name / "agent.md"
         gate_criteria: str = context.state.gate_criteria
         elicitation = _build_elicitation_context(context.state)
 
