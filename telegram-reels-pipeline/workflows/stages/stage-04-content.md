@@ -64,6 +64,17 @@ Generate an Instagram content package — descriptions, hashtags, and music sugg
 5. **Set mood_category** — a label for the overall mood (e.g., "thought-provoking", "energetic", "funny").
 6. **Output valid JSON** as `content.json`.
 
+### Step 6.5: Apply Narrative Overrides
+
+1. Read `narrative_overrides` from `router-output.json`
+2. If narrative overrides are present:
+   - Apply `tone` adjustments to description voice and word choice
+   - Apply `structure` changes to description organization
+   - Apply `pacing` cues to rhythm and music suggestion
+   - Apply `arc_changes` to how the moment is framed
+3. If no overrides exist, use default content generation behavior
+4. Ensure all 3 description variants reflect the overrides consistently
+
 ### Publishing Assets (MANDATORY when `publishing_language` is set)
 
 7. **Check `publishing_language`** in elicitation context. If empty or absent, skip steps 8-11. **If `publishing_language` IS present, steps 8-11 are MANDATORY — do not skip them.**

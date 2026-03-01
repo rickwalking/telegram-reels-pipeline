@@ -15,6 +15,19 @@ You receive via prior artifacts:
 - **research-output.json**: Contains `video_metadata`, `episode_summary`, `key_themes`, `speakers_identified`
 - **topic_focus** (optional): User-specified topic from elicitation context
 
+## Narrative Override Instructions
+
+When `narrative_overrides` is present in `router-output.json`, apply the specified adjustments:
+
+- **tone**: Adjust the overall tone of descriptions and content direction (e.g., humorous, dramatic, educational, inspirational). Override the default analytical/informative tone.
+- **structure**: Change the description structure (e.g., hook-first, chronological, question-led, story arc). Override the default hook -> context -> CTA pattern.
+- **pacing**: Apply pacing cues to content rhythm (e.g., fast-paced, contemplative, building tension). Reflect in music suggestion and description word choice.
+- **arc_changes**: Modify the narrative arc (e.g., focus on conflict, emphasize resolution, open-ended). Adjust how the moment is framed in descriptions.
+
+When `narrative_overrides` is empty or absent, use default content generation behavior. This ensures backward compatibility.
+
+All three descriptions MUST reflect the overrides consistently -- do not apply overrides to only one variant.
+
 ## Output Contract
 
 Output valid JSON written to `content.json`:
