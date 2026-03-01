@@ -739,6 +739,27 @@ class CutawayManifest:
 
 
 @dataclass(frozen=True)
+class CommandRecord:
+    """Immutable record of a CLI command execution for history tracking."""
+
+    name: str
+    started_at: str
+    finished_at: str
+    status: str  # "success" | "failed"
+    error: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            raise ValueError("name must not be empty")
+        if not self.started_at:
+            raise ValueError("started_at must not be empty")
+        if not self.finished_at:
+            raise ValueError("finished_at must not be empty")
+        if self.status not in {"success", "failed"}:
+            raise ValueError(f"status must be 'success' or 'failed', got '{self.status}'")
+
+
+@dataclass(frozen=True)
 class ResourceSnapshot:
     """Point-in-time system resource measurements."""
 
