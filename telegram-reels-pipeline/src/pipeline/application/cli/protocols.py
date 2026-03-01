@@ -65,3 +65,10 @@ class ArtifactCollector(Protocol):
     """Scan a workspace directory for output artifacts."""
 
     def __call__(self, work_dir: Path) -> tuple[Path, ...]: ...
+
+
+@runtime_checkable
+class OutputPort(Protocol):
+    """Write user-facing text (matches builtin ``print`` signature)."""
+
+    def __call__(self, *args: object, **kwargs: Any) -> None: ...

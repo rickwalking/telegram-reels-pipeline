@@ -8,12 +8,12 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from pipeline.application.cli.commands.validate_args import (
-    TOTAL_CLI_STAGES,
     ValidateArgsCommand,
     compute_moments_requested,
     detect_resume_stage,
 )
 from pipeline.application.cli.context import PipelineContext
+from pipeline.application.cli.stage_registry import TOTAL_CLI_STAGES
 
 # ---------------------------------------------------------------------------
 # Helpers

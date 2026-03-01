@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pipeline.application.cli.context import PipelineContext
-    from pipeline.application.cli.protocols import ClipDurationProber, Command, CommandResult
+    from pipeline.application.cli.protocols import ClipDurationProber, Command, CommandResult, OutputPort
     from pipeline.domain.ports import ExternalClipDownloaderPort
 
 logger = logging.getLogger(__name__)
@@ -49,16 +49,9 @@ async def _download_cutaway_clips(
     workspace: Path,
     clip_downloader: ExternalClipDownloaderPort,
     duration_prober: ClipDurationProber,
+    output: OutputPort = print,
 ) -> list[dict[str, object]]:
-    """Download cutaway clips and write ``external-clips.json`` manifest.
-
-    Downloads each clip via the injected ``clip_downloader``, renames to
-    ``cutaway-{n}.mp4``, probes duration, and builds a manifest array.
-    Partial failures are tolerated: failed downloads are logged and skipped.
-
-    Returns:
-        List of manifest entries (one per successfully downloaded clip).
-    """
+    """Download cutaway clips and write ``external-clips.json`` manifest."""
     import shutil
 
     manifest: list[dict[str, object]] = []
@@ -70,22 +63,20 @@ async def _download_cutaway_clips(
             url, insertion_point = parse_cutaway_spec(spec)
         except ValueError as exc:
             logger.warning("Skipping invalid cutaway spec: %s", exc)
-            print(f"    [CUTAWAY] Skipping invalid spec: {exc}")
+            output(f"    [CUTAWAY] Skipping invalid spec: {exc}")
             continue
 
-        print(f"    [CUTAWAY] Downloading clip {idx + 1}/{len(cutaway_specs)}: {url}")
+        output(f"    [CUTAWAY] Downloading clip {idx + 1}/{len(cutaway_specs)}: {url}")
         downloaded = await clip_downloader.download(url, workspace)
         if downloaded is None:
             logger.warning("Cutaway download failed for %s -- skipping", url)
-            print(f"    [CUTAWAY] Download failed for {url} -- skipping")
+            output(f"    [CUTAWAY] Download failed for {url} -- skipping")
             continue
 
-        # Rename to canonical cutaway-{n}.mp4
         dest = clips_dir / f"cutaway-{idx}.mp4"
         try:
             downloaded.rename(dest)
         except OSError:
-            # Cross-device rename -- fall back to copy + unlink
             shutil.copy2(str(downloaded), str(dest))
             with contextlib.suppress(OSError):
                 downloaded.unlink()
@@ -93,7 +84,7 @@ async def _download_cutaway_clips(
         duration = await duration_prober.probe(dest)
         if duration is None:
             logger.warning("Could not probe duration for %s -- skipping", dest.name)
-            print(f"    [CUTAWAY] Could not probe duration for {dest.name} -- skipping")
+            output(f"    [CUTAWAY] Could not probe duration for {dest.name} -- skipping")
             continue
 
         entry: dict[str, object] = {
@@ -103,7 +94,7 @@ async def _download_cutaway_clips(
             "duration_s": duration,
         }
         manifest.append(entry)
-        print(f"    [CUTAWAY] Ready: cutaway-{idx}.mp4 ({duration:.1f}s, insert at {insertion_point:.1f}s)")
+        output(f"    [CUTAWAY] Ready: cutaway-{idx}.mp4 ({duration:.1f}s, insert at {insertion_point:.1f}s)")
 
     # Write manifest (atomic write)
     manifest_path = workspace / "external-clips.json"
@@ -131,21 +122,18 @@ class DownloadCutawaysCommand:
         self,
         clip_downloader: ExternalClipDownloaderPort,
         duration_prober: ClipDurationProber,
+        output: OutputPort = print,
     ) -> None:
         self._clip_downloader = clip_downloader
         self._duration_prober = duration_prober
+        self._output = output
 
     @property
     def name(self) -> str:
         return "download-cutaways"
 
     async def execute(self, context: PipelineContext) -> CommandResult:
-        """Download cutaway clips if any are specified in context state.
-
-        Reads ``cutaway_specs`` from ``context.state["cutaway_specs"]``.
-        If none, returns early with success. Otherwise downloads clips,
-        writes the manifest via atomic write, and returns a summary.
-        """
+        """Download cutaway clips if any are specified in context state."""
         from pipeline.application.cli.protocols import CommandResult
 
         cutaway_specs: list[str] | None = context.state.cutaway_specs
@@ -154,14 +142,15 @@ class DownloadCutawaysCommand:
 
         workspace = context.require_workspace()
 
-        print(f"  Downloading {len(cutaway_specs)} cutaway clip(s)...")
+        self._output(f"  Downloading {len(cutaway_specs)} cutaway clip(s)...")
         manifest = await _download_cutaway_clips(
             cutaway_specs,
             workspace,
             self._clip_downloader,
             self._duration_prober,
+            output=self._output,
         )
-        print(f"  Cutaway clips ready: {len(manifest)}/{len(cutaway_specs)} succeeded\n")
+        self._output(f"  Cutaway clips ready: {len(manifest)}/{len(cutaway_specs)} succeeded\n")
 
         return CommandResult(
             success=True,

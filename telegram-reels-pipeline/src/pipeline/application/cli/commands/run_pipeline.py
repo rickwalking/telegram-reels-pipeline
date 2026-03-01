@@ -6,13 +6,13 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
-from pipeline.application.cli.commands.run_stage import ALL_STAGES, stage_name
 from pipeline.application.cli.protocols import CommandResult
+from pipeline.application.cli.stage_registry import ALL_STAGES, stage_name
 
 if TYPE_CHECKING:
     from pipeline.application.cli.context import PipelineContext
     from pipeline.application.cli.invoker import PipelineInvoker
-    from pipeline.application.cli.protocols import Command
+    from pipeline.application.cli.protocols import Command, OutputPort
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ class RunPipelineCommand:
         download_cmd: Command,
         elicitation_cmd: Command,
         stage_cmd: Command,
+        output: OutputPort = print,
     ) -> None:
         self._invoker = invoker
         self._validate_cmd = validate_cmd
@@ -44,6 +45,7 @@ class RunPipelineCommand:
         self._download_cmd = download_cmd
         self._elicitation_cmd = elicitation_cmd
         self._stage_cmd = stage_cmd
+        self._output = output
 
     @property
     def name(self) -> str:
@@ -59,7 +61,7 @@ class RunPipelineCommand:
             return result
 
         # --- Phase 2: Print header ---
-        _print_header(context)
+        _print_header(context, output=self._output)
 
         # --- Phase 3: Setup workspace ---
         result = await self._invoker.execute(self._setup_cmd, context)
@@ -78,7 +80,7 @@ class RunPipelineCommand:
 
         for stage_idx, stage_spec in enumerate(stages, 1):
             if stage_idx < start_stage:
-                print(f"  [{stage_spec[0].value.upper()}] Skipped (resuming)")
+                self._output(f"  [{stage_spec[0].value.upper()}] Skipped (resuming)")
                 continue
 
             stage = stage_spec[0]
@@ -97,16 +99,16 @@ class RunPipelineCommand:
                 break
 
             if result.data.get("escalation_needed"):
-                print("    ESCALATION needed — stopping.")
+                self._output("    ESCALATION needed — stopping.")
                 break
 
         total = time.monotonic() - overall_start
-        _print_footer(context, total)
+        _print_footer(context, total, output=self._output)
 
         return CommandResult(success=True, message=f"Pipeline completed in {total:.1f}s")
 
 
-def _print_header(context: PipelineContext) -> None:
+def _print_header(context: PipelineContext, output: OutputPort = print) -> None:
     """Print the pipeline run header."""
     stages_count = context.state.stages
     start_stage = context.state.start_stage
@@ -114,34 +116,34 @@ def _print_header(context: PipelineContext) -> None:
     target_duration = context.state.target_duration
     moments = context.state.moments_requested
 
-    print(f"\n{'=' * 60}")
-    print(f"  PIPELINE RUN — {stages_count} stages (starting at stage {start_stage}: {start_label})")
-    print(f"  URL: {context.youtube_url}")
+    output(f"\n{'=' * 60}")
+    output(f"  PIPELINE RUN — {stages_count} stages (starting at stage {start_stage}: {start_label})")
+    output(f"  URL: {context.youtube_url}")
     if context.user_message != context.youtube_url:
-        print(f"  Message: {context.user_message}")
-    print(f"  Timeout: {context.timeout_seconds}s")
+        output(f"  Message: {context.user_message}")
+    output(f"  Timeout: {context.timeout_seconds}s")
     if target_duration != 90:
-        print(f"  Target duration: {target_duration}s (extended narrative)")
+        output(f"  Target duration: {target_duration}s (extended narrative)")
     if moments > 1:
-        print(f"  Narrative moments: {moments}")
+        output(f"  Narrative moments: {moments}")
     cutaway_specs = context.state.cutaway_specs
-    print(f"  Cutaway clips: {len(cutaway_specs) if cutaway_specs else 0}")
-    print(f"{'=' * 60}\n")
+    output(f"  Cutaway clips: {len(cutaway_specs) if cutaway_specs else 0}")
+    output(f"{'=' * 60}\n")
 
 
-def _print_footer(context: PipelineContext, total_seconds: float) -> None:
+def _print_footer(context: PipelineContext, total_seconds: float, output: OutputPort = print) -> None:
     """Print the pipeline completion footer with workspace contents."""
     workspace = context.workspace
 
-    print(f"\n{'=' * 60}")
-    print(f"  Total time: {total_seconds:.1f}s")
-    print(f"  Workspace: {workspace}")
-    print(f"{'=' * 60}\n")
+    output(f"\n{'=' * 60}")
+    output(f"  Total time: {total_seconds:.1f}s")
+    output(f"  Workspace: {workspace}")
+    output(f"{'=' * 60}\n")
 
     if workspace is not None and workspace.is_dir():
-        print("  Workspace contents:")
+        output("  Workspace contents:")
         for p in sorted(workspace.rglob("*")):
             if p.is_file():
                 rel = p.relative_to(workspace)
                 size = p.stat().st_size
-                print(f"    {rel} ({size} bytes)")
+                output(f"    {rel} ({size} bytes)")

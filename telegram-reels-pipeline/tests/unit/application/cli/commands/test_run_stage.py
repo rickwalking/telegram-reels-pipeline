@@ -9,11 +9,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from pipeline.application.cli.commands.run_stage import (
-    RunStageCommand,
-    stage_name,
-)
+from pipeline.application.cli.commands.run_stage import RunStageCommand
 from pipeline.application.cli.context import PipelineState
+from pipeline.application.cli.stage_registry import stage_name
 from pipeline.domain.enums import PipelineStage, QADecision
 from pipeline.domain.models import QACritique, ReflectionResult
 from pipeline.domain.types import GateName
