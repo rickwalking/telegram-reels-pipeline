@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pipeline.application.cli.context import PipelineContext
-from pipeline.application.cli.hooks.manifest_hook import ManifestBuildHook
+from pipeline.application.cli.hooks.manifest_hook import ManifestBuildHook, _read_user_instructed_clips
 from pipeline.application.cli.protocols import StageHook
 from pipeline.domain.enums import PipelineStage
 
@@ -214,3 +214,122 @@ class TestManifestBuildHookExecute:
         call_args = fake_builder.build.call_args
         total_duration = call_args[0][2]
         assert total_duration == 45.0
+
+
+# --- TestReadUserInstructedClips ---
+
+
+class TestReadUserInstructedClips:
+    """Tests for _read_user_instructed_clips — documentary clips from router-output.json."""
+
+    def test_no_router_output_returns_empty(self, tmp_path: Path) -> None:
+        """No router-output.json → empty tuple."""
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_no_documentary_clips_field(self, tmp_path: Path) -> None:
+        """router-output.json without documentary_clips → empty tuple."""
+        (tmp_path / "router-output.json").write_text(json.dumps({"url": "test"}))
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_empty_documentary_clips(self, tmp_path: Path) -> None:
+        """Empty documentary_clips array → empty tuple."""
+        (tmp_path / "router-output.json").write_text(json.dumps({"documentary_clips": []}))
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_valid_local_clip(self, tmp_path: Path) -> None:
+        """Valid local file creates a CutawayClip."""
+        clip_file = tmp_path / "intro.mp4"
+        clip_file.write_bytes(b"fake video")
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "intro.mp4", "placement_hint": "intro"}]})
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 100.0)
+        assert len(result) == 1
+        assert result[0].clip_path == str(clip_file)
+        assert result[0].insertion_point_s == pytest.approx(5.0)  # 100 * 0.05
+        assert result[0].match_confidence == 1.0
+        assert result[0].source.value == "user_provided"
+
+    def test_placement_hint_middle(self, tmp_path: Path) -> None:
+        """Placement hint 'middle' maps to 50% of total duration."""
+        clip_file = tmp_path / "clip.mp4"
+        clip_file.write_bytes(b"fake")
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "clip.mp4", "placement_hint": "middle"}]})
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 80.0)
+        assert result[0].insertion_point_s == pytest.approx(40.0)
+
+    def test_placement_hint_outro(self, tmp_path: Path) -> None:
+        """Placement hint 'outro' maps to 90% of total duration."""
+        clip_file = tmp_path / "outro.mp4"
+        clip_file.write_bytes(b"fake")
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "outro.mp4", "placement_hint": "outro"}]})
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 100.0)
+        assert result[0].insertion_point_s == pytest.approx(90.0)
+
+    def test_unknown_placement_defaults_to_midpoint(self, tmp_path: Path) -> None:
+        """Unknown placement hint defaults to 50%."""
+        clip_file = tmp_path / "clip.mp4"
+        clip_file.write_bytes(b"fake")
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "clip.mp4", "placement_hint": "somewhere"}]})
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 60.0)
+        assert result[0].insertion_point_s == pytest.approx(30.0)
+
+    def test_missing_file_skipped(self, tmp_path: Path) -> None:
+        """Non-existent file path is skipped."""
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "nonexistent.mp4", "placement_hint": "intro"}]})
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 60.0)
+        assert result == ()
+
+    def test_empty_path_skipped(self, tmp_path: Path) -> None:
+        """Empty path_or_query is skipped."""
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": [{"path_or_query": "", "placement_hint": "intro"}]})
+        )
+
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_non_dict_entry_skipped(self, tmp_path: Path) -> None:
+        """Non-dict entries in the array are skipped."""
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": ["not-a-dict", 42]})
+        )
+
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_non_list_documentary_clips(self, tmp_path: Path) -> None:
+        """Non-list documentary_clips field → empty tuple."""
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({"documentary_clips": "not-a-list"})
+        )
+
+        assert _read_user_instructed_clips(tmp_path, 60.0) == ()
+
+    def test_multiple_clips(self, tmp_path: Path) -> None:
+        """Multiple valid clips all returned."""
+        for name in ("a.mp4", "b.mp4"):
+            (tmp_path / name).write_bytes(b"fake")
+        (tmp_path / "router-output.json").write_text(
+            json.dumps({
+                "documentary_clips": [
+                    {"path_or_query": "a.mp4", "placement_hint": "intro"},
+                    {"path_or_query": "b.mp4", "placement_hint": "outro"},
+                ]
+            })
+        )
+
+        result = _read_user_instructed_clips(tmp_path, 100.0)
+        assert len(result) == 2
+        assert result[0].insertion_point_s < result[1].insertion_point_s

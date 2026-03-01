@@ -46,6 +46,15 @@ Combine encoded video segments into the final Instagram Reel, verify quality, an
    - **Single-moment mode**: sequential by segment number.
    - **Multi-moment mode**: reorder segments from chronological I/O order (how they were encoded) into **narrative role order** (intro → buildup → core → reaction → conclusion). Use the `moment_index` and `narrative_role` fields from `encoding-plan.json` commands to group and sort.
 4.5. **Discover B-roll clips** — read `cutaway-manifest.json` for the unified cutaway manifest (pre-built by the pipeline before this stage). The manifest contains clips from all sources (Veo3, external downloads, user-provided) with resolved insertion points, durations, and overlap resolution already applied. If `cutaway-manifest.json` is missing, fall back to reading `veo3/jobs.json` directly. Include B-roll details in the assembly report.
+4.6. **User-Instructed Documentary Clips**:
+    1. Read `documentary_clips` from `router-output.json`
+    2. If documentary clips are present:
+       - Clips referenced by URL should already be downloaded by the pipeline (via ExternalClipDownloader)
+       - Check `cutaway-manifest.json` for clips with `source: "user_provided"` -- these are the user-instructed clips
+       - Place clips at user-specified insertion points from `placement_hint`
+       - Include `source: "user_instructed"` in the assembly report's `broll_summary.placements[]`
+    3. User-instructed clips have highest priority in overlap resolution (they override Veo3 and external clips)
+    4. If no documentary clips exist, skip this step (backward compatible)
 4. **Plan transitions** — check `encoding-plan.json` for `style_transitions`. Use the `transition_kind` field to select transition type:
    - `style_change`: 0.5s slide effect (within-moment style transitions)
    - `narrative_boundary`: 1.0s dissolve effect (between-moment transitions)
