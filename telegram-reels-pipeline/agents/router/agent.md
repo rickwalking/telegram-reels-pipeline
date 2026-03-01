@@ -28,7 +28,12 @@ You MUST output valid JSON. Two schemas depending on request type:
   "framing_style": "default",
   "revision_type": null,
   "routing_target": null,
-  "elicitation_questions": []
+  "elicitation_questions": [],
+  "instructions": "",
+  "overlay_images": [],
+  "documentary_clips": [],
+  "transition_preferences": [],
+  "narrative_overrides": []
 }
 ```
 
@@ -57,6 +62,11 @@ Note: `revision_type` uses lowercase snake_case enum **values** (e.g., `extend_m
 | `routing_target` | string or null | Pipeline stage to re-execute for revisions |
 | `revision_context` | string or null | Interpreted description of what the user wants changed |
 | `elicitation_questions` | array | Questions to ask the user (0-2 max) |
+| `instructions` | string | Raw creative instructions passed through from user input |
+| `overlay_images` | array | Parsed image overlay directives (see Creative Instructions) |
+| `documentary_clips` | array | Parsed documentary clip references (see Creative Instructions) |
+| `transition_preferences` | array | Parsed transition effect preferences (see Creative Instructions) |
+| `narrative_overrides` | array | Parsed narrative adjustment directives (see Creative Instructions) |
 
 ## Behavioral Rules
 
@@ -77,6 +87,19 @@ When no additional context is provided:
 
 - `elicitation-flow.md` — Decision tree for when to ask questions vs. use defaults
 - `revision-interpretation.md` — Natural language to RevisionType mapping rules
+
+## Creative Instructions
+
+When `instructions` is provided in elicitation context, parse the free-text instructions into structured directive categories:
+
+- **overlay_images**: Extract image paths with timestamps and durations. Each entry: `{"path": "...", "timestamp_s": N, "duration_s": N}`
+- **documentary_clips**: Extract video clip references with placement hints. Each entry: `{"path_or_query": "...", "placement_hint": "..."}`
+- **transition_preferences**: Extract transition effect preferences. Each entry: `{"effect_type": "fade|wipe|dissolve|...", "timing_s": N}`
+- **narrative_overrides**: Extract tone, structure, pacing, or arc changes. Each entry: `{"tone": "...", "structure": "...", "pacing": "...", "arc_changes": "..."}`
+
+When no instructions are provided, output empty arrays for all directive fields. This ensures backward compatibility.
+
+Validate referenced local file paths (images, videos) for existence. Flag invalid references as warnings in the output -- do not fail the stage.
 
 ## Error Handling
 

@@ -21,7 +21,12 @@ Parse the user's Telegram message to extract a YouTube URL, determine if elicita
   "framing_style": "default",
   "revision_type": null,
   "routing_target": null,
-  "elicitation_questions": []
+  "elicitation_questions": [],
+  "instructions": "",
+  "overlay_images": [],
+  "documentary_clips": [],
+  "transition_preferences": [],
+  "narrative_overrides": []
 }
 ```
 
@@ -32,7 +37,13 @@ Parse the user's Telegram message to extract a YouTube URL, determine if elicita
 3. **Extract framing style**. Check the user's message for style keywords ("split screen", "pip", "picture in picture", "auto", etc.) and set `framing_style` accordingly. If `framing_style` is provided in elicitation context (from CLI `--style` flag), use that value as an override. See `elicitation-flow.md` step 2.
 4. **Determine elicitation needs**. If the URL is from a long video (> 60 min) and no topic focus is specified, consider asking a topic question. See `elicitation-flow.md`.
 5. **Apply smart defaults** for any unspecified fields: topic_focus=null, duration_preference=75, framing_style="default".
-6. **Output valid JSON** matching the schema above.
+6. **Process creative instructions**. If `instructions` is provided in elicitation context:
+   1. Parse the free-text instructions into structured directive categories
+   2. Populate `overlay_images`, `documentary_clips`, `transition_preferences`, `narrative_overrides` arrays in output
+   3. Validate any referenced local file paths -- flag invalid ones as warnings
+   4. Pass the raw `instructions` string through to the output for downstream reference
+   If no instructions are provided, output empty arrays for all directive fields.
+7. **Output valid JSON** matching the schema above.
 
 ## Constraints
 

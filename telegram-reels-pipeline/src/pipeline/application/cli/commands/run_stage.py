@@ -94,6 +94,11 @@ class RunStageCommand:
         gate_criteria: str = context.state.get("gate_criteria", "")
         elicitation: dict[str, str] = context.state.get("elicitation", {})
 
+        # Forward creative instructions to elicitation context if present
+        instructions = context.state.get("instructions", "")
+        if instructions:
+            elicitation["instructions"] = instructions
+
         print(f"  [{stage.value.upper()}] Starting...")
         stage_start = time.monotonic()
 

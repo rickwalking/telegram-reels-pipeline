@@ -287,6 +287,11 @@ class RunElicitationCommand:
         gate_criteria: str = context.state["gate_criteria"]
         elicitation: dict[str, str] = context.state.get("elicitation", {})
 
+        # Forward creative instructions to elicitation context if present
+        instructions = context.state.get("instructions", "")
+        if instructions:
+            elicitation["instructions"] = instructions
+
         result, new_artifacts = await _run_router_with_elicitation(
             elicitation=elicitation,
             step_file=step_file,
