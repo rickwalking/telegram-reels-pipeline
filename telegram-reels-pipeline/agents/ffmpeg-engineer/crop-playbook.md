@@ -194,6 +194,46 @@ split=2[content][speaker];
 
 **Output dimensions**: 1080x1920 with SAR 1:1 via `vstack`.
 
+### Documentary Insert (Veo3 B-Roll Splice)
+
+Fullscreen cutaway clip (e.g. Veo3-generated B-roll) spliced into a source-video segment, replacing the source picture for a fixed duration while source audio continues uninterrupted.
+
+**Split-concat pattern** (single-pass `filter_complex` with secondary input):
+
+```
+# Given: segment duration = D seconds, insert starts at T seconds, insert lasts L seconds
+# source_A = 0..T, veo3_insert = 0..L, source_B = (T+L)..D
+[0:v]{crop_and_scale},split=2[src_pre][src_post];
+[src_pre]trim=0:{T},setpts=PTS-STARTPTS[a];
+[1:v]scale=1080:1920:flags=lanczos,setsar=1,trim=0:{L},setpts=PTS-STARTPTS[br];
+[src_post]trim={T+L}:{D},setpts=PTS-STARTPTS[b];
+[a][br][b]concat=n=3:v=1:a=0[v]
+```
+
+**CRITICAL — All trim filters MUST have explicit upper bounds**:
+- `trim=0:{T}` — NOT `trim=0:` (unbounded start section)
+- `trim={T+L}:{D}` — NOT `trim={T+L}:` (unbounded tail causes runaway encoding)
+- `D` = segment duration in seconds = `end_seconds - start_seconds`
+
+**Example** (25s segment, 6s insert at t=6):
+```
+# D=25, T=6, L=6 → source_A(0-6) + veo3(0-6) + source_B(12-25)
+[0:v]crop=960:1080:90:0,scale=1080:1920:flags=lanczos,setsar=1,split=2[src_pre][src_post];
+[src_pre]trim=0:6,setpts=PTS-STARTPTS[a];
+[1:v]scale=1080:1920:flags=lanczos,setsar=1,trim=0:6,setpts=PTS-STARTPTS[br];
+[src_post]trim=12:25,setpts=PTS-STARTPTS[b];
+[a][br][b]concat=n=3:v=1:a=0[v]
+```
+
+**Audio mapping**: Use `-map [v] -map 0:a?` so source audio from input 0 plays continuously under the Veo3 insert (Veo3 audio is discarded).
+
+**Veo3 resolution**: Native 720x1280. Scale to 1080x1920 (1.5x upscale — acceptable for AI-generated B-roll).
+
+**Encoding plan fields**:
+- `filter_type`: `"filter_complex"`
+- `secondary_inputs`: `["veo3/{variant}.mp4"]`
+- `documentary_clip.split_plan`: human-readable summary, e.g. `"source_A(0-6s) + veo3_broll(0-6s) + source_B(12-25s)"`
+
 ### Unknown Layouts (from Knowledge Base)
 
 For layouts stored via LayoutEscalationHandler:

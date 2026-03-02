@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +20,29 @@ logger = logging.getLogger(__name__)
 
 # Default thread count for FFmpeg on Raspberry Pi
 _DEFAULT_THREADS: int = 2
+
+
+_UNBOUNDED_TRIM_RE = re.compile(r"trim=(\d+(?:\.\d+)?):(?=[,;\[\]]|$)")
+"""Matches ``trim=N:`` where N is a number and the colon is followed by a
+filter separator (``,``, ``;``), a stream label (``[``), or end-of-string —
+i.e. there is no upper-bound timestamp after the colon."""
+
+
+def _bound_unbounded_trims(filter_complex: str, segment_duration: float) -> str:
+    """Replace ``trim=N:`` with ``trim=N:{segment_duration}`` to prevent runaway encodes."""
+
+    def _add_bound(match: re.Match[str]) -> str:
+        start_val = match.group(1)
+        bounded = f"trim={start_val}:{segment_duration}"
+        logger.warning(
+            "Bounded unbounded trim filter: trim=%s: → trim=%s:%s",
+            start_val,
+            start_val,
+            segment_duration,
+        )
+        return bounded
+
+    return _UNBOUNDED_TRIM_RE.sub(_add_bound, filter_complex)
 
 
 class FFmpegError(PipelineError):
@@ -246,6 +270,10 @@ class FFmpegAdapter:
         filter_type = cmd.get("filter_type", "crop")
         if filter_type == "filter_complex" and cmd.get("filter_complex") and has_all_secondary:
             fc = str(cmd["filter_complex"])
+            # Safety net: bound any unbounded trim filters to the segment duration.
+            # An unbounded `trim=N:` causes ffmpeg to process far beyond the segment,
+            # producing multi-GB files for short clips.
+            fc = _bound_unbounded_trims(fc, float(end) - float(start))
             # Ensure the filter graph has a labeled [v] output for -map
             if "[v]" not in fc:
                 fc = fc.rstrip() + "[v]"
