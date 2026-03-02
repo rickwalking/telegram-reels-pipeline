@@ -291,6 +291,14 @@ class RunElicitationCommand:
         gate_criteria: str = context.state.gate_criteria
         elicitation: dict[str, str] = dict(context.state.elicitation)
 
+        # Forward pipeline parameters to elicitation context
+        if context.state.target_duration != 90:
+            elicitation["target_duration"] = str(context.state.target_duration)
+        if context.state.moments_requested > 1:
+            elicitation["moments_requested"] = str(context.state.moments_requested)
+        if context.state.framing_style:
+            elicitation["framing_style"] = context.state.framing_style
+
         # Forward creative instructions to elicitation context if present
         instructions = context.state.instructions
         if instructions:
