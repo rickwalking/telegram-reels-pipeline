@@ -39,8 +39,8 @@ def print_stage_result(
         output(f"      - {a.name}")
 
 
-def _build_elicitation_context(state: object) -> dict[str, str]:
-    """Build elicitation context dict, merging in creative instructions."""
+def _build_elicitation_context(state: object, context: PipelineContext | None = None) -> dict[str, str]:
+    """Build elicitation context dict, merging in creative instructions and settings."""
     from pipeline.application.cli.context import PipelineState
 
     if not isinstance(state, PipelineState):
@@ -48,6 +48,18 @@ def _build_elicitation_context(state: object) -> dict[str, str]:
     result = dict(state.elicitation)
     if state.instructions:
         result["instructions"] = state.instructions
+
+    # Inject publishing settings for Content stage (mirrors pipeline_runner logic)
+    if context is None or state.stage_spec is None:
+        return result
+    stage = state.stage_spec[0]
+    if stage != PipelineStage.CONTENT:
+        return result
+    settings = context.settings
+    if not settings.publishing_language:
+        return result
+    result["publishing_language"] = settings.publishing_language
+    result["publishing_description_variants"] = str(settings.publishing_description_variants)
     return result
 
 
@@ -115,7 +127,7 @@ class RunStageCommand:
         step_file = context.project_root / "workflows" / "stages" / step_file_name
         agent_def = context.project_root / "agents" / agent_def_name / "agent.md"
         gate_criteria: str = context.state.gate_criteria
-        elicitation = _build_elicitation_context(context.state)
+        elicitation = _build_elicitation_context(context.state, context)
 
         self._output(f"  [{stage.value.upper()}] Starting...")
         stage_start = time.monotonic()

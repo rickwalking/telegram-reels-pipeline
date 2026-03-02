@@ -98,6 +98,7 @@ Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fa
 - Async for I/O; synchronous for pure transforms
 - Min 80% test coverage, AAA pattern, fakes over mocks for domain
 - Line length: 120
+- No nested `if` blocks — prefer early returns / guard clauses
 
 ## Commit Rules
 
