@@ -7,6 +7,9 @@ from pathlib import Path
 # File extensions considered valid artifacts
 _ARTIFACT_EXTENSIONS: frozenset[str] = frozenset({".md", ".json", ".txt", ".yaml", ".yml", ".mp4"})
 
+# Files written by the pipeline itself (not by agents) — excluded from collection
+_INTERNAL_FILES: frozenset[str] = frozenset({"command-history.json"})
+
 
 def collect_artifacts(work_dir: Path) -> tuple[Path, ...]:
     """Scan work_dir for output files produced by the agent.
@@ -19,6 +22,11 @@ def collect_artifacts(work_dir: Path) -> tuple[Path, ...]:
 
     artifacts: list[Path] = []
     for path in sorted(work_dir.iterdir()):
-        if path.is_file() and not path.name.startswith(".") and path.suffix in _ARTIFACT_EXTENSIONS:
+        if (
+            path.is_file()
+            and not path.name.startswith(".")
+            and path.suffix in _ARTIFACT_EXTENSIONS
+            and path.name not in _INTERNAL_FILES
+        ):
             artifacts.append(path)
     return tuple(artifacts)
