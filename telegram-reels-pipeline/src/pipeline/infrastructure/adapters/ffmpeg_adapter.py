@@ -160,6 +160,10 @@ class FFmpegAdapter:
 
         produced: list[Path] = []
         for i, cmd in enumerate(commands):
+            input_path = Path(os.path.normpath(ws_root / str(cmd["input"])))
+            if not input_path.exists():
+                logger.warning("Skipping command %d: primary input missing: %s", i + 1, input_path)
+                continue
             output_path = self._execute_plan_command(cmd, i, ws_root)
             produced.append(await self._encode_plan_segment(cmd, i, output_path, len(commands), ws_root))
 
@@ -227,12 +231,20 @@ class FFmpegAdapter:
         args: list[str] = ["-ss", str(start), "-to", str(end), "-i", str(input_path)]
 
         # Secondary inputs (e.g. documentary clips for PiP overlay)
+        secondary_paths: list[Path] = []
         for secondary in cmd.get("secondary_inputs", []):
             sec_path = Path(os.path.normpath(ws_root / str(secondary)))
-            args.extend(["-i", str(sec_path)])
+            secondary_paths.append(sec_path)
+
+        has_all_secondary = all(p.exists() for p in secondary_paths)
+        if secondary_paths and not has_all_secondary:
+            logger.warning("Secondary inputs missing, falling back to crop for command %d", index + 1)
+        if has_all_secondary:
+            for sec_path in secondary_paths:
+                args.extend(["-i", str(sec_path)])
 
         filter_type = cmd.get("filter_type", "crop")
-        if filter_type == "filter_complex" and cmd.get("filter_complex"):
+        if filter_type == "filter_complex" and cmd.get("filter_complex") and has_all_secondary:
             fc = str(cmd["filter_complex"])
             # Ensure the filter graph has a labeled [v] output for -map
             if "[v]" not in fc:
