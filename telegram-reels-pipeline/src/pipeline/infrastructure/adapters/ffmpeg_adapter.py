@@ -237,7 +237,8 @@ class FFmpegAdapter:
         else:
             crop_filter = cmd.get("crop_filter")
             if not crop_filter:
-                raise FFmpegError(f"Command {index + 1} missing crop_filter")
+                # Passthrough: scale to 1080×1920 reel target (e.g. cutaway clips)
+                crop_filter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
             args.extend(["-vf", str(crop_filter)])
 
         fd, tmp_path_str = tempfile.mkstemp(dir=str(output_path.parent), suffix=".tmp.mp4")
