@@ -226,6 +226,11 @@ class FFmpegAdapter:
 
         args: list[str] = ["-ss", str(start), "-to", str(end), "-i", str(input_path)]
 
+        # Secondary inputs (e.g. documentary clips for PiP overlay)
+        for secondary in cmd.get("secondary_inputs", []):
+            sec_path = Path(os.path.normpath(ws_root / str(secondary)))
+            args.extend(["-i", str(sec_path)])
+
         filter_type = cmd.get("filter_type", "crop")
         if filter_type == "filter_complex" and cmd.get("filter_complex"):
             fc = str(cmd["filter_complex"])
