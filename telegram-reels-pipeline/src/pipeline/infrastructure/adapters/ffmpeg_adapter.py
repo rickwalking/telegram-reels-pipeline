@@ -27,22 +27,43 @@ _UNBOUNDED_TRIM_RE = re.compile(r"trim=(\d+(?:\.\d+)?):(?=[,;\[\]]|$)")
 filter separator (``,``, ``;``), a stream label (``[``), or end-of-string —
 i.e. there is no upper-bound timestamp after the colon."""
 
+_SECONDARY_STREAM_RE = re.compile(r"\[1:v\]([^;]*?)(?=\[)")
+"""Matches the filter chain applied to ``[1:v]`` (secondary/Veo3 input)."""
 
-def _bound_unbounded_trims(filter_complex: str, segment_duration: float) -> str:
+
+def _bound_unbounded_trims(filter_graph: str, segment_duration: float) -> str:
     """Replace ``trim=N:`` with ``trim=N:{segment_duration}`` to prevent runaway encodes."""
 
-    def _add_bound(match: re.Match[str]) -> str:
-        start_val = match.group(1)
-        bounded = f"trim={start_val}:{segment_duration}"
-        logger.warning(
-            "Bounded unbounded trim filter: trim=%s: → trim=%s:%s",
-            start_val,
-            start_val,
-            segment_duration,
-        )
-        return bounded
+    def _cap_trim(match: re.Match[str]) -> str:
+        trim_start = match.group(1)
+        logger.warning("Capping unbounded trim=%s: → trim=%s:%s", trim_start, trim_start, segment_duration)
+        return f"trim={trim_start}:{segment_duration}"
 
-    return _UNBOUNDED_TRIM_RE.sub(_add_bound, filter_complex)
+    return _UNBOUNDED_TRIM_RE.sub(_cap_trim, filter_graph)
+
+
+def _normalize_secondary_fps(filter_graph: str, target_fps: int) -> str:
+    """Inject ``fps=N`` into the ``[1:v]`` (secondary input) filter chain.
+
+    The ``concat`` filter requires all segments to share the same framerate.
+    Veo3 clips are typically 24fps while source video is 30fps — a mismatch
+    causes concat to produce runaway multi-GB output.
+    """
+    fps_filter = f"fps={target_fps}"
+
+    def _inject(match: re.Match[str]) -> str:
+        secondary_chain = match.group(1)
+        if "fps=" in secondary_chain:
+            return match.group(0)
+        logger.info("Injecting %s into secondary input filter chain", fps_filter)
+        normalized = (
+            secondary_chain.replace("trim=", f"{fps_filter},trim=", 1)
+            if "trim=" in secondary_chain
+            else secondary_chain.rstrip(",") + f",{fps_filter}"
+        )
+        return f"[1:v]{normalized}"
+
+    return _SECONDARY_STREAM_RE.sub(_inject, filter_graph)
 
 
 class FFmpegError(PipelineError):
@@ -268,21 +289,15 @@ class FFmpegAdapter:
                 args.extend(["-i", str(sec_path)])
 
         filter_type = cmd.get("filter_type", "crop")
-        if filter_type == "filter_complex" and cmd.get("filter_complex") and has_all_secondary:
-            fc = str(cmd["filter_complex"])
-            # Safety net: bound any unbounded trim filters to the segment duration.
-            # An unbounded `trim=N:` causes ffmpeg to process far beyond the segment,
-            # producing multi-GB files for short clips.
-            fc = _bound_unbounded_trims(fc, float(end) - float(start))
-            # Ensure the filter graph has a labeled [v] output for -map
-            if "[v]" not in fc:
-                fc = fc.rstrip() + "[v]"
-            args.extend(["-filter_complex", fc])
-            args.extend(["-map", "[v]", "-map", "0:a?"])
+        has_filter_graph = filter_type == "filter_complex" and cmd.get("filter_complex") and has_all_secondary
+        if has_filter_graph:
+            sanitized_graph = await self._sanitize_filter_graph(
+                str(cmd["filter_complex"]), float(end) - float(start), input_path, secondary_paths,
+            )
+            args.extend(["-filter_complex", sanitized_graph, "-map", "[v]", "-map", "0:a?"])
         else:
             crop_filter = cmd.get("crop_filter")
             if not crop_filter:
-                # Passthrough: scale to 1080×1920 reel target (e.g. cutaway clips)
                 crop_filter = "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
             args.extend(["-vf", str(crop_filter)])
 
@@ -395,6 +410,39 @@ class FFmpegAdapter:
             )
         finally:
             list_file.unlink(missing_ok=True)
+
+    async def _sanitize_filter_graph(
+        self, filter_graph: str, seg_duration: float, source_path: Path, secondary_paths: list[Path],
+    ) -> str:
+        """Apply safety-net fixes to a filter_complex string before encoding."""
+        filter_graph = _bound_unbounded_trims(filter_graph, seg_duration)
+        if secondary_paths and "[1:v]" in filter_graph:
+            source_fps = await self._probe_fps(source_path)
+            filter_graph = _normalize_secondary_fps(filter_graph, source_fps)
+        if "[v]" not in filter_graph:
+            filter_graph = filter_graph.rstrip() + "[v]"
+        return filter_graph
+
+    @staticmethod
+    async def _probe_fps(video: Path, default: int = 30) -> int:
+        """Return the integer framerate of a video via ffprobe."""
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe",
+            "-v", "quiet",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=r_frame_rate",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            str(video),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        try:
+            numerator, denominator = stdout.decode().strip().split("/")
+            return round(int(numerator) / int(denominator))
+        except (ValueError, ZeroDivisionError):
+            logger.warning("Could not probe fps for %s, defaulting to %d", video, default)
+            return default
 
     async def _run_ffmpeg(self, *args: str) -> str:
         """Run an FFmpeg command and return stdout."""

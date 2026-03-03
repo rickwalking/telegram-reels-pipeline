@@ -205,22 +205,27 @@ Fullscreen cutaway clip (e.g. Veo3-generated B-roll) spliced into a source-video
 # source_A = 0..T, veo3_insert = 0..L, source_B = (T+L)..D
 [0:v]{crop_and_scale},split=2[src_pre][src_post];
 [src_pre]trim=0:{T},setpts=PTS-STARTPTS[a];
-[1:v]scale=1080:1920:flags=lanczos,setsar=1,trim=0:{L},setpts=PTS-STARTPTS[br];
+[1:v]scale=1080:1920:flags=lanczos,setsar=1,fps={SOURCE_FPS},trim=0:{L},setpts=PTS-STARTPTS[br];
 [src_post]trim={T+L}:{D},setpts=PTS-STARTPTS[b];
 [a][br][b]concat=n=3:v=1:a=0[v]
 ```
+
+**CRITICAL — Framerate normalization**:
+- Veo3 clips are typically 24fps while source video is 30fps
+- The `concat` filter requires all segments to have the **same framerate** — mismatched fps causes runaway encoding (multi-GB output for short clips)
+- **Always add `fps={SOURCE_FPS}`** to the Veo3 stream chain BEFORE `trim`, e.g. `fps=30` for a 30fps source
 
 **CRITICAL — All trim filters MUST have explicit upper bounds**:
 - `trim=0:{T}` — NOT `trim=0:` (unbounded start section)
 - `trim={T+L}:{D}` — NOT `trim={T+L}:` (unbounded tail causes runaway encoding)
 - `D` = segment duration in seconds = `end_seconds - start_seconds`
 
-**Example** (25s segment, 6s insert at t=6):
+**Example** (25s segment, 6s insert at t=6, 30fps source):
 ```
 # D=25, T=6, L=6 → source_A(0-6) + veo3(0-6) + source_B(12-25)
 [0:v]crop=960:1080:90:0,scale=1080:1920:flags=lanczos,setsar=1,split=2[src_pre][src_post];
 [src_pre]trim=0:6,setpts=PTS-STARTPTS[a];
-[1:v]scale=1080:1920:flags=lanczos,setsar=1,trim=0:6,setpts=PTS-STARTPTS[br];
+[1:v]scale=1080:1920:flags=lanczos,setsar=1,fps=30,trim=0:6,setpts=PTS-STARTPTS[br];
 [src_post]trim=12:25,setpts=PTS-STARTPTS[b];
 [a][br][b]concat=n=3:v=1:a=0[v]
 ```
