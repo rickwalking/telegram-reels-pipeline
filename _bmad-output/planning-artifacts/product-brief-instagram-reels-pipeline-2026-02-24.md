@@ -8,7 +8,7 @@ date: 2026-02-24
 author: Pedro
 ---
 
-# Product Brief: claude_docker
+# Product Brief: Instagram Reels Pipeline
 
 ## Executive Summary
 
