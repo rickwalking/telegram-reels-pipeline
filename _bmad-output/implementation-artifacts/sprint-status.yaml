@@ -197,3 +197,57 @@ development_status:
   # QA pass: typed PipelineState (P0-2), layer violation fix (P0-1),
   # nan/inf guards (P0-3), exception chaining (P1-4), stage registry
   # extraction (P1-7), OutputPort protocol (P2-8), function extraction (P2-9/10)
+
+  # ═══════════════════════════════════════════════════════════════
+  # OMNI-CHANNEL HEXAGONAL REFACTOR (Epics 22-27)
+  # PRD: prd.md (2026-02-24), Epics: epics.md (2026-02-24)
+  # Architecture: FastAPI + MongoDB + FastMCP + React SPA
+  # ═══════════════════════════════════════════════════════════════
+
+  # Epic 22: Pipeline Foundation & Omni-Channel Core
+  # FRs: FR1 (trigger), FR2 (state machine), FR3 (FIFO queue)
+  epic-22: in-progress
+  22-1-hexagonal-scaffolding-presentation-layer: in-progress
+  22-2-domain-models-event-sourcing-extensions: in-progress
+  22-3-fastapi-core-run-trigger-endpoint: ready-for-dev
+  22-4-fifo-queue-orchestrator-initialization: ready-for-dev
+
+  # Epic 23: The Time-Travel State Store (Event Sourcing)
+  # FRs: FR6 (immutable events), FR7 (state projection), FR8 (binary media)
+  epic-23: in-progress
+  23-1-odmantic-mongodb-setup-document-models: ready-for-dev
+  23-2-state-store-port-mongo-implementation: ready-for-dev
+  23-3-event-driven-state-transitions: ready-for-dev
+  23-4-local-filesystem-binary-media-adapter: ready-for-dev
+
+  # Epic 24: AI Agent Core Tooling (FastMCP)
+  # FRs: FR9 (read state), FR10 (save artifacts), FR11 (DTO validation)
+  epic-24: in-progress
+  24-1-dto-mapping-agent-state-transfer: ready-for-dev
+  24-2-fastmcp-server-initialization: ready-for-dev
+  24-3-read-pipeline-state-tool: ready-for-dev
+  24-4-save-stage-output-tool: ready-for-dev
+
+  # Epic 25: Real-Time Observability Dashboard (The Glass Wall)
+  # FRs: FR12 (view runs), FR13 (SSE), FR14 (time-travel), FR15 (payload inspection)
+  epic-25: backlog
+  25-1-react-spa-foundation-api-client: ready-for-dev
+  25-2-realtime-sse-integration: ready-for-dev
+  25-3-historical-event-scrubber-pipeline-dvr: ready-for-dev
+  25-4-document-carousel-payload-inspection: ready-for-dev
+
+  # Epic 26: Core Processing Engine (Legacy Parity)
+  # FRs: FR16 (download), FR17 (transcript), FR18 (layout), FR19 (ffmpeg), FR20 (QA)
+  epic-26: backlog
+  26-1-video-download-metadata-extraction-agent: ready-for-dev
+  26-2-transcript-analysis-moment-selection-agent: ready-for-dev
+  26-3-camera-layout-detection-agent: ready-for-dev
+  26-4-ffmpeg-video-generation-agent: ready-for-dev
+  26-5-automated-qa-reflection-loop: ready-for-dev
+
+  # Epic 27: Operator Intervention & Recovery
+  # FRs: FR4 (pause), FR5 (resume)
+  epic-27: backlog
+  27-1-escalate-to-operator-state-transition: ready-for-dev
+  27-2-pause-pipeline-api-endpoint: ready-for-dev
+  27-3-resume-pipeline-api-endpoint: ready-for-dev
