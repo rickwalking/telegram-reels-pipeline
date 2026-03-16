@@ -1,4 +1,4 @@
-"""StateStorePort — protocol for persisting and retrieving run state projections."""
+"""StateStorePort — protocol for persisting and retrieving pipeline run projections."""
 
 from __future__ import annotations
 
@@ -10,10 +10,15 @@ if TYPE_CHECKING:
 
 @runtime_checkable
 class StateStorePort(Protocol):
-    """Persist and retrieve pipeline run state projections."""
+    """Persist and retrieve pipeline run state projections.
+
+    New event-sourced methods operate on RunStateProjection.
+    """
 
     async def save_state(self, projection: RunStateProjection) -> None: ...
 
-    async def load_state(self, pipeline_run_id: str) -> RunStateProjection | None: ...
+    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None: ...
 
-    async def list_incomplete_runs(self) -> list[RunStateProjection]: ...
+    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]: ...
+
+    async def list_all_projections(self) -> list[RunStateProjection]: ...

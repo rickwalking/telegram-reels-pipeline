@@ -43,13 +43,17 @@ class FakeStateStore:
         """Save projection to in-memory dictionary."""
         self.projections[projection.pipeline_run_id] = projection
 
-    async def load_state(self, pipeline_run_id: str) -> RunStateProjection | None:
+    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
         """Load projection by pipeline_run_id."""
         return self.projections.get(pipeline_run_id)
 
-    async def list_incomplete_runs(self) -> list[RunStateProjection]:
-        """List non-completed projections."""
-        return [p for p in self.projections.values() if p.execution_status != "completed"]
+    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
+        """List projections matching the given execution status."""
+        return [p for p in self.projections.values() if p.execution_status == execution_status]
+
+    async def list_all_projections(self) -> list[RunStateProjection]:
+        """List all projections."""
+        return list(self.projections.values())
 
 
 # ---------------------------------------------------------------------------
