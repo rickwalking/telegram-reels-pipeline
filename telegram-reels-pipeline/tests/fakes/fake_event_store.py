@@ -14,6 +14,11 @@ class FakeEventStore:
     def __init__(self) -> None:
         self._events: list[PipelineStateEvent] = []
 
+    @property
+    def events(self) -> list[PipelineStateEvent]:
+        """Public access for test assertions."""
+        return self._events
+
     async def append_event(self, event: PipelineStateEvent) -> None:
         """Append an event to the in-memory store."""
         self._events.append(event)

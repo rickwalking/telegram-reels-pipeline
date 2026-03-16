@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -68,7 +68,7 @@ def _build_event(event_type: str, pipeline_run_id: str, stage_name: str) -> Pipe
         event_id=uuid.uuid4().hex,
         pipeline_run_id=pipeline_run_id,
         event_type=event_type,
-        timestamp=datetime.now(tz=UTC).isoformat(),
+        created_at=datetime.now(tz=UTC).isoformat(),
         stage_name=stage_name,
     )
 
@@ -84,9 +84,9 @@ def _build_event_with_payload(
         event_id=uuid.uuid4().hex,
         pipeline_run_id=pipeline_run_id,
         event_type=event_type,
-        timestamp=datetime.now(tz=UTC).isoformat(),
+        created_at=datetime.now(tz=UTC).isoformat(),
         stage_name=stage_name,
-        payload=payload,
+        payload_data=payload,
     )
 
 
@@ -106,14 +106,7 @@ class PipelineEventEmitterService:
         event = _build_event(STAGE_ENTERED, payload.pipeline_run_id, payload.stage_name)
         await self._event_store.append_event(event)
         projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=payload.stage_name,
-            execution_status=projection.execution_status,
-            stages_completed=projection.stages_completed,
-            last_event_id=event.event_id,
-        )
-        await self._state_store.save_projection(updated)
+        await self._state_store.save_state(replace(projection, current_stage=payload.stage_name))
 
     async def emit_stage_completed(self, payload: StageEventPayload) -> None:
         """Emit STAGE_COMPLETED event with artifact paths and update projection."""
@@ -121,34 +114,16 @@ class PipelineEventEmitterService:
         event = _build_event_with_payload(STAGE_COMPLETED, payload.pipeline_run_id, payload.stage_name, event_payload)
         await self._event_store.append_event(event)
         projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        completed = projection.stages_completed + (payload.stage_name,)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=payload.stage_name,
-            execution_status=projection.execution_status,
-            stages_completed=completed,
-            last_event_id=event.event_id,
-        )
-        await self._state_store.save_projection(updated)
+        completed = projection.completed_stages + (payload.stage_name,)
+        await self._state_store.save_state(replace(projection, completed_stages=completed))
 
     async def emit_qa_gate_result(self, payload: QaEventPayload) -> None:
         """Emit QA gate event dispatched from qa_decision string."""
         event_type = _QA_DECISION_TO_EVENT_TYPE.get(payload.qa_decision)
         if event_type is None:
             raise ValueError(f"Unknown qa_decision: {payload.qa_decision}")
-        event = _build_event_with_payload(
-            event_type, payload.pipeline_run_id, payload.stage_name, payload.critique_payload
-        )
+        event = _build_event_with_payload(event_type, payload.pipeline_run_id, payload.stage_name, payload.critique_payload)
         await self._event_store.append_event(event)
-        projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=projection.current_stage,
-            execution_status=projection.execution_status,
-            stages_completed=projection.stages_completed,
-            last_event_id=event.event_id,
-        )
-        await self._state_store.save_projection(updated)
 
     async def emit_error_occurred(self, payload: ErrorEventPayload) -> None:
         """Emit ERROR_OCCURRED event and mark projection as failed."""
@@ -156,43 +131,21 @@ class PipelineEventEmitterService:
         event = _build_event_with_payload(ERROR_OCCURRED, payload.pipeline_run_id, payload.stage_name, event_payload)
         await self._event_store.append_event(event)
         projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=projection.current_stage,
-            execution_status="failed",
-            stages_completed=projection.stages_completed,
-            last_event_id=event.event_id,
-            error_message=payload.error_message,
-        )
-        await self._state_store.save_projection(updated)
+        await self._state_store.save_state(replace(projection, execution_status="failed"))
 
     async def emit_pipeline_paused(self, payload: StageEventPayload) -> None:
         """Emit PIPELINE_PAUSED event and mark projection as paused."""
         event = _build_event(PIPELINE_PAUSED, payload.pipeline_run_id, payload.stage_name)
         await self._event_store.append_event(event)
         projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=projection.current_stage,
-            execution_status="paused",
-            stages_completed=projection.stages_completed,
-            last_event_id=event.event_id,
-        )
-        await self._state_store.save_projection(updated)
+        await self._state_store.save_state(replace(projection, execution_status="paused"))
 
     async def emit_pipeline_resumed(self, payload: StageEventPayload) -> None:
         """Emit PIPELINE_RESUMED event and mark projection as running."""
         event = _build_event(PIPELINE_RESUMED, payload.pipeline_run_id, payload.stage_name)
         await self._event_store.append_event(event)
         projection = await self._load_or_create_projection(payload.pipeline_run_id, payload.stage_name)
-        updated = RunStateProjection(
-            pipeline_run_id=projection.pipeline_run_id,
-            current_stage=projection.current_stage,
-            execution_status="running",
-            stages_completed=projection.stages_completed,
-            last_event_id=event.event_id,
-        )
-        await self._state_store.save_projection(updated)
+        await self._state_store.save_state(replace(projection, execution_status="running"))
 
     async def _load_or_create_projection(self, pipeline_run_id: str, stage_name: str) -> RunStateProjection:
         """Load existing projection or create a default one."""
@@ -201,6 +154,7 @@ class PipelineEventEmitterService:
             return existing
         return RunStateProjection(
             pipeline_run_id=pipeline_run_id,
+            youtube_url="unknown://emitter-fallback",
             current_stage=stage_name,
             execution_status="running",
         )

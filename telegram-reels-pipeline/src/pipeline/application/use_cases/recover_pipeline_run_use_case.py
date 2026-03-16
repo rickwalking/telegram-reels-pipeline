@@ -32,13 +32,12 @@ def _build_recovered_projection(
     completed_stages = tuple(e.stage_name for e in events if e.event_type == STAGE_COMPLETED)
     last_completed = _extract_last_completed_stage(events)
     current_stage = last_completed if last_completed else "router"
-    last_event_id = events[-1].event_id if events else ""
     return RunStateProjection(
         pipeline_run_id=pipeline_run_id,
+        youtube_url="unknown://recovery",
         current_stage=current_stage,
         execution_status="recovering",
-        stages_completed=completed_stages,
-        last_event_id=last_event_id,
+        completed_stages=completed_stages,
     )
 
 
@@ -69,5 +68,5 @@ class RecoverPipelineRunUseCase:
         """Replay events for a single run and persist the recovered projection."""
         events = await self._event_store.get_events_for_run(pipeline_run_id)
         recovered = _build_recovered_projection(pipeline_run_id, events)
-        await self._state_store.save_projection(recovered)
+        await self._state_store.save_state(recovered)
         return recovered

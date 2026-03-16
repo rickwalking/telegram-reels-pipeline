@@ -11,6 +11,11 @@ class FakeStateStore:
     def __init__(self) -> None:
         self._projections: dict[str, RunStateProjection] = {}
 
+    @property
+    def projections(self) -> dict[str, RunStateProjection]:
+        """Public access for test assertions."""
+        return self._projections
+
     async def save_state(self, projection: RunStateProjection) -> None:
         """Upsert a run state projection."""
         self._projections[projection.pipeline_run_id] = projection

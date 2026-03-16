@@ -25,7 +25,7 @@ def _make_event(pipeline_run_id: str, event_type: str, stage_name: str, event_id
         event_id=event_id,
         pipeline_run_id=pipeline_run_id,
         event_type=event_type,
-        timestamp="2026-03-16T10:00:00Z",
+        created_at="2026-03-16T10:00:00Z",
         stage_name=stage_name,
     )
 
@@ -55,10 +55,11 @@ class TestRecoveryFindsLastCompletedStage:
         # Seed a running projection
         projection = RunStateProjection(
             pipeline_run_id=pipeline_run_id,
+            youtube_url="https://youtube.com/watch?v=test",
             current_stage="transcript",
             execution_status="running",
         )
-        await state_store.save_projection(projection)
+        await state_store.save_state(projection)
 
         # Seed events showing router and research completed
         await event_store.append_event(_make_event(pipeline_run_id, STAGE_ENTERED, "router", "evt-1"))
@@ -74,8 +75,8 @@ class TestRecoveryFindsLastCompletedStage:
         recovered = result[0]
         assert recovered.pipeline_run_id == pipeline_run_id
         assert recovered.execution_status == "recovering"
-        assert "router" in recovered.stages_completed
-        assert "research" in recovered.stages_completed
+        assert "router" in recovered.completed_stages
+        assert "research" in recovered.completed_stages
         assert recovered.current_stage == "research"
 
     async def test_recovers_run_with_no_completed_events(self) -> None:
@@ -85,10 +86,11 @@ class TestRecoveryFindsLastCompletedStage:
 
         projection = RunStateProjection(
             pipeline_run_id=pipeline_run_id,
+            youtube_url="https://youtube.com/watch?v=test",
             current_stage="router",
             execution_status="running",
         )
-        await state_store.save_projection(projection)
+        await state_store.save_state(projection)
 
         # Only an entered event, no completions
         await event_store.append_event(_make_event(pipeline_run_id, STAGE_ENTERED, "router", "evt-1"))
@@ -99,7 +101,7 @@ class TestRecoveryFindsLastCompletedStage:
         # Assert
         assert len(result) == 1
         recovered = result[0]
-        assert recovered.stages_completed == ()
+        assert recovered.completed_stages == ()
         assert recovered.current_stage == "router"
 
     async def test_persists_recovered_projection(self) -> None:
@@ -109,10 +111,11 @@ class TestRecoveryFindsLastCompletedStage:
 
         projection = RunStateProjection(
             pipeline_run_id=pipeline_run_id,
+            youtube_url="https://youtube.com/watch?v=test",
             current_stage="content",
             execution_status="running",
         )
-        await state_store.save_projection(projection)
+        await state_store.save_state(projection)
 
         await event_store.append_event(_make_event(pipeline_run_id, STAGE_COMPLETED, "router", "evt-1"))
 
@@ -131,18 +134,20 @@ class TestRecoveryFindsLastCompletedStage:
         # A completed projection should not be recovered
         completed = RunStateProjection(
             pipeline_run_id="run-done",
+            youtube_url="https://youtube.com/watch?v=test",
             current_stage="delivery",
             execution_status="completed",
         )
-        await state_store.save_projection(completed)
+        await state_store.save_state(completed)
 
         # A failed projection should not be recovered
         failed = RunStateProjection(
             pipeline_run_id="run-failed",
+            youtube_url="https://youtube.com/watch?v=test",
             current_stage="research",
             execution_status="failed",
         )
-        await state_store.save_projection(failed)
+        await state_store.save_state(failed)
 
         # Act
         result = await use_case.execute()

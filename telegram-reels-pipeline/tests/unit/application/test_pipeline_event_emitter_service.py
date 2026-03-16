@@ -37,10 +37,11 @@ async def _seed_projection(state_store: FakeStateStore, stage: str = "router") -
     """Seed a running projection in the fake state store."""
     projection = RunStateProjection(
         pipeline_run_id=PIPELINE_RUN_ID,
+        youtube_url="https://youtube.com/watch?v=test",
         current_stage=stage,
         execution_status="running",
     )
-    await state_store.save_projection(projection)
+    await state_store.save_state(projection)
 
 
 class TestEmitStageEntered:
@@ -122,7 +123,7 @@ class TestEmitStageCompleted:
 
         # Assert
         event = event_store.events[0]
-        assert event.payload["artifact_paths"] == ("router-output.json", "research-output.json")
+        assert event.payload_data["artifact_paths"] == ("router-output.json", "research-output.json")
 
     async def test_adds_stage_to_stages_completed(self) -> None:
         # Arrange
@@ -136,7 +137,7 @@ class TestEmitStageCompleted:
         # Assert
         projection = await state_store.load_projection(PIPELINE_RUN_ID)
         assert projection is not None
-        assert "router" in projection.stages_completed
+        assert "router" in projection.completed_stages
 
 
 class TestEmitQaGateResult:
@@ -207,7 +208,7 @@ class TestEmitQaGateResult:
 
         # Assert
         event = event_store.events[0]
-        assert event.payload["score"] == 85
+        assert event.payload_data["score"] == 85
 
     async def test_raises_on_unknown_qa_decision(self) -> None:
         # Arrange
@@ -281,4 +282,4 @@ class TestEmitErrorOccurred:
         # Assert
         projection = await state_store.load_projection(PIPELINE_RUN_ID)
         assert projection is not None
-        assert projection.error_message == "agent timeout"
+        assert projection.execution_status == "failed"

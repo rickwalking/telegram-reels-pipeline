@@ -58,10 +58,11 @@ def pipeline_run_in_stage(stage_name: str) -> ScenarioContext:
     # Seed projection with the current stage
     projection = RunStateProjection(
         pipeline_run_id=context.pipeline_run_id,
+            youtube_url="https://youtube.com/watch?v=test",
         current_stage=stage_name,
         execution_status="running",
     )
-    _run_async(state_store.save_projection(projection))
+    _run_async(state_store.save_state(projection))
     return context
 
 
@@ -88,7 +89,7 @@ def projection_shows_next_stage(scenario_context: ScenarioContext) -> None:
     """Verify projection has stage in stages_completed."""
     projection = _run_async(scenario_context.state_store.load_projection(scenario_context.pipeline_run_id))
     assert projection is not None
-    assert scenario_context.stage_name in projection.stages_completed  # type: ignore[union-attr]
+    assert scenario_context.stage_name in projection.completed_stages  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

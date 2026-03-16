@@ -6,10 +6,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
 
-<<<<<<< HEAD
 
-=======
->>>>>>> worktree-agent-adf76045
 _REQUIRED_EVENT_FIELDS: dict[str, str] = {
     "event_id": "event_id must not be empty",
     "pipeline_run_id": "pipeline_run_id must not be empty",
