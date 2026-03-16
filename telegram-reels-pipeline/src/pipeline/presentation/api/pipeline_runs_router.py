@@ -1,14 +1,16 @@
-"""FastAPI router for pipeline run endpoints (POST /api/runs, GET /api/runs/{id})."""
+"""FastAPI router for pipeline run endpoints (POST /api/runs, GET /api/runs, GET /api/runs/{id})."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from pipeline.application.use_cases.trigger_pipeline_run_use_case import TriggerPipelineRunUseCase
 from pipeline.domain.ports import EventStorePort, StateStorePort
 from pipeline.presentation.dtos.create_pipeline_run_request_dto import CreatePipelineRunRequestDTO
 from pipeline.presentation.dtos.error_response_dto import ErrorResponseDTO
+from pipeline.presentation.dtos.pipeline_run_list_item_response_dto import PipelineRunListItemResponseDTO
 from pipeline.presentation.dtos.pipeline_run_response_dto import PipelineRunResponseDTO
+from pipeline.presentation.mappers.projection_to_list_item_dto_mapper import map_projection_to_list_item_dto
 from pipeline.presentation.mappers.run_state_mapper import (
     map_projection_to_response_dto,
     map_request_dto_to_command,
@@ -33,6 +35,7 @@ async def get_state_store_port() -> StateStorePort:
     response_model=PipelineRunResponseDTO,
     responses={422: {"model": ErrorResponseDTO}},
     summary="Trigger a new pipeline run",
+    description="Accept a YouTube URL and optional topic focus to enqueue a new pipeline run.",
 )
 async def trigger_pipeline_run(
     request_dto: CreatePipelineRunRequestDTO,
@@ -47,10 +50,32 @@ async def trigger_pipeline_run(
 
 
 @pipeline_runs_router.get(
+    "",
+    response_model=list[PipelineRunListItemResponseDTO],
+    summary="List all pipeline runs",
+    description="Return all pipeline runs, optionally filtered by execution_status query parameter.",
+)
+async def list_pipeline_runs(
+    execution_status: str | None = Query(
+        default=None,
+        description="Filter by execution status (e.g. pending, in_progress)",
+    ),
+    state_store: StateStorePort = Depends(get_state_store_port),  # noqa: B008
+) -> list[PipelineRunListItemResponseDTO]:
+    """List all pipeline runs with optional execution_status filter."""
+    if execution_status is not None:
+        projections = await state_store.list_by_execution_status(execution_status)
+    else:
+        projections = await state_store.list_all_projections()
+    return [map_projection_to_list_item_dto(projection) for projection in projections]
+
+
+@pipeline_runs_router.get(
     "/{pipeline_run_id}",
     response_model=PipelineRunResponseDTO,
     responses={404: {"model": ErrorResponseDTO}},
     summary="Retrieve pipeline run state",
+    description="Load and return the full current state of a pipeline run by its unique identifier.",
 )
 async def get_pipeline_run(
     pipeline_run_id: str,
