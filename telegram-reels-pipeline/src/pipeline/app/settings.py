@@ -58,4 +58,18 @@ class PipelineSettings(BaseSettings):
     veo3_timeout_s: int = Field(default=300, ge=30, description="Timeout for Veo3 await gate in seconds")
     veo3_crop_bottom_px: int = Field(default=16, ge=0, description="Pixels to crop from bottom for watermark removal")
 
+    # FastAPI
+    fastapi_host: str = Field(default="0.0.0.0", description="FastAPI server bind host")
+    fastapi_port: int = Field(default=8000, ge=1, le=65535, description="FastAPI server bind port")
+
+    # MongoDB (event-sourced state store)
+    mongodb_connection_string: str = Field(
+        default="mongodb://localhost:27017",
+        description="MongoDB connection URI for event-sourced state",
+    )
+    mongodb_database_name: str = Field(
+        default="telegram_reels_pipeline",
+        description="MongoDB database name for pipeline state",
+    )
+
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}

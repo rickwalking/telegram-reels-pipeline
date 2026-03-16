@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from pipeline.domain.events import PipelineStateEvent, RunStateProjection
 from pipeline.domain.models import (
     AgentRequest,
     AgentResult,
@@ -163,3 +164,21 @@ class ExternalClipDownloaderPort(Protocol):
         Returns path to prepared clip, or None on failure (non-fatal).
         """
         ...
+
+
+@runtime_checkable
+class EventStorePort(Protocol):
+    """Append-only event store for pipeline run events."""
+
+    async def append_event(self, event: PipelineStateEvent) -> None: ...
+
+    async def get_events_for_run(self, pipeline_run_id: str) -> list[PipelineStateEvent]: ...
+
+
+@runtime_checkable
+class ProjectionStorePort(Protocol):
+    """Read/write store for materialized pipeline run state projections."""
+
+    async def save_projection(self, projection: RunStateProjection) -> None: ...
+
+    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None: ...

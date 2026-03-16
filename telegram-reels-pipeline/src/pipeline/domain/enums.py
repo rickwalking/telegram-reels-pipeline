@@ -101,6 +101,26 @@ class TransitionKind(Enum):
 
 
 @unique
+class TriggerSource(Enum):
+    """Origin channel that triggered a pipeline run."""
+
+    TELEGRAM = "telegram"
+    API = "api"
+    CLI = "cli"
+
+
+@unique
+class RunExecutionStatus(Enum):
+    """High-level execution status for a pipeline run."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PAUSED = "paused"
+
+
+@unique
 class RevisionType(Enum):
     """User-requested revision categories routed by Router Agent."""
 
