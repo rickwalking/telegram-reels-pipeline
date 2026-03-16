@@ -33,11 +33,14 @@ class FakeStateStore:
     async def save_state(self, projection: RunStateProjection) -> None:
         self.projections[projection.pipeline_run_id] = projection
 
-    async def load_state(self, pipeline_run_id: str) -> RunStateProjection | None:
+    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
         return self.projections.get(pipeline_run_id)
 
-    async def list_incomplete_runs(self) -> list[RunStateProjection]:
-        return [p for p in self.projections.values() if p.execution_status != RunExecutionStatus.COMPLETED.value]
+    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
+        return [p for p in self.projections.values() if p.execution_status == execution_status]
+
+    async def list_all_projections(self) -> list[RunStateProjection]:
+        return list(self.projections.values())
 
 
 @pytest.fixture()
@@ -123,7 +126,7 @@ async def test_trigger_saves_projection_to_store(
     result = await use_case.execute(command)
 
     # Assert
-    loaded = await fake_state_store.load_state(result.pipeline_run_id)
+    loaded = await fake_state_store.load_projection(result.pipeline_run_id)
     assert loaded is not None
     assert loaded.pipeline_run_id == result.pipeline_run_id
     assert loaded.trigger_source == "cli"

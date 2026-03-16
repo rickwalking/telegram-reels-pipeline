@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pipeline.domain.models import RunState
+from pipeline.domain.events import RunStateProjection
 from pipeline.domain.ports import (
     AgentExecutionPort,
     FileDeliveryPort,
@@ -13,7 +13,6 @@ from pipeline.domain.ports import (
     VideoDownloadPort,
     VideoProcessingPort,
 )
-from pipeline.domain.types import RunId
 
 
 class TestPortsAreRuntimeCheckable:
@@ -49,13 +48,16 @@ class TestFakeAdapterSatisfiesPort:
 
     def test_fake_state_store_satisfies_port(self) -> None:
         class FakeStateStore:
-            async def save_state(self, state: RunState) -> None:
+            async def save_state(self, projection: RunStateProjection) -> None:
                 pass
 
-            async def load_state(self, run_id: RunId) -> RunState | None:
+            async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
                 return None
 
-            async def list_incomplete_runs(self) -> list[RunState]:
+            async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
+                return []
+
+            async def list_all_projections(self) -> list[RunStateProjection]:
                 return []
 
         assert isinstance(FakeStateStore(), StateStorePort)
