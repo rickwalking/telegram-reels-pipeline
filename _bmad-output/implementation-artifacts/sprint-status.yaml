@@ -207,23 +207,23 @@ development_status:
   # Epic 22: Pipeline Foundation & Omni-Channel Core
   # FRs: FR1 (trigger), FR2 (state machine), FR3 (FIFO queue)
   epic-22: in-progress
-  22-1-hexagonal-scaffolding-presentation-layer: in-progress
-  22-2-domain-models-event-sourcing-extensions: in-progress
-  22-3-fastapi-core-run-trigger-endpoint: ready-for-dev
+  22-1-hexagonal-scaffolding-presentation-layer: done
+  22-2-domain-models-event-sourcing-extensions: done
+  22-3-fastapi-core-run-trigger-endpoint: done
   22-4-fifo-queue-orchestrator-initialization: ready-for-dev
 
   # Epic 23: The Time-Travel State Store (Event Sourcing)
   # FRs: FR6 (immutable events), FR7 (state projection), FR8 (binary media)
   epic-23: in-progress
-  23-1-odmantic-mongodb-setup-document-models: ready-for-dev
+  23-1-odmantic-mongodb-setup-document-models: done
   23-2-state-store-port-mongo-implementation: ready-for-dev
   23-3-event-driven-state-transitions: ready-for-dev
-  23-4-local-filesystem-binary-media-adapter: ready-for-dev
+  23-4-local-filesystem-binary-media-adapter: done
 
   # Epic 24: AI Agent Core Tooling (FastMCP)
   # FRs: FR9 (read state), FR10 (save artifacts), FR11 (DTO validation)
   epic-24: in-progress
-  24-1-dto-mapping-agent-state-transfer: ready-for-dev
+  24-1-dto-mapping-agent-state-transfer: done
   24-2-fastmcp-server-initialization: ready-for-dev
   24-3-read-pipeline-state-tool: ready-for-dev
   24-4-save-stage-output-tool: ready-for-dev
