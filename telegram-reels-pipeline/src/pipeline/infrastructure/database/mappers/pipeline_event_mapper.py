@@ -1,39 +1,6 @@
-"""Pure mapping functions between PipelineStateEvent domain objects and PipelineEventDocument."""
+"""Backward-compatible re-exports for pipeline event mappers."""
 
-from __future__ import annotations
+from pipeline.infrastructure.database.mappers.document_to_domain_event_mapper import map_document_to_domain_event
+from pipeline.infrastructure.database.mappers.domain_event_to_document_mapper import map_domain_event_to_document
 
-from datetime import datetime, timezone
-from types import MappingProxyType
-
-from pipeline.domain.events import PipelineStateEvent
-from pipeline.infrastructure.database.models.pipeline_event_document import PipelineEventDocument
-
-
-def map_domain_event_to_document(event: PipelineStateEvent) -> PipelineEventDocument:
-    """Convert an immutable domain event to a MongoDB document for persistence.
-
-    The payload MappingProxyType is serialised to a plain dict for MongoDB storage.
-    """
-    return PipelineEventDocument(
-        event_id=event.event_id,
-        pipeline_run_id=event.pipeline_run_id,
-        event_type=event.event_type,
-        stage_name=event.stage_name,
-        payload_data=dict(event.payload_data),
-        created_at=datetime.fromisoformat(event.created_at) if isinstance(event.created_at, str) else event.created_at,
-    )
-
-
-def map_document_to_domain_event(document: PipelineEventDocument) -> PipelineStateEvent:
-    """Reconstruct a domain event from a persisted MongoDB document.
-
-    The stored payload dict is wrapped in MappingProxyType to restore immutability.
-    """
-    return PipelineStateEvent(
-        event_id=document.event_id,
-        pipeline_run_id=document.pipeline_run_id,
-        event_type=document.event_type,
-        stage_name=document.stage_name,
-        payload_data=MappingProxyType(document.payload_data),
-        created_at=document.created_at.isoformat() if hasattr(document.created_at, 'isoformat') else str(document.created_at),
-    )
+__all__ = ["map_domain_event_to_document", "map_document_to_domain_event"]
