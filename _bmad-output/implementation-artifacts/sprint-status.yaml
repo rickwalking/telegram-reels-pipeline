@@ -215,19 +215,21 @@ development_status:
 
   # Epic 23: The Time-Travel State Store (Event Sourcing)
   # FRs: FR6 (immutable events), FR7 (state projection), FR8 (binary media)
-  epic-23: in-progress
+  epic-23: done
   23-1-odmantic-mongodb-setup-document-models: done
   23-2-state-store-port-mongo-implementation: done
-  23-3-event-driven-state-transitions: ready-for-dev
+  23-3-event-driven-state-transitions: done
+  epic-23-retrospective: optional
   23-4-local-filesystem-binary-media-adapter: done
 
   # Epic 24: AI Agent Core Tooling (FastMCP)
   # FRs: FR9 (read state), FR10 (save artifacts), FR11 (DTO validation)
-  epic-24: in-progress
+  epic-24: done
   24-1-dto-mapping-agent-state-transfer: done
   24-2-fastmcp-server-initialization: done
-  24-3-read-pipeline-state-tool: ready-for-dev
-  24-4-save-stage-output-tool: ready-for-dev
+  24-3-read-pipeline-state-tool: done
+  24-4-save-stage-output-tool: done
+  epic-24-retrospective: optional
 
   # Epic 25: Real-Time Observability Dashboard (The Glass Wall)
   # FRs: FR12 (view runs), FR13 (SSE), FR14 (time-travel), FR15 (payload inspection)
