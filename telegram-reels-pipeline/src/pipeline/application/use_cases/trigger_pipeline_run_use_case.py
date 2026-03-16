@@ -12,7 +12,7 @@ from pipeline.domain.event_types import PIPELINE_RUN_CREATED
 from pipeline.domain.events import CreatePipelineRunCommand, PipelineStateEvent, RunStateProjection
 
 if TYPE_CHECKING:
-    from pipeline.domain.ports import EventStorePort, ProjectionStorePort
+    from pipeline.domain.ports import EventStorePort, StateStorePort
 
 
 class TriggerPipelineRunUseCase:
@@ -21,10 +21,10 @@ class TriggerPipelineRunUseCase:
     def __init__(
         self,
         event_store_port: EventStorePort,
-        projection_store_port: ProjectionStorePort,
+        state_store_port: StateStorePort,
     ) -> None:
         self._event_store_port = event_store_port
-        self._projection_store_port = projection_store_port
+        self._state_store_port = state_store_port
 
     async def execute(self, command: CreatePipelineRunCommand) -> RunStateProjection:
         """Persist the creation event and build the initial state projection."""
@@ -35,7 +35,7 @@ class TriggerPipelineRunUseCase:
         await self._event_store_port.append_event(event)
 
         projection = _build_initial_projection(pipeline_run_id, command, now_iso)
-        await self._projection_store_port.save_projection(projection)
+        await self._state_store_port.save_state(projection)
         return projection
 
 

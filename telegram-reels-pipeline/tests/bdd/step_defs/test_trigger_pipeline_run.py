@@ -11,7 +11,7 @@ from pytest_bdd import given, parsers, scenario, then, when
 
 from pipeline.domain.events import PipelineStateEvent, RunStateProjection
 from pipeline.presentation.api.application_factory import create_fastapi_application
-from pipeline.presentation.api.pipeline_runs_router import get_event_store_port, get_projection_store_port
+from pipeline.presentation.api.pipeline_runs_router import get_event_store_port, get_state_store_port
 
 # ---------------------------------------------------------------------------
 # In-memory fake adapters
@@ -33,19 +33,23 @@ class FakeEventStore:
         return [e for e in self.events if e.pipeline_run_id == pipeline_run_id]
 
 
-class FakeProjectionStore:
+class FakeStateStore:
     """In-memory projection store for testing."""
 
     def __init__(self) -> None:
         self.projections: dict[str, RunStateProjection] = {}
 
-    async def save_projection(self, projection: RunStateProjection) -> None:
+    async def save_state(self, projection: RunStateProjection) -> None:
         """Save projection to in-memory dictionary."""
         self.projections[projection.pipeline_run_id] = projection
 
-    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
+    async def load_state(self, pipeline_run_id: str) -> RunStateProjection | None:
         """Load projection by pipeline_run_id."""
         return self.projections.get(pipeline_run_id)
+
+    async def list_incomplete_runs(self) -> list[RunStateProjection]:
+        """List non-completed projections."""
+        return [p for p in self.projections.values() if p.execution_status != "completed"]
 
 
 # ---------------------------------------------------------------------------
@@ -78,10 +82,10 @@ def test_application() -> Any:
     """Create a FastAPI app with faked port dependencies."""
     application = create_fastapi_application()
     fake_event_store = FakeEventStore()
-    fake_projection_store = FakeProjectionStore()
+    fake_state_store = FakeStateStore()
 
     application.dependency_overrides[get_event_store_port] = lambda: fake_event_store
-    application.dependency_overrides[get_projection_store_port] = lambda: fake_projection_store
+    application.dependency_overrides[get_state_store_port] = lambda: fake_state_store
     return application
 
 

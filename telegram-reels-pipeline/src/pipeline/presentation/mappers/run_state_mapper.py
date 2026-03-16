@@ -13,6 +13,7 @@ def map_request_dto_to_command(dto: CreatePipelineRunRequestDTO) -> CreatePipeli
         youtube_url=dto.youtube_url,
         topic_focus=dto.topic_focus,
         trigger_source=dto.trigger_source,
+        client_identifier=dto.client_identifier or "",
     )
 
 

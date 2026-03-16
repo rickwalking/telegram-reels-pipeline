@@ -18,7 +18,8 @@ class CreatePipelineRunRequestDTO(BaseModel):
 
     youtube_url: str
     topic_focus: str = ""
-    trigger_source: str = "api"
+    trigger_source: str = "api_client"
+    client_identifier: str | None = None
 
     @field_validator("youtube_url")
     @classmethod

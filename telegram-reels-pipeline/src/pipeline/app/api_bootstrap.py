@@ -10,7 +10,7 @@ from pipeline.presentation.api.application_factory import create_fastapi_applica
 def create_api_application() -> FastAPI:
     """Build the FastAPI app configured for production use.
 
-    Dependency overrides for EventStorePort and ProjectionStorePort
+    Dependency overrides for EventStorePort and StateStorePort
     will be wired in story 23-2 when MongoDB adapters are implemented.
     """
     return create_fastapi_application()

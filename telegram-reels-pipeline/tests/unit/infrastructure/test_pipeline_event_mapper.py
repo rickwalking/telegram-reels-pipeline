@@ -24,17 +24,18 @@ def _build_pipeline_state_event(
     pipeline_run_id: str = "run-abc",
     event_type: str = "stage_started",
     stage_name: str = "router",
-    payload: MappingProxyType[str, object] | None = None,
-    occurred_at: datetime | None = None,
+    payload_data: MappingProxyType[str, object] | None = None,
+    created_at: datetime | str | None = None,
 ) -> PipelineStateEvent:
     """Build a test PipelineStateEvent with sensible defaults."""
+    ts = created_at if isinstance(created_at, str) else (created_at or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)).isoformat()
     return PipelineStateEvent(
         event_id=event_id,
         pipeline_run_id=pipeline_run_id,
         event_type=event_type,
         stage_name=stage_name,
-        payload=payload or MappingProxyType({}),
-        occurred_at=occurred_at or datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC),
+        payload_data=payload_data or MappingProxyType({}),
+        created_at=ts,
     )
 
 
@@ -69,7 +70,7 @@ class TestMapDomainEventToDocument:
             pipeline_run_id="run-123",
             event_type="stage_completed",
             stage_name="research",
-            occurred_at=fixed_timestamp,
+            created_at=fixed_timestamp,
         )
 
         # Act
@@ -85,7 +86,7 @@ class TestMapDomainEventToDocument:
     def test_serialises_mapping_proxy_payload_to_plain_dict(self) -> None:
         # Arrange
         payload = MappingProxyType({"attempt": 2, "duration_seconds": 45.5})
-        domain_event = _build_pipeline_state_event(payload=payload)
+        domain_event = _build_pipeline_state_event(payload_data=payload)
 
         # Act
         document = map_domain_event_to_document(domain_event)
@@ -96,7 +97,7 @@ class TestMapDomainEventToDocument:
 
     def test_maps_empty_payload_to_empty_dict(self) -> None:
         # Arrange
-        domain_event = _build_pipeline_state_event(payload=MappingProxyType({}))
+        domain_event = _build_pipeline_state_event(payload_data=MappingProxyType({}))
 
         # Act
         document = map_domain_event_to_document(domain_event)
@@ -127,7 +128,7 @@ class TestMapDocumentToDomainEvent:
         assert domain_event.pipeline_run_id == "run-456"
         assert domain_event.event_type == "stage_failed"
         assert domain_event.stage_name == "ffmpeg_engineer"
-        assert domain_event.occurred_at == fixed_timestamp
+        assert domain_event.created_at == fixed_timestamp.isoformat()
 
     def test_deserialises_dict_payload_to_mapping_proxy(self) -> None:
         # Arrange
@@ -137,9 +138,9 @@ class TestMapDocumentToDomainEvent:
         domain_event = map_document_to_domain_event(document)
 
         # Assert
-        assert isinstance(domain_event.payload, MappingProxyType)
-        assert domain_event.payload["score"] == 85
-        assert domain_event.payload["gate"] == "qa"
+        assert isinstance(domain_event.payload_data, MappingProxyType)
+        assert domain_event.payload_data["score"] == 85
+        assert domain_event.payload_data["gate"] == "qa"
 
     def test_payload_mapping_proxy_is_immutable(self) -> None:
         # Arrange
@@ -150,7 +151,7 @@ class TestMapDocumentToDomainEvent:
 
         # Assert
         with pytest.raises(TypeError):
-            domain_event.payload["key"] = "mutated"  # type: ignore[index]
+            domain_event.payload_data["key"] = "mutated"  # type: ignore[index]
 
 
 class TestPipelineEventRoundTrip:
@@ -164,8 +165,8 @@ class TestPipelineEventRoundTrip:
             pipeline_run_id="run-roundtrip",
             event_type="qa_passed",
             stage_name="transcript",
-            payload=MappingProxyType({"score": 92, "attempts": 1}),
-            occurred_at=fixed_timestamp,
+            payload_data=MappingProxyType({"score": 92, "attempts": 1}),
+            created_at=fixed_timestamp,
         )
 
         # Act
@@ -177,17 +178,17 @@ class TestPipelineEventRoundTrip:
         assert reconstructed_event.pipeline_run_id == original_event.pipeline_run_id
         assert reconstructed_event.event_type == original_event.event_type
         assert reconstructed_event.stage_name == original_event.stage_name
-        assert reconstructed_event.occurred_at == original_event.occurred_at
-        assert dict(reconstructed_event.payload) == dict(original_event.payload)
+        assert reconstructed_event.created_at == original_event.created_at
+        assert dict(reconstructed_event.payload_data) == dict(original_event.payload_data)
 
     def test_round_trip_with_empty_payload(self) -> None:
         # Arrange
-        original_event = _build_pipeline_state_event(payload=MappingProxyType({}))
+        original_event = _build_pipeline_state_event(payload_data=MappingProxyType({}))
 
         # Act
         document = map_domain_event_to_document(original_event)
         reconstructed_event = map_document_to_domain_event(document)
 
         # Assert
-        assert dict(reconstructed_event.payload) == {}
-        assert isinstance(reconstructed_event.payload, MappingProxyType)
+        assert dict(reconstructed_event.payload_data) == {}
+        assert isinstance(reconstructed_event.payload_data, MappingProxyType)

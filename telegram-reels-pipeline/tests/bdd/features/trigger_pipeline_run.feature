@@ -10,7 +10,7 @@ Feature: Trigger Pipeline Run
     Then the response status code should be 201
     And the response should contain a pipeline_run_id
     And the response execution_status should be "pending"
-    And the response trigger_source should be "api"
+    And the response trigger_source should be "api_client"
 
   Scenario: Reject a request with an invalid YouTube URL
     Given an invalid YouTube URL "not-a-valid-url"

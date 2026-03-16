@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from pipeline.application.use_cases.trigger_pipeline_run_use_case import TriggerPipelineRunUseCase
-from pipeline.domain.ports import EventStorePort, ProjectionStorePort
+from pipeline.domain.ports import EventStorePort, StateStorePort
 from pipeline.presentation.dtos.create_pipeline_run_request_dto import CreatePipelineRunRequestDTO
 from pipeline.presentation.dtos.error_response_dto import ErrorResponseDTO
 from pipeline.presentation.dtos.pipeline_run_response_dto import PipelineRunResponseDTO
@@ -22,9 +22,9 @@ async def get_event_store_port() -> EventStorePort:
     raise NotImplementedError("EventStorePort not wired yet — see story 23-2")
 
 
-async def get_projection_store_port() -> ProjectionStorePort:
+async def get_state_store_port() -> StateStorePort:
     """Dependency stub — wired in story 23-2 via app override."""
-    raise NotImplementedError("ProjectionStorePort not wired yet — see story 23-2")
+    raise NotImplementedError("StateStorePort not wired yet — see story 23-2")
 
 
 @pipeline_runs_router.post(
@@ -37,11 +37,11 @@ async def get_projection_store_port() -> ProjectionStorePort:
 async def trigger_pipeline_run(
     request_dto: CreatePipelineRunRequestDTO,
     event_store: EventStorePort = Depends(get_event_store_port),  # noqa: B008
-    projection_store: ProjectionStorePort = Depends(get_projection_store_port),  # noqa: B008
+    state_store: StateStorePort = Depends(get_state_store_port),  # noqa: B008
 ) -> PipelineRunResponseDTO:
     """Accept a YouTube URL and optional topic to start a new pipeline run."""
     command = map_request_dto_to_command(request_dto)
-    use_case = TriggerPipelineRunUseCase(event_store, projection_store)
+    use_case = TriggerPipelineRunUseCase(event_store, state_store)
     projection = await use_case.execute(command)
     return map_projection_to_response_dto(projection)
 
@@ -54,10 +54,10 @@ async def trigger_pipeline_run(
 )
 async def get_pipeline_run(
     pipeline_run_id: str,
-    projection_store: ProjectionStorePort = Depends(get_projection_store_port),  # noqa: B008
+    state_store: StateStorePort = Depends(get_state_store_port),  # noqa: B008
 ) -> PipelineRunResponseDTO:
     """Load and return the current state of a pipeline run by its ID."""
-    projection = await projection_store.load_projection(pipeline_run_id)
+    projection = await state_store.load_projection(pipeline_run_id)
     if projection is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

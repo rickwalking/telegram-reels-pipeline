@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from types import MappingProxyType
 
 from pipeline.domain.events import PipelineStateEvent
@@ -18,8 +19,8 @@ def map_domain_event_to_document(event: PipelineStateEvent) -> PipelineEventDocu
         pipeline_run_id=event.pipeline_run_id,
         event_type=event.event_type,
         stage_name=event.stage_name,
-        payload_data=dict(event.payload),
-        created_at=event.occurred_at,
+        payload_data=dict(event.payload_data),
+        created_at=datetime.fromisoformat(event.created_at) if isinstance(event.created_at, str) else event.created_at,
     )
 
 
@@ -33,6 +34,6 @@ def map_document_to_domain_event(document: PipelineEventDocument) -> PipelineSta
         pipeline_run_id=document.pipeline_run_id,
         event_type=document.event_type,
         stage_name=document.stage_name,
-        payload=MappingProxyType(document.payload_data),
-        occurred_at=document.created_at,
+        payload_data=MappingProxyType(document.payload_data),
+        created_at=document.created_at.isoformat() if hasattr(document.created_at, 'isoformat') else str(document.created_at),
     )
