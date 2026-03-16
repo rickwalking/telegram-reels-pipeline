@@ -250,15 +250,11 @@ description = "Cross-platform colored terminal text."
 optional = false
 python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,!=3.5.*,!=3.6.*,>=2.7"
 groups = ["main", "dev"]
-<<<<<<< HEAD
 markers = "platform_system == \"Windows\" or sys_platform == \"win32\""
-=======
->>>>>>> worktree-agent-adf76045
 files = [
     {file = "colorama-0.4.6-py2.py3-none-any.whl", hash = "sha256:4f1d9991f5acc0ca119f9d443620b77f9d6b33703e51011c16baf57afb285fc6"},
     {file = "colorama-0.4.6.tar.gz", hash = "sha256:08695f5cb7ed6e0531a20572697297273c47b8cae5a63ffc6d6ed5c201be6e44"},
 ]
-markers = {main = "platform_system == \"Windows\"", dev = "platform_system == \"Windows\" or sys_platform == \"win32\""}
 
 [[package]]
 name = "coverage"
@@ -380,10 +376,6 @@ files = [
 toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-adf76045
 name = "cryptography"
 version = "46.0.5"
 description = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
@@ -456,7 +448,6 @@ test = ["certifi (>=2024)", "cryptography-vectors (==46.0.5)", "pretend (>=0.7)"
 test-randomorder = ["pytest-randomly"]
 
 [[package]]
-<<<<<<< HEAD
 name = "dnspython"
 version = "2.8.0"
 description = "DNS toolkit"
@@ -502,8 +493,6 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.8)", "htt
 standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[standard-no-fastapi-cloud-cli] (>=0.0.8)", "httpx (>=0.23.0,<1.0.0)", "jinja2 (>=3.1.5)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.18)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
-=======
->>>>>>> worktree-agent-a614ea7a
 name = "gherkin-official"
 version = "29.0.0"
 description = "Gherkin parser (official, by Cucumber team)"
@@ -516,8 +505,6 @@ files = [
 ]
 
 [[package]]
-=======
->>>>>>> worktree-agent-adf76045
 name = "h11"
 version = "0.16.0"
 description = "A pure-Python, bring-your-own-I/O implementation of HTTP/1.1"
@@ -809,7 +796,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "mako"
 version = "1.3.10"
 description = "A super-fast templating language that borrows the best ideas from the existing templating languages."
@@ -830,9 +816,6 @@ lingua = ["lingua"]
 testing = ["pytest"]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-adf76045
 name = "markdown-it-py"
 version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -857,9 +840,6 @@ rtd = ["ipykernel", "jupyter_sphinx", "mdit-py-plugins (>=0.5.0)", "myst-parser"
 testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions", "requests"]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-a614ea7a
 name = "markupsafe"
 version = "3.0.3"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -959,9 +939,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-adf76045
 name = "mcp"
 version = "1.26.0"
 description = "Model Context Protocol SDK"
@@ -1009,7 +986,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "motor"
 version = "3.7.1"
 description = "Non-blocking MongoDB driver for Tornado or asyncio"
@@ -1035,10 +1011,6 @@ test = ["aiohttp (>=3.8.7)", "cffi (>=1.17.0rc1) ; python_version == \"3.13\"", 
 zstd = ["pymongo[zstd] (>=4.5,<5)"]
 
 [[package]]
-=======
->>>>>>> worktree-agent-a614ea7a
-=======
->>>>>>> worktree-agent-adf76045
 name = "mypy"
 version = "1.19.1"
 description = "Optional static typing for Python"
@@ -1564,7 +1536,6 @@ docs = ["sphinx", "sphinx-rtd-theme", "zope.interface"]
 tests = ["coverage[toml] (==7.10.7)", "pytest (>=8.4.2,<9.0.0)"]
 
 [[package]]
-<<<<<<< HEAD
 name = "pymongo"
 version = "4.16.0"
 description = "PyMongo - the Official MongoDB Python driver"
@@ -1659,8 +1630,6 @@ test = ["importlib-metadata (>=7.0) ; python_version < \"3.13\"", "pytest (>=8.2
 zstd = ["backports-zstd (>=1.0.0) ; python_version < \"3.14\""]
 
 [[package]]
-=======
->>>>>>> worktree-agent-adf76045
 name = "pytest"
 version = "9.0.2"
 description = "pytest: simple powerful testing with Python"
@@ -2156,10 +2125,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-adf76045
 name = "shellingham"
 version = "1.5.4"
 description = "Tool to Detect Surrounding Shell"
@@ -2172,9 +2137,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-a614ea7a
 name = "six"
 version = "1.17.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -2187,9 +2149,6 @@ files = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-adf76045
 name = "sse-starlette"
 version = "3.3.2"
 description = "SSE plugin for Starlette"
@@ -2249,11 +2208,6 @@ rich = ">=12.3.0"
 shellingham = ">=1.3.0"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> worktree-agent-a614ea7a
-=======
->>>>>>> worktree-agent-adf76045
 name = "types-aiofiles"
 version = "25.1.0.20251011"
 description = "Typing stubs for aiofiles"
@@ -2306,30 +2260,18 @@ typing-extensions = ">=4.12.0"
 
 [[package]]
 name = "uvicorn"
-<<<<<<< HEAD
 version = "0.41.0"
-=======
-version = "0.42.0"
->>>>>>> worktree-agent-adf76045
 description = "The lightning-fast ASGI server."
 optional = false
 python-versions = ">=3.10"
 groups = ["main"]
-<<<<<<< HEAD
 files = [
     {file = "uvicorn-0.41.0-py3-none-any.whl", hash = "sha256:29e35b1d2c36a04b9e180d4007ede3bcb32a85fbdfd6c6aeb3f26839de088187"},
     {file = "uvicorn-0.41.0.tar.gz", hash = "sha256:09d11cf7008da33113824ee5a1c6422d89fbc2ff476540d69a34c87fab8b571a"},
-=======
-markers = "sys_platform != \"emscripten\""
-files = [
-    {file = "uvicorn-0.42.0-py3-none-any.whl", hash = "sha256:96c30f5c7abe6f74ae8900a70e92b85ad6613b745d4879eb9b16ccad15645359"},
-    {file = "uvicorn-0.42.0.tar.gz", hash = "sha256:9b1f190ce15a2dd22e7758651d9b6d12df09a13d51ba5bf4fc33c383a48e1775"},
->>>>>>> worktree-agent-adf76045
 ]
 
 [package.dependencies]
 click = ">=7.0"
-<<<<<<< HEAD
 colorama = {version = ">=0.4", optional = true, markers = "sys_platform == \"win32\" and extra == \"standard\""}
 h11 = ">=0.8"
 httptools = {version = ">=0.6.3", optional = true, markers = "extra == \"standard\""}
@@ -2338,14 +2280,10 @@ pyyaml = {version = ">=5.1", optional = true, markers = "extra == \"standard\""}
 uvloop = {version = ">=0.15.1", optional = true, markers = "sys_platform != \"win32\" and sys_platform != \"cygwin\" and platform_python_implementation != \"PyPy\" and extra == \"standard\""}
 watchfiles = {version = ">=0.20", optional = true, markers = "extra == \"standard\""}
 websockets = {version = ">=10.4", optional = true, markers = "extra == \"standard\""}
-=======
-h11 = ">=0.8"
->>>>>>> worktree-agent-adf76045
 
 [package.extras]
 standard = ["colorama (>=0.4) ; sys_platform == \"win32\"", "httptools (>=0.6.3)", "python-dotenv (>=0.13)", "pyyaml (>=5.1)", "uvloop (>=0.15.1) ; sys_platform != \"win32\" and sys_platform != \"cygwin\" and platform_python_implementation != \"PyPy\"", "watchfiles (>=0.20)", "websockets (>=10.4)"]
 
-<<<<<<< HEAD
 [[package]]
 name = "uvloop"
 version = "0.22.1"
@@ -2607,14 +2545,4 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
-<<<<<<< HEAD
 content-hash = "7ff0f2a0c38ca5ad330574d8363ad5586727576c1a2311c65ee24c8b701b5105"
-=======
-content-hash = "1f0ebf61779f0b741153701a50cc88730599aa61fcc7c1088edd2ae706e13255"
->>>>>>> worktree-agent-a614ea7a
-=======
-[metadata]
-lock-version = "2.1"
-python-versions = ">=3.11"
-content-hash = "e473f766fa8a40e9d1c6ba06fa510c827956e15e36036b6764f65a0b0987c82d"
->>>>>>> worktree-agent-adf76045
