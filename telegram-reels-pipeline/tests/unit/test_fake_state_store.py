@@ -44,7 +44,7 @@ class TestFakeStateStoreSaveAndLoad:
 
         # Act
         await fake_store.save_state(projection)
-        loaded = await fake_store.load_state("run-001")
+        loaded = await fake_store.load_projection("run-001")
 
         # Assert
         assert loaded is not None
@@ -57,7 +57,7 @@ class TestFakeStateStoreSaveAndLoad:
         fake_store = FakeStateStore()
 
         # Act
-        loaded = await fake_store.load_state("nonexistent-run")
+        loaded = await fake_store.load_projection("nonexistent-run")
 
         # Assert
         assert loaded is None
@@ -80,7 +80,7 @@ class TestFakeStateStoreSaveAndLoad:
         # Act
         await fake_store.save_state(original_projection)
         await fake_store.save_state(updated_projection)
-        loaded = await fake_store.load_state("run-001")
+        loaded = await fake_store.load_projection("run-001")
 
         # Assert
         assert loaded is not None
@@ -97,52 +97,53 @@ class TestFakeStateStoreListIncompleteRuns:
         fake_store = FakeStateStore()
 
         # Act
-        incomplete_runs = await fake_store.list_incomplete_runs()
+        incomplete_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
         assert incomplete_runs == []
 
     @pytest.mark.asyncio
-    async def test_excludes_completed_runs(self) -> None:
+    async def test_filters_by_exact_status(self) -> None:
         # Arrange
         fake_store = FakeStateStore()
         await fake_store.save_state(_make_projection("run-001", execution_status="completed"))
         await fake_store.save_state(_make_projection("run-002", execution_status="in_progress"))
+        await fake_store.save_state(_make_projection("run-003", execution_status="pending"))
 
         # Act
-        incomplete_runs = await fake_store.list_incomplete_runs()
+        pending_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
-        assert len(incomplete_runs) == 1
-        assert incomplete_runs[0].pipeline_run_id == "run-002"
+        assert len(pending_runs) == 1
+        assert pending_runs[0].pipeline_run_id == "run-003"
 
     @pytest.mark.asyncio
-    async def test_excludes_failed_runs(self) -> None:
+    async def test_returns_multiple_matching_runs(self) -> None:
         # Arrange
         fake_store = FakeStateStore()
-        await fake_store.save_state(_make_projection("run-001", execution_status="failed"))
+        await fake_store.save_state(_make_projection("run-001", execution_status="pending"))
         await fake_store.save_state(_make_projection("run-002", execution_status="pending"))
+        await fake_store.save_state(_make_projection("run-003", execution_status="completed"))
 
         # Act
-        incomplete_runs = await fake_store.list_incomplete_runs()
+        pending_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
-        assert len(incomplete_runs) == 1
-        assert incomplete_runs[0].pipeline_run_id == "run-002"
+        assert len(pending_runs) == 2
 
     @pytest.mark.asyncio
-    async def test_includes_pending_and_in_progress_runs(self) -> None:
+    async def test_list_all_projections(self) -> None:
         # Arrange
         fake_store = FakeStateStore()
         await fake_store.save_state(_make_projection("run-001", execution_status="pending"))
         await fake_store.save_state(_make_projection("run-002", execution_status="in_progress"))
-        await fake_store.save_state(_make_projection("run-003", execution_status="paused"))
+        await fake_store.save_state(_make_projection("run-003", execution_status="completed"))
 
         # Act
-        incomplete_runs = await fake_store.list_incomplete_runs()
+        all_runs = await fake_store.list_all_projections()
 
         # Assert
-        assert len(incomplete_runs) == 3
+        assert len(all_runs) == 3
 
     @pytest.mark.asyncio
     async def test_returns_list_type(self) -> None:
@@ -151,7 +152,7 @@ class TestFakeStateStoreListIncompleteRuns:
         await fake_store.save_state(_make_projection("run-001"))
 
         # Act
-        incomplete_runs = await fake_store.list_incomplete_runs()
+        incomplete_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
         assert isinstance(incomplete_runs, list)
