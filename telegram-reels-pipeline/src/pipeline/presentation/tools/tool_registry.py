@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from mcp.server.fastmcp import FastMCP
 
+from pipeline.presentation.tools.save_stage_output_tool import register_save_stage_output_tool
+
 if TYPE_CHECKING:
     from pipeline.domain.ports.event_store_port import EventStorePort
     from pipeline.domain.ports.file_storage_port import FileStoragePort
@@ -32,6 +34,7 @@ def register_pipeline_tools(
     the provided ports. Infrastructure adapters must never be imported here.
     """
     _register_ping_tool(mcp_server)
+    register_save_stage_output_tool(mcp_server, dependencies)
 
 
 def _register_ping_tool(mcp_server: FastMCP) -> None:
