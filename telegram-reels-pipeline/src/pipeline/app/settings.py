@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PipelineSettings(BaseSettings):
@@ -73,3 +73,22 @@ class PipelineSettings(BaseSettings):
     )
 
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+
+class MongoDbSettings(BaseSettings):
+    """MongoDB connection configuration loaded from environment variables.
+
+    Used by the infrastructure layer to initialise ``MongoDbConnectionManager``.
+    All fields are prefixed with ``MONGODB_`` in the environment.
+    """
+
+    mongodb_connection_string: str = Field(
+        default="mongodb://localhost:27017",
+        description="MongoDB connection string (URI format)",
+    )
+    mongodb_database_name: str = Field(
+        default="telegram_reels_pipeline",
+        description="Target MongoDB database name",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="MONGODB_", env_file=".env", env_file_encoding="utf-8", extra="ignore")
