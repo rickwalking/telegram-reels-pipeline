@@ -376,6 +376,7 @@ files = [
 toml = ["tomli ; python_full_version <= \"3.11.0a6\""]
 
 [[package]]
+<<<<<<< HEAD
 name = "cryptography"
 version = "46.0.5"
 description = "cryptography is a package which provides cryptographic recipes and primitives to Python developers."
@@ -493,6 +494,8 @@ standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.8)", "htt
 standard-no-fastapi-cloud-cli = ["email-validator (>=2.0.0)", "fastapi-cli[standard-no-fastapi-cloud-cli] (>=0.0.8)", "httpx (>=0.23.0,<1.0.0)", "jinja2 (>=3.1.5)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.18)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
+=======
+>>>>>>> worktree-agent-a614ea7a
 name = "gherkin-official"
 version = "29.0.0"
 description = "Gherkin parser (official, by Cucumber team)"
@@ -816,6 +819,7 @@ lingua = ["lingua"]
 testing = ["pytest"]
 
 [[package]]
+<<<<<<< HEAD
 name = "markdown-it-py"
 version = "4.0.0"
 description = "Python port of markdown-it. Markdown parsing, done right!"
@@ -840,6 +844,8 @@ rtd = ["ipykernel", "jupyter_sphinx", "mdit-py-plugins (>=0.5.0)", "myst-parser"
 testing = ["coverage", "pytest", "pytest-cov", "pytest-regressions", "requests"]
 
 [[package]]
+=======
+>>>>>>> worktree-agent-a614ea7a
 name = "markupsafe"
 version = "3.0.3"
 description = "Safely add untrusted strings to HTML/XML markup."
@@ -939,6 +945,7 @@ files = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "mcp"
 version = "1.26.0"
 description = "Model Context Protocol SDK"
@@ -1011,6 +1018,8 @@ test = ["aiohttp (>=3.8.7)", "cffi (>=1.17.0rc1) ; python_version == \"3.13\"", 
 zstd = ["pymongo[zstd] (>=4.5,<5)"]
 
 [[package]]
+=======
+>>>>>>> worktree-agent-a614ea7a
 name = "mypy"
 version = "1.19.1"
 description = "Optional static typing for Python"
@@ -2125,6 +2134,7 @@ files = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "shellingham"
 version = "1.5.4"
 description = "Tool to Detect Surrounding Shell"
@@ -2137,6 +2147,8 @@ files = [
 ]
 
 [[package]]
+=======
+>>>>>>> worktree-agent-a614ea7a
 name = "six"
 version = "1.17.0"
 description = "Python 2 and 3 compatibility utilities"
@@ -2149,6 +2161,7 @@ files = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "sse-starlette"
 version = "3.3.2"
 description = "SSE plugin for Starlette"
@@ -2208,6 +2221,8 @@ rich = ">=12.3.0"
 shellingham = ">=1.3.0"
 
 [[package]]
+=======
+>>>>>>> worktree-agent-a614ea7a
 name = "types-aiofiles"
 version = "25.1.0.20251011"
 description = "Typing stubs for aiofiles"
@@ -2545,4 +2560,8 @@ files = [
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.11"
+<<<<<<< HEAD
 content-hash = "7ff0f2a0c38ca5ad330574d8363ad5586727576c1a2311c65ee24c8b701b5105"
+=======
+content-hash = "1f0ebf61779f0b741153701a50cc88730599aa61fcc7c1088edd2ae706e13255"
+>>>>>>> worktree-agent-a614ea7a

@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """Domain ports package — re-exports all port protocols for backward compatibility."""
 
 from __future__ import annotations
@@ -35,3 +36,6 @@ __all__ = [
     "VideoGenerationPort",
     "VideoProcessingPort",
 ]
+=======
+"""Domain ports — single-file Protocol interfaces for event-sourced state."""
+>>>>>>> worktree-agent-a614ea7a
