@@ -108,3 +108,24 @@ class RevisionType(Enum):
     FIX_FRAMING = "fix_framing"
     DIFFERENT_MOMENT = "different_moment"
     ADD_CONTEXT = "add_context"
+
+
+@unique
+class TriggerSource(Enum):
+    """Source that triggered a pipeline run."""
+
+    CLI = "cli"
+    TELEGRAM = "telegram"
+    API = "api"
+
+
+@unique
+class RunExecutionStatus(Enum):
+    """Execution lifecycle status for a pipeline run."""
+
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PAUSED = "paused"
+    ESCALATED = "escalated"
