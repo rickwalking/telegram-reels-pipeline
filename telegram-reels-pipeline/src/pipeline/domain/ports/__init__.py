@@ -1,8 +1,12 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> worktree-agent-adf76045
 """Domain ports package — re-exports all port protocols for backward compatibility."""
 
 from __future__ import annotations
 
+<<<<<<< HEAD
 from pipeline.domain.ports.agent_execution_port import AgentExecutionPort
 from pipeline.domain.ports.event_store_port import EventStorePort
 from pipeline.domain.ports.external_clip_downloader_port import ExternalClipDownloaderPort
@@ -25,17 +29,52 @@ __all__ = [
     "ExternalClipDownloaderPort",
     "FileDeliveryPort",
     "FileStoragePort",
+=======
+# New event-sourced port protocols (story 24-x series).
+from pipeline.domain.ports.event_store_port import EventStorePort
+from pipeline.domain.ports.state_store_port import StateStorePort as EventSourcedStateStorePort
+
+# Backward-compatible re-exports: these maintain the original protocol signatures
+# used by existing application and infrastructure adapters.
+from pipeline.domain.ports_legacy import (
+    AgentExecutionPort,
+    ExternalClipDownloaderPort,
+    FileDeliveryPort,
+    KnowledgeBasePort,
+    MessagingPort,
+    ModelDispatchPort,
+    QueuePort,
+    ResourceMonitorPort,
+    StateStorePort,
+    VideoDownloadPort,
+    VideoGenerationPort,
+    VideoProcessingPort,
+)
+
+__all__ = [
+    "AgentExecutionPort",
+    "EventSourcedStateStorePort",
+    "EventStorePort",
+    "ExternalClipDownloaderPort",
+    "FileDeliveryPort",
+>>>>>>> worktree-agent-adf76045
     "KnowledgeBasePort",
     "MessagingPort",
     "ModelDispatchPort",
     "QueuePort",
     "ResourceMonitorPort",
+<<<<<<< HEAD
     "SseBroadcastPort",
+=======
+>>>>>>> worktree-agent-adf76045
     "StateStorePort",
     "VideoDownloadPort",
     "VideoGenerationPort",
     "VideoProcessingPort",
 ]
+<<<<<<< HEAD
 =======
 """Domain ports — single-file Protocol interfaces for event-sourced state."""
 >>>>>>> worktree-agent-a614ea7a
+=======
+>>>>>>> worktree-agent-adf76045
