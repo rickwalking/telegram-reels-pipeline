@@ -7,25 +7,25 @@ from dataclasses import dataclass
 from types import MappingProxyType
 
 
-_REQUIRED_EVENT_FIELDS: dict[str, str] = {
+_REQUIRED_EVENT_FIELDS: Mapping[str, str] = MappingProxyType({
     "event_id": "event_id must not be empty",
     "pipeline_run_id": "pipeline_run_id must not be empty",
     "event_type": "event_type must not be empty",
     "created_at": "created_at must not be empty",
-}
+})
 
-_REQUIRED_PROJECTION_FIELDS: dict[str, str] = {
+_REQUIRED_PROJECTION_FIELDS: Mapping[str, str] = MappingProxyType({
     "pipeline_run_id": "pipeline_run_id must not be empty",
     "youtube_url": "youtube_url must not be empty",
-}
+})
 
-_REQUIRED_COMMAND_FIELDS: dict[str, str] = {
+_REQUIRED_COMMAND_FIELDS: Mapping[str, str] = MappingProxyType({
     "youtube_url": "youtube_url must not be empty",
     "trigger_source": "trigger_source must not be empty",
-}
+})
 
 
-def _validate_required_fields(instance: object, rules: dict[str, str]) -> None:
+def _validate_required_fields(instance: object, rules: Mapping[str, str]) -> None:
     """Validate that required string fields are non-empty using a rules dict."""
     for field_name, error_message in rules.items():
         if not getattr(instance, field_name):

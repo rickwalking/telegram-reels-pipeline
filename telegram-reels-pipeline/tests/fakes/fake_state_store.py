@@ -24,10 +24,10 @@ class FakeStateStore:
         """Load a projection by pipeline_run_id, or None."""
         return self._projections.get(pipeline_run_id)
 
-    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
+    async def list_by_execution_status(self, execution_status: str) -> tuple[RunStateProjection, ...]:
         """List projections filtered by execution status."""
-        return [p for p in self._projections.values() if p.execution_status == execution_status]
+        return tuple(p for p in self._projections.values() if p.execution_status == execution_status)
 
-    async def list_all_projections(self) -> list[RunStateProjection]:
+    async def list_all_projections(self) -> tuple[RunStateProjection, ...]:
         """List all stored projections."""
-        return list(self._projections.values())
+        return tuple(self._projections.values())

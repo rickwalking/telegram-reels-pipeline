@@ -19,7 +19,7 @@ from pipeline.presentation.api.pipeline_runs_router import pipeline_runs_router
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ORIGINS: list[str] = ["http://localhost:5173"]
+ALLOWED_ORIGINS: tuple[str, ...] = ("http://localhost:5173",)
 
 
 @asynccontextmanager

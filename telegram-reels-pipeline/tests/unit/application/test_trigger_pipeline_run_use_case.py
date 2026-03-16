@@ -5,42 +5,9 @@ from __future__ import annotations
 import pytest
 
 from pipeline.domain.enums import EscalationState, QAStatus, RunExecutionStatus
-from pipeline.domain.events import CreatePipelineRunCommand, PipelineStateEvent, RunStateProjection
-
-
-class FakeEventStore:
-    """In-memory fake implementing EventStorePort for unit tests."""
-
-    def __init__(self) -> None:
-        self.events: list[PipelineStateEvent] = []
-
-    async def append_event(self, event: PipelineStateEvent) -> None:
-        self.events.append(event)
-
-    async def get_events_for_run(self, pipeline_run_id: str) -> tuple[PipelineStateEvent, ...]:
-        return tuple(e for e in self.events if e.pipeline_run_id == pipeline_run_id)
-
-    async def get_event_count_for_run(self, pipeline_run_id: str) -> int:
-        return len([e for e in self.events if e.pipeline_run_id == pipeline_run_id])
-
-
-class FakeStateStore:
-    """In-memory fake implementing StateStorePort for unit tests."""
-
-    def __init__(self) -> None:
-        self.projections: dict[str, RunStateProjection] = {}
-
-    async def save_state(self, projection: RunStateProjection) -> None:
-        self.projections[projection.pipeline_run_id] = projection
-
-    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
-        return self.projections.get(pipeline_run_id)
-
-    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
-        return [p for p in self.projections.values() if p.execution_status == execution_status]
-
-    async def list_all_projections(self) -> list[RunStateProjection]:
-        return list(self.projections.values())
+from pipeline.domain.events import CreatePipelineRunCommand
+from tests.fakes.fake_event_store import FakeEventStore
+from tests.fakes.fake_state_store import FakeStateStore
 
 
 @pytest.fixture()

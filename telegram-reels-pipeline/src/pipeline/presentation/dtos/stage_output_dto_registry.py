@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from types import MappingProxyType
+
 from pipeline.presentation.dtos.assembly_report_dto import AssemblyReportDTO
 from pipeline.presentation.dtos.base_stage_output_dto import BaseStageOutputDTO
 from pipeline.presentation.dtos.content_output_dto import ContentOutputDTO
@@ -11,7 +14,7 @@ from pipeline.presentation.dtos.research_output_dto import ResearchOutputDTO
 from pipeline.presentation.dtos.router_output_dto import RouterOutputDTO
 from pipeline.presentation.dtos.transcript_output_dto import TranscriptOutputDTO
 
-STAGE_OUTPUT_DTO_REGISTRY: dict[str, type[BaseStageOutputDTO]] = {
+STAGE_OUTPUT_DTO_REGISTRY: Mapping[str, type[BaseStageOutputDTO]] = MappingProxyType({
     "router": RouterOutputDTO,
     "research": ResearchOutputDTO,
     "transcript": TranscriptOutputDTO,
@@ -19,7 +22,7 @@ STAGE_OUTPUT_DTO_REGISTRY: dict[str, type[BaseStageOutputDTO]] = {
     "layout_detective": LayoutAnalysisOutputDTO,
     "ffmpeg_engineer": FfmpegEncodingPlanDTO,
     "assembly": AssemblyReportDTO,
-}
+})
 
 
 def get_dto_class_for_stage(stage_name: str) -> type[BaseStageOutputDTO]:

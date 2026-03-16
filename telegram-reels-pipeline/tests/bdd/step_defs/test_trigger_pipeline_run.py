@@ -9,51 +9,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient, Response
 from pytest_bdd import given, parsers, scenario, then, when
 
-from pipeline.domain.events import PipelineStateEvent, RunStateProjection
 from pipeline.presentation.api.application_factory import create_fastapi_application
 from pipeline.presentation.api.pipeline_runs_router import get_event_store_port, get_state_store_port
-
-# ---------------------------------------------------------------------------
-# In-memory fake adapters
-# ---------------------------------------------------------------------------
-
-
-class FakeEventStore:
-    """In-memory event store for testing."""
-
-    def __init__(self) -> None:
-        self.events: list[PipelineStateEvent] = []
-
-    async def append_event(self, event: PipelineStateEvent) -> None:
-        """Append event to in-memory list."""
-        self.events.append(event)
-
-    async def get_events_for_run(self, pipeline_run_id: str) -> list[PipelineStateEvent]:
-        """Return events filtered by pipeline_run_id."""
-        return [e for e in self.events if e.pipeline_run_id == pipeline_run_id]
-
-
-class FakeStateStore:
-    """In-memory projection store for testing."""
-
-    def __init__(self) -> None:
-        self.projections: dict[str, RunStateProjection] = {}
-
-    async def save_state(self, projection: RunStateProjection) -> None:
-        """Save projection to in-memory dictionary."""
-        self.projections[projection.pipeline_run_id] = projection
-
-    async def load_projection(self, pipeline_run_id: str) -> RunStateProjection | None:
-        """Load projection by pipeline_run_id."""
-        return self.projections.get(pipeline_run_id)
-
-    async def list_by_execution_status(self, execution_status: str) -> list[RunStateProjection]:
-        """List projections matching the given execution status."""
-        return [p for p in self.projections.values() if p.execution_status == execution_status]
-
-    async def list_all_projections(self) -> list[RunStateProjection]:
-        """List all projections."""
-        return list(self.projections.values())
+from tests.fakes.fake_event_store import FakeEventStore
+from tests.fakes.fake_state_store import FakeStateStore
 
 
 # ---------------------------------------------------------------------------

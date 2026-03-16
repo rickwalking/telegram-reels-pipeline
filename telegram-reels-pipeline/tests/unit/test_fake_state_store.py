@@ -100,7 +100,7 @@ class TestFakeStateStoreListIncompleteRuns:
         incomplete_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
-        assert incomplete_runs == []
+        assert incomplete_runs == ()
 
     @pytest.mark.asyncio
     async def test_filters_by_exact_status(self) -> None:
@@ -155,4 +155,4 @@ class TestFakeStateStoreListIncompleteRuns:
         incomplete_runs = await fake_store.list_by_execution_status("pending")
 
         # Assert
-        assert isinstance(incomplete_runs, list)
+        assert isinstance(incomplete_runs, tuple)
