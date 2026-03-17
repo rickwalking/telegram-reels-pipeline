@@ -108,3 +108,26 @@ class RevisionType(Enum):
     FIX_FRAMING = "fix_framing"
     DIFFERENT_MOMENT = "different_moment"
     ADD_CONTEXT = "add_context"
+
+
+@unique
+class TriggerSource(Enum):
+    """Identifies the client that triggered a pipeline run."""
+
+    WEB_UI = "web_ui"
+    TELEGRAM_BOT = "telegram_bot"
+    CI_WEBHOOK = "ci_webhook"
+    API_CLIENT = "api_client"
+    CLI = "cli"
+
+
+@unique
+class RunExecutionStatus(Enum):
+    """Lifecycle status of a pipeline run in the queue."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PAUSED = "paused"
+    CANCELLED = "cancelled"
