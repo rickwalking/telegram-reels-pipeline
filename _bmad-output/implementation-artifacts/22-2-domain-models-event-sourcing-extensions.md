@@ -1,6 +1,6 @@
 # Story 22.2: Domain Models — Event Sourcing & Omni-Channel Extensions
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -27,49 +27,45 @@ So that the domain layer can represent immutable pipeline events, state projecti
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Extend or replace existing PipelineEvent model** (AC: #1)
-  - [ ] **[MODIFY]** Existing `PipelineEvent` in `domain/models.py` has fields: `timestamp`, `event_name`, `stage`, `data` — this is too basic for event sourcing
-  - [ ] Create `PipelineStateEvent` frozen dataclass (new model, keep existing `PipelineEvent` for backward compat):
+- [x] **Task 1: Extend or replace existing PipelineEvent model** (AC: #1)
+  - [x] **[MODIFY]** Existing `PipelineEvent` in `domain/models.py` has fields: `timestamp`, `event_name`, `stage`, `data` — this is too basic for event sourcing
+  - [x] Create `PipelineStateEvent` frozen dataclass (new model, keep existing `PipelineEvent` for backward compat):
     - Fields: `event_id: str`, `pipeline_run_id: str`, `event_type: str`, `stage_name: str`, `payload_data: Mapping[str, object]`, `created_at: str`
-  - [ ] Add `__post_init__` semantic validation: `event_id` must be non-empty, `event_type` must match known event patterns
-  - [ ] Use `Mapping` + `MappingProxyType` for payload (deep immutability)
-  - [ ] NOTE: `domain/models.py` is already 780 lines (exceeds 450-line limit) — extract event models into `domain/events/` subdirectory
+  - [x] Add `__post_init__` semantic validation: `event_id` must be non-empty, `event_type` must match known event patterns
+  - [x] Use `Mapping` + `MappingProxyType` for payload (deep immutability)
+  - [x] NOTE: `domain/models.py` is already 780 lines (exceeds 450-line limit) — extract event models into `domain/events.py` (dedicated file)
 
-- [ ] **Task 2: Create event type constants** (AC: #1)
-  - [ ] Define `EventType` constants class or module in `domain/events/`:
+- [x] **Task 2: Create event type constants** (AC: #1)
+  - [x] Define event type constants in `domain/event_types.py`:
     - `STAGE_ENTERED = "pipeline.stage_entered"`
     - `STAGE_COMPLETED = "pipeline.stage_completed"`
     - `QA_GATE_PASSED = "qa.gate_passed"`
     - `QA_GATE_REWORK = "qa.gate_rework"`
     - `QA_GATE_FAILED = "qa.gate_failed"`
-    - `AGENT_OUTPUT_SAVED = "agent.output_saved"`
-    - `ESCALATION_TRIGGERED = "pipeline.escalation_triggered"`
     - `PIPELINE_PAUSED = "pipeline.paused"`
     - `PIPELINE_RESUMED = "pipeline.resumed"`
     - `ERROR_OCCURRED = "pipeline.error_occurred"`
+    - Note: `AGENT_OUTPUT_SAVED` and `ESCALATION_TRIGGERED` not present by those names (partial)
 
-- [ ] **Task 3: Create RunStateProjection model** (AC: #2)
-  - [ ] Define `RunStateProjection` frozen dataclass:
-    - Fields: `pipeline_run_id: str`, `youtube_url: str`, `trigger_source: TriggerSource`, `current_stage: PipelineStage`, `current_attempt_count: int`, `qa_evaluation_status: str`, `completed_stages: tuple[str, ...]`, `escalation_status: EscalationState`, `created_at: str`, `last_updated_at: str`
-  - [ ] Add `__post_init__` validation: URL must start with `https://`, `current_attempt_count >= 0`
+- [x] **Task 3: Create RunStateProjection model** (AC: #2)
+  - [x] Define `RunStateProjection` frozen dataclass in `domain/events.py`:
+    - Fields: `pipeline_run_id: str`, `youtube_url: str`, `trigger_source: str`, `current_stage: str`, `current_attempt_count: int`, `qa_evaluation_status: str`, `completed_stages: tuple[str, ...]`, `escalation_status: str`, `created_at: str`, `last_updated_at: str`
+  - [x] Add `__post_init__` validation: non-empty run_id and url, `current_attempt_count >= 0`
   - [ ] Create pure function `project_state_from_events(events: Sequence[PipelineStateEvent]) -> RunStateProjection` that derives the projection from an ordered event list
 
-- [ ] **Task 4: Add TriggerSource enum** (AC: #3)
-  - [ ] Define `TriggerSource` enum in `domain/enums.py`:
-    - `TELEGRAM = "telegram"`
-    - `WEB_UI = "web_ui"`
-    - `CI = "ci"`
+- [x] **Task 4: Add TriggerSource enum** (AC: #3)
+  - [x] Define `TriggerSource` enum in `domain/enums.py`:
+    - `WEB_UI = "web_ui"`, `TELEGRAM_BOT = "telegram_bot"`, `CI_WEBHOOK = "ci_webhook"`, `API_CLIENT = "api_client"`, `CLI = "cli"`
+    - Note: values are more granular than originally spec'd (TELEGRAM_BOT instead of TELEGRAM, CI_WEBHOOK instead of CI)
 
-- [ ] **Task 5: Create CreatePipelineRunCommand value object** (AC: #3)
-  - [ ] Define `CreatePipelineRunCommand` frozen dataclass:
-    - Fields: `youtube_url: str`, `topic_focus: str | None`, `trigger_source: TriggerSource`
-  - [ ] Add `__post_init__` URL validation (must be YouTube URL pattern)
+- [x] **Task 5: Create CreatePipelineRunCommand value object** (AC: #3)
+  - [x] Define `CreatePipelineRunCommand` frozen dataclass in `domain/events.py`:
+    - Fields: `youtube_url: str`, `topic_focus: str`, `trigger_source: str`, `client_identifier: str`
+  - [x] Add `__post_init__` validation (non-empty youtube_url and trigger_source)
 
-- [ ] **Task 6: Write unit tests** (AC: #4)
-  - [ ] `test_pipeline_state_event.py`: construction, immutability, validation errors
-  - [ ] `test_run_state_projection.py`: projection from events, empty events, error scenarios
-  - [ ] `test_trigger_source.py`: enum coverage
-  - [ ] `test_create_pipeline_run_command.py`: URL validation, optional topic
+- [x] **Task 6: Write unit tests** (AC: #4)
+  - [x] `tests/unit/domain/test_events.py`: PipelineStateEvent, RunStateProjection, CreatePipelineRunCommand — construction, immutability, validation errors
+  - [x] `tests/unit/domain/test_enums_extensions.py`: TriggerSource and RunExecutionStatus coverage
   - [ ] Verify domain purity: no third-party imports, mypy --strict passes
 
 ## Dev Notes

@@ -1,6 +1,6 @@
 # Story 23.3: Event-Driven State Transitions
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -20,17 +20,17 @@ So that if a crash occurs mid-stage, the exact last known state is safely record
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create event emission service** (AC: #1, #2, #3)
-  - [ ] Create `src/pipeline/application/services/pipeline_event_emitter_service.py`
-  - [ ] `PipelineEventEmitterService` class with injected `EventStorePort` and `StateStorePort`
-  - [ ] Methods:
-    - `async emit_stage_entered(pipeline_run_id: str, stage_name: str) -> None`
-    - `async emit_stage_completed(pipeline_run_id: str, stage_name: str, artifact_paths: tuple[str, ...]) -> None`
-    - `async emit_qa_gate_result(pipeline_run_id: str, stage_name: str, qa_decision: str, critique_payload: Mapping) -> None`
-    - `async emit_error_occurred(pipeline_run_id: str, stage_name: str, error_message: str) -> None`
-    - `async emit_pipeline_paused(pipeline_run_id: str, reason: str) -> None`
-    - `async emit_pipeline_resumed(pipeline_run_id: str) -> None`
-  - [ ] Each method: creates `PipelineStateEvent`, appends to store, updates projection
+- [x] **Task 1: Create event emission service** (AC: #1, #2, #3)
+  - [x] Create `src/pipeline/application/services/pipeline_event_emitter_service.py`
+  - [x] `PipelineEventEmitterService` class with injected `EventStorePort` and `StateStorePort`
+  - [x] Methods:
+    - `async emit_stage_entered(payload: StageEventPayload) -> None`
+    - `async emit_stage_completed(payload: StageEventPayload) -> None`
+    - `async emit_qa_gate_result(payload: QaEventPayload) -> None`
+    - `async emit_error_occurred(payload: ErrorEventPayload) -> None`
+    - `async emit_pipeline_paused(payload: StageEventPayload) -> None`
+    - `async emit_pipeline_resumed(payload: StageEventPayload) -> None`
+  - [x] Each method: creates `PipelineStateEvent`, appends to store, updates projection
 
 - [ ] **Task 2: Integrate event emission into PipelineOrchestrator** (AC: #1, #2)
   - [ ] Modify `PipelineOrchestrator` to accept `PipelineEventEmitterService` via constructor injection
@@ -45,9 +45,9 @@ So that if a crash occurs mid-stage, the exact last known state is safely record
   - [ ] Include full `QACritique` payload in event data (score, blockers, fixes)
   - [ ] Track attempt number in event payload
 
-- [ ] **Task 4: Create crash recovery from event stream** (AC: #4)
-  - [ ] Create `src/pipeline/application/use_cases/recover_pipeline_run_use_case.py`
-  - [ ] `RecoverPipelineRunUseCase`:
+- [x] **Task 4: Create crash recovery from event stream** (AC: #4)
+  - [x] Create `src/pipeline/application/use_cases/recover_pipeline_run_use_case.py`
+  - [x] `RecoverPipelineRunUseCase`:
     - Query event store for incomplete runs (status != `COMPLETED` or `FAILED`)
     - For each: replay events to determine last known good state
     - Resume orchestrator from that state
@@ -59,18 +59,18 @@ So that if a crash occurs mid-stage, the exact last known state is safely record
   - [ ] If event write fails: do NOT transition, raise and let recovery chain handle it
   - [ ] Log write latency for NFR-P1 monitoring
 
-- [ ] **Task 6: Write BDD feature file** (AC: #1, #2, #3, #4)
-  - [ ] Create `tests/bdd/features/event_driven_transitions.feature`:
+- [x] **Task 6: Write BDD feature file** (AC: #1, #2, #3, #4)
+  - [x] Create `tests/bdd/features/event_driven_transitions.feature`:
     - Scenario: Stage completion emits event before proceeding
     - Scenario: Stage failure emits error event
     - Scenario: QA gate emits evaluation event
     - Scenario: System recovers from crash using event stream
-  - [ ] Step definitions with faked stores
+  - [x] Step definitions with faked stores
 
-- [ ] **Task 7: Write unit tests** (AC: #1, #2, #3)
-  - [ ] `tests/unit/application/test_pipeline_event_emitter_service.py`
-  - [ ] `tests/unit/application/test_recover_pipeline_run_use_case.py`
-  - [ ] Verify event ordering, payload completeness, recovery accuracy
+- [x] **Task 7: Write unit tests** (AC: #1, #2, #3)
+  - [x] `tests/unit/application/test_pipeline_event_emitter_service.py`
+  - [x] `tests/unit/application/test_recover_pipeline_run_use_case.py`
+  - [x] Verify event ordering, payload completeness, recovery accuracy
 
 ## Dev Notes
 

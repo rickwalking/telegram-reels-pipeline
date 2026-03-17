@@ -1,6 +1,6 @@
 # Story 23.2: StateStorePort Implementation (MongoStateStore)
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -28,25 +28,25 @@ So that the core pipeline logic can save and retrieve state without coupling to 
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Implement MongoDbEventStoreAdapter** (AC: #1, #4) [NEW — no event store exists]
-  - [ ] Create `src/pipeline/infrastructure/database/adapters/mongodb_event_store_adapter.py`
-  - [ ] Implement `EventStorePort` protocol:
+- [x] **Task 1: Implement MongoDbEventStoreAdapter** (AC: #1, #4) [NEW — no event store exists]
+  - [x] Create `src/pipeline/infrastructure/database/adapters/mongodb_event_store_adapter.py`
+  - [x] Implement `EventStorePort` protocol:
     - `async append_event(event: PipelineStateEvent) -> None` — maps to document, saves via AIOEngine
     - `async get_events_for_run(pipeline_run_id: str) -> tuple[PipelineStateEvent, ...]` — queries by run ID, ordered by `created_at`
     - `async get_event_count_for_run(pipeline_run_id: str) -> int`
-  - [ ] Use mapper functions for domain ↔ document conversion
-  - [ ] Events are append-only — no update or delete methods
+  - [x] Use mapper functions for domain ↔ document conversion
+  - [x] Events are append-only — no update or delete methods
 
-- [ ] **Task 2: Refactor existing MongoStateStore into MongoDbStateStoreAdapter** (AC: #2, #4)
-  - [ ] **[REWRITE]** Existing `mongo_state_store.py` does inline mapping and creates its own client — refactor to accept `AIOEngine` via injection and use mapper functions
-  - [ ] Move to `src/pipeline/infrastructure/database/adapters/mongodb_state_store_adapter.py` (new path)
-  - [ ] Implement updated `StateStorePort` protocol:
-    - `async save_state_projection(projection: RunStateProjection) -> None` — upsert by `pipeline_run_id`
-    - `async load_state_projection(pipeline_run_id: str) -> RunStateProjection | None`
-    - `async list_runs_by_status(execution_status: str) -> tuple[RunStateProjection, ...]`
-    - `async list_all_run_projections() -> tuple[RunStateProjection, ...]`
-  - [ ] Upsert pattern: if document exists for `pipeline_run_id`, update it; otherwise create
-  - [ ] Use mapper functions for domain ↔ document conversion
+- [x] **Task 2: Refactor existing MongoStateStore into MongoDbStateStoreAdapter** (AC: #2, #4)
+  - [x] **[REWRITE]** Existing `mongo_state_store.py` does inline mapping and creates its own client — refactor to accept `AIOEngine` via injection and use mapper functions
+  - [x] Move to `src/pipeline/infrastructure/database/adapters/mongodb_state_store_adapter.py` (new path)
+  - [x] Implement updated `StateStorePort` protocol:
+    - `async save_state(projection: RunStateProjection) -> None` — upsert by `pipeline_run_id`
+    - `async load_projection(pipeline_run_id: str) -> RunStateProjection | None`
+    - `async list_by_execution_status(execution_status: str) -> tuple[RunStateProjection, ...]`
+    - `async list_all_projections() -> tuple[RunStateProjection, ...]`
+  - [x] Upsert pattern: if document exists for `pipeline_run_id`, update it; otherwise create
+  - [x] Use mapper functions for domain ↔ document conversion
 
 - [ ] **Task 3: Create atomic event-and-projection write** (AC: #4)
   - [ ] Create `src/pipeline/infrastructure/database/adapters/transactional_state_writer.py`
@@ -72,10 +72,10 @@ So that the core pipeline logic can save and retrieve state without coupling to 
   - [ ] Test: load non-existent → returns None
   - [ ] Verify adapter satisfies `isinstance(adapter, StateStorePort)`
 
-- [ ] **Task 6: Create faked in-memory implementations** (AC: #3)
-  - [ ] Create `tests/fakes/fake_event_store.py` — in-memory list-based `EventStorePort`
-  - [ ] Create `tests/fakes/fake_state_store.py` — in-memory dict-based `StateStorePort`
-  - [ ] These are used by application-layer unit tests (no real DB needed)
+- [x] **Task 6: Create faked in-memory implementations** (AC: #3)
+  - [x] Create `tests/fakes/fake_event_store.py` — in-memory list-based `EventStorePort`
+  - [x] Create `tests/fakes/fake_state_store.py` — in-memory dict-based `StateStorePort`
+  - [x] These are used by application-layer unit tests (no real DB needed)
   - [ ] Verify fakes also pass the same contract tests
 
 ## Dev Notes

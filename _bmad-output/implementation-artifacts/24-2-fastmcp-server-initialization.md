@@ -1,6 +1,6 @@
 # Story 24.2: FastMCP Server Initialization
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -33,18 +33,18 @@ So that the Claude Code CLI/Agent SDK has a secure server to call its designated
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Refactor FastMCP server** (AC: #1)
-  - [ ] **[REWRITE]** Existing `presentation/mcp/server.py` is a non-functional stub with mock tools and no DI
-  - [ ] Move to `src/pipeline/presentation/tools/mcp_server_factory.py` (rename `mcp/` → `tools/` per CLAUDE.md)
-  - [ ] Create `create_mcp_server() -> FastMCP` factory function (replaces global `mcp` instance)
-  - [ ] Configure server name: `"Pipeline State Manager"` (existing uses `"telegram-reels-agent-tools"`)
-  - [ ] Set up stdio transport for Claude Code CLI
-  - [ ] Set up SSE transport for potential web-based MCP clients
-  - [ ] Delete old `presentation/mcp/server.py` after migration
+- [x] **Task 1: Refactor FastMCP server** (AC: #1)
+  - [x] **[REWRITE]** Existing `presentation/mcp/server.py` is a non-functional stub with mock tools and no DI
+  - [x] Move to `src/pipeline/presentation/tools/mcp_server_factory.py` (rename `mcp/` → `tools/` per CLAUDE.md)
+  - [x] Create `create_mcp_server() -> FastMCP` factory function (replaces global `mcp` instance)
+  - [x] Configure server name: `"Pipeline State Manager"` (existing uses `"telegram-reels-agent-tools"`)
+  - [x] Set up stdio transport for Claude Code CLI
+  - [x] Set up SSE transport for potential web-based MCP clients
+  - [x] Delete old `presentation/mcp/server.py` after migration
 
-- [ ] **Task 2: Create MCP tool registry pattern** (AC: #2, #3)
-  - [ ] Create `src/pipeline/presentation/tools/tool_registry.py`
-  - [ ] Define pattern for registering tools with dependency injection:
+- [x] **Task 2: Create MCP tool registry pattern** (AC: #2, #3)
+  - [x] Create `src/pipeline/presentation/tools/tool_registry.py`
+  - [x] Define pattern for registering tools with dependency injection:
     ```python
     def register_pipeline_tools(
         mcp_server: FastMCP,
@@ -53,8 +53,8 @@ So that the Claude Code CLI/Agent SDK has a secure server to call its designated
         file_storage_port: FileStoragePort,
     ) -> None:
     ```
-  - [ ] Each tool receives ports via closure, not global state
-  - [ ] Tools are thin wrappers that validate DTOs and call use cases
+  - [x] Each tool receives ports via closure, not global state
+  - [x] Tools are thin wrappers that validate DTOs and call use cases
 
 - [ ] **Task 3: Mount FastMCP into FastAPI** (AC: #1)
   - [ ] Update `presentation/api/application_factory.py` to mount MCP server
@@ -62,8 +62,8 @@ So that the Claude Code CLI/Agent SDK has a secure server to call its designated
   - [ ] Both REST endpoints (`/api/...`) and MCP endpoints (`/mcp/...`) coexist
   - [ ] Health check endpoint at `/mcp/health`
 
-- [ ] **Task 4: Create MCP configuration for Claude Code** (AC: #2)
-  - [ ] Create `config/mcp-pipeline.json` MCP configuration file:
+- [x] **Task 4: Create MCP configuration for Claude Code** (AC: #2)
+  - [x] Create `config/mcp-pipeline.json` MCP configuration file:
     ```json
     {
       "mcpServers": {
@@ -75,15 +75,15 @@ So that the Claude Code CLI/Agent SDK has a secure server to call its designated
       }
     }
     ```
-  - [ ] Ensure the server can start standalone via `python -m` for stdio transport
-  - [ ] Ensure it can also be mounted in FastAPI for SSE transport
+  - [x] Ensure the server can start standalone via `python -m` for stdio transport
+  - [x] Ensure it can also be mounted in FastAPI for SSE transport
 
-- [ ] **Task 5: Create tool response formatting** (AC: #2)
-  - [ ] Create `src/pipeline/presentation/tools/tool_response_formatter.py`
-  - [ ] Standard success format: `{"status": "success", "data": {...}}`
-  - [ ] Standard error format: `{"status": "error", "error_type": "...", "message": "..."}`
-  - [ ] All tool responses use this consistent format
-  - [ ] Serialize domain objects to JSON-safe dicts
+- [x] **Task 5: Create tool response formatting** (AC: #2)
+  - [x] Create `src/pipeline/presentation/tools/tool_response_formatter.py` (implemented as `format_success_response.py` and `format_error_response.py`)
+  - [x] Standard success format: `{"status": "success", "data": {...}}`
+  - [x] Standard error format: `{"status": "error", "error_type": "...", "message": "..."}`
+  - [x] All tool responses use this consistent format
+  - [x] Serialize domain objects to JSON-safe dicts
 
 - [ ] **Task 6: Write integration tests** (AC: #1, #2)
   - [ ] `tests/integration/test_mcp_server_initialization.py`
@@ -92,10 +92,10 @@ So that the Claude Code CLI/Agent SDK has a secure server to call its designated
   - [ ] Test: stdio transport works for tool invocation
   - [ ] Use `mcp.client` for testing (official MCP test client)
 
-- [ ] **Task 7: Write unit tests** (AC: #3, #4)
+- [x] **Task 7: Write unit tests** (AC: #3, #4)
   - [ ] `tests/unit/presentation/test_tool_registry.py`: tools registered correctly
-  - [ ] `tests/unit/presentation/test_tool_response_formatter.py`: format consistency
-  - [ ] Verify no infrastructure imports in presentation/tools/
+  - [x] `tests/unit/presentation/test_tool_response_formatter.py`: format consistency (implemented as `test_tool_response_formatter.py` covering `format_success_response.py` and `format_error_response.py`)
+  - [x] Verify no infrastructure imports in presentation/tools/
 
 ## Dev Notes
 

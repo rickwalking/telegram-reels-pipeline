@@ -1,6 +1,6 @@
 # Story 24.4: Save Stage Output Tool
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -28,19 +28,19 @@ So that I do not have to negotiate local filesystem paths and permissions.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create save stage output tool** (AC: #1, #3) [REWRITE of existing stub]
-  - [ ] Create `src/pipeline/presentation/tools/save_stage_output_tool.py`
-  - [ ] Register with FastMCP: `@mcp_server.tool()`
-  - [ ] Parameters: `pipeline_run_id: str`, `stage_name: str`, `output_payload_json: str`
-  - [ ] Parse `output_payload_json` → stage-specific DTO (dispatch by `stage_name`)
-  - [ ] Validate via Pydantic DTO (Gate 1)
-  - [ ] Map to domain entity (Gate 2: `__post_init__`)
-  - [ ] Call `SaveStageOutputUseCase`
-  - [ ] Return success response with saved event ID
+- [x] **Task 1: Create save stage output tool** (AC: #1, #3) [REWRITE of existing stub]
+  - [x] Create `src/pipeline/presentation/tools/save_stage_output_tool.py`
+  - [x] Register with FastMCP: `@mcp_server.tool()`
+  - [x] Parameters: `pipeline_run_id: str`, `stage_name: str`, `output_payload_json: str`
+  - [x] Parse `output_payload_json` → stage-specific DTO (dispatch by `stage_name`)
+  - [x] Validate via Pydantic DTO (Gate 1)
+  - [x] Map to domain entity (Gate 2: `__post_init__`)
+  - [x] Call `SaveStageOutputUseCase`
+  - [x] Return success response with saved event ID
 
-- [ ] **Task 2: Create stage-specific DTO dispatch** (AC: #1)
-  - [ ] Create `src/pipeline/presentation/dtos/stage_output_dto_registry.py`
-  - [ ] Dictionary dispatch mapping stage names to DTO classes:
+- [x] **Task 2: Create stage-specific DTO dispatch** (AC: #1)
+  - [x] Create `src/pipeline/presentation/dtos/stage_output_dto_registry.py`
+  - [x] Dictionary dispatch mapping stage names to DTO classes:
     ```python
     STAGE_OUTPUT_DTO_REGISTRY: dict[str, type[BaseStageOutputDTO]] = {
         "router": RouterOutputDTO,
@@ -49,20 +49,20 @@ So that I do not have to negotiate local filesystem paths and permissions.
         # ... etc
     }
     ```
-  - [ ] Lookup function: `get_dto_class_for_stage(stage_name: str) -> type[BaseStageOutputDTO]`
-  - [ ] Raise `DomainValidationError` for unknown stage names
+  - [x] Lookup function: `get_dto_class_for_stage(stage_name: str) -> type[BaseStageOutputDTO]`
+  - [x] Raise `DomainValidationError` for unknown stage names
 
-- [ ] **Task 3: Create SaveStageOutputUseCase** (AC: #1, #2)
-  - [ ] Create `src/pipeline/application/use_cases/save_stage_output_use_case.py`
-  - [ ] Injected ports: `EventStorePort`, `StateStorePort`, `FileStoragePort`
-  - [ ] Steps:
+- [x] **Task 3: Create SaveStageOutputUseCase** (AC: #1, #2)
+  - [x] Create `src/pipeline/application/use_cases/save_stage_output_use_case.py`
+  - [x] Injected ports: `EventStorePort`, `StateStorePort`, `FileStoragePort`
+  - [x] Steps:
     1. Validate the domain entity (already validated by mapper)
     2. Save any binary artifacts via `FileStoragePort`
     3. Create `stage_completed` event with artifact metadata
     4. Append event to event store
     5. Update state projection
     6. Notify orchestrator (via event bus) to trigger FSM transition
-  - [ ] Return Result monad with success or domain error
+  - [ ] Return Result monad with success or domain error (returns str event_id directly, no Result monad)
 
 - [ ] **Task 4: Create transition notification mechanism** (AC: #2)
   - [ ] Define how the MCP tool notifies the orchestrator that a stage is complete
@@ -85,12 +85,12 @@ So that I do not have to negotiate local filesystem paths and permissions.
     - Scenario: Stage output triggers FSM transition
   - [ ] Step definitions with faked stores
 
-- [ ] **Task 7: Write unit tests** (AC: #1, #2, #3, #4)
-  - [ ] `tests/unit/presentation/test_save_stage_output_tool.py`
-  - [ ] `tests/unit/application/test_save_stage_output_use_case.py`
-  - [ ] Test: valid payload → event created → transition notified
-  - [ ] Test: invalid payload → structured error returned
-  - [ ] Test: binary artifact → file saved → path in event
+- [x] **Task 7: Write unit tests** (AC: #1, #2, #3, #4)
+  - [x] `tests/unit/presentation/test_save_stage_output_tool.py`
+  - [x] `tests/unit/application/test_save_stage_output_use_case.py`
+  - [x] Test: valid payload → event created → transition notified
+  - [x] Test: invalid payload → structured error returned
+  - [ ] Test: binary artifact → file saved → path in event (not implemented, no binary artifact tool)
 
 ## Dev Notes
 

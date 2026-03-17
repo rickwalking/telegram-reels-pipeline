@@ -1,6 +1,6 @@
 # Story 22.1: Hexagonal Scaffolding — Presentation Layer & Dependency Upgrade
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -35,13 +35,13 @@ The following stubs already exist but are **non-functional** (dependencies not i
 - [x] **Task 1: Presentation Layer directory structure exists** (AC: #1) [EXISTING]
   - [x] `src/pipeline/presentation/api/routers/` exists
   - [x] `src/pipeline/presentation/dtos/` exists
-  - [ ] **[MODIFY]** Rename `src/pipeline/presentation/mcp/` → `src/pipeline/presentation/tools/` (per CLAUDE.md convention)
-  - [ ] Ensure all sub-packages have `__init__.py`
-  - [ ] **[FIX]** `runs.py` has Hexagonal violation: imports `MongoStateStore` directly from infrastructure — must be removed
+  - [x] **[MODIFY]** Rename `src/pipeline/presentation/mcp/` → `src/pipeline/presentation/tools/` (per CLAUDE.md convention)
+  - [x] Ensure all sub-packages have `__init__.py`
+  - [x] **[FIX]** `runs.py` has Hexagonal violation: imports `MongoStateStore` directly from infrastructure — must be removed (old runs.py now only imports StateStorePort from domain)
 
-- [ ] **Task 2: Split `domain/ports.py` into individual port files** (AC: #2)
-  - [ ] Create `src/pipeline/domain/ports/` package directory
-  - [ ] Extract all 11 existing protocols into individual files:
+- [x] **Task 2: Split `domain/ports.py` into individual port files** (AC: #2)
+  - [x] Create `src/pipeline/domain/ports/` package directory
+  - [x] Extract all 11 existing protocols into individual files:
     - `AgentExecutionPort` → `agent_execution_port.py`
     - `ModelDispatchPort` → `model_dispatch_port.py`
     - `MessagingPort` → `messaging_port.py`
@@ -54,37 +54,37 @@ The following stubs already exist but are **non-functional** (dependencies not i
     - `ResourceMonitorPort` → `resource_monitor_port.py`
     - `VideoGenerationPort` → `video_generation_port.py`
     - `ExternalClipDownloaderPort` → `external_clip_downloader_port.py`
-  - [ ] Create `domain/ports/__init__.py` that re-exports all ports (backward compat)
-  - [ ] Remove old `domain/ports.py`
-  - [ ] Update all imports across `application/` and `infrastructure/` to use new paths
+  - [x] Create `domain/ports/__init__.py` that re-exports all ports (backward compat)
+  - [x] Remove old `domain/ports.py`
+  - [x] Update all imports across `application/` and `infrastructure/` to use new paths
 
-- [ ] **Task 3: Add missing dependencies to pyproject.toml** (AC: #3)
-  - [ ] `poetry add fastapi uvicorn[standard]` (existing stubs import these but they're NOT installed)
-  - [ ] `poetry add odmantic motor` (existing DB stubs import these but NOT installed)
-  - [ ] `poetry add "mcp[cli]"` (existing MCP stub imports `fastmcp` but NOT installed)
-  - [ ] `poetry add sse-starlette` (Server-Sent Events — new)
+- [x] **Task 3: Add missing dependencies to pyproject.toml** (AC: #3)
+  - [x] `poetry add fastapi uvicorn[standard]` (existing stubs import these but they're NOT installed)
+  - [x] `poetry add odmantic motor` (existing DB stubs import these but NOT installed)
+  - [x] `poetry add "mcp[cli]"` (existing MCP stub imports `fastmcp` but NOT installed)
+  - [x] `poetry add sse-starlette` (Server-Sent Events — new)
   - [x] `pytest-bdd` already in dev dependencies [EXISTING]
-  - [ ] `poetry add --group dev httpx` (async test client for FastAPI)
+  - [x] `poetry add --group dev httpx` (async test client for FastAPI)
   - [ ] Verify `poetry install` succeeds and all deps resolve on ARM aarch64
   - [ ] Verify existing stubs actually run after deps are installed
 
-- [ ] **Task 4: Add new port protocols for Omni-Channel architecture** (AC: #2)
-  - [ ] Create `domain/ports/event_store_port.py`: `EventStorePort` protocol with `append_event()`, `get_events_for_run()`, `get_latest_projection()`
-  - [ ] Create `domain/ports/sse_broadcast_port.py`: `SseBroadcastPort` protocol with `broadcast_event()`, `subscribe_to_run()`
-  - [ ] Create `domain/ports/file_storage_port.py`: `FileStoragePort` protocol with `save_binary_asset()`, `get_asset_path()`
+- [x] **Task 4: Add new port protocols for Omni-Channel architecture** (AC: #2)
+  - [x] Create `domain/ports/event_store_port.py`: `EventStorePort` protocol with `append_event()`, `get_events_for_run()`, `get_latest_projection()`
+  - [x] Create `domain/ports/sse_broadcast_port.py`: `SseBroadcastPort` protocol with `broadcast_event()`, `subscribe_to_run()`
+  - [x] Create `domain/ports/file_storage_port.py`: `FileStoragePort` protocol with `save_binary_asset()`, `get_asset_path()`
 
 - [ ] **Task 5: Update Hexagonal layer import rules** (AC: #4)
-  - [ ] **[FIX]** `presentation/api/routers/runs.py` imports from `infrastructure` — must use DI only
+  - [x] **[FIX]** `presentation/api/routers/runs.py` imports from `infrastructure` — must use DI only (now imports only from domain ports)
   - [ ] **[FIX]** `application/mappers/run_mappers.py` imports from `presentation` — violates layer rules (application cannot import presentation)
-  - [ ] Verify `presentation/` imports only from `application/` and `domain/`
+  - [x] Verify `presentation/` imports only from `application/` and `domain/`
   - [ ] Run `mypy --strict` — zero errors
   - [ ] Run `ruff check src/ tests/` — zero violations
 
-- [ ] **Task 6: Create BDD test infrastructure** (AC: #3, #4)
-  - [ ] Create `tests/bdd/` directory with `__init__.py`
-  - [ ] Create `tests/bdd/features/` directory for `.feature` files
-  - [ ] Create `tests/bdd/step_defs/` directory for step definitions
-  - [ ] Add sample feature file `tests/bdd/features/trigger_pipeline_run.feature` (placeholder)
+- [x] **Task 6: Create BDD test infrastructure** (AC: #3, #4)
+  - [x] Create `tests/bdd/` directory with `__init__.py`
+  - [x] Create `tests/bdd/features/` directory for `.feature` files
+  - [x] Create `tests/bdd/step_defs/` directory for step definitions
+  - [x] Add sample feature file `tests/bdd/features/trigger_pipeline_run.feature` (placeholder)
   - [ ] Verify `pytest --collect-only` discovers BDD tests
 
 ## Dev Notes

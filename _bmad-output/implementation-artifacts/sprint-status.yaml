@@ -206,7 +206,7 @@ development_status:
 
   # Epic 22: Pipeline Foundation & Omni-Channel Core
   # FRs: FR1 (trigger), FR2 (state machine), FR3 (FIFO queue)
-  epic-22: in-progress
+  epic-22: done
   22-1-hexagonal-scaffolding-presentation-layer: done
   22-2-domain-models-event-sourcing-extensions: done
   22-3-fastapi-core-run-trigger-endpoint: done

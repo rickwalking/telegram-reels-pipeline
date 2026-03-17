@@ -1,6 +1,6 @@
 # Story 24.1: DTO Mapping for Agent State Transfer
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -31,40 +31,40 @@ So that all incoming JSON payloads from agents are syntactically validated befor
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create base DTO patterns** (AC: #1, #4)
-  - [ ] Create `src/pipeline/presentation/dtos/base_stage_output_dto.py`
-  - [ ] Base class with common fields: `pipeline_run_id: str`, `stage_name: str`, `generated_at: str`
-  - [ ] Use Pydantic `model_config = ConfigDict(strict=True, extra="forbid")`
+- [x] **Task 1: Create base DTO patterns** (AC: #1, #4)
+  - [x] Create `src/pipeline/presentation/dtos/base_stage_output_dto.py`
+  - [x] Base class with common fields: `pipeline_run_id: str`, `stage_name: str`, `generated_at: str`
+  - [x] Use Pydantic `model_config = ConfigDict(strict=True, extra="forbid")`
 
-- [ ] **Task 2: Create stage-specific output DTOs** (AC: #1)
-  - [ ] `presentation/dtos/router_output_dto.py`: `RouterOutputDTO` — tier, elicitation answers, topic extraction
-  - [ ] `presentation/dtos/research_output_dto.py`: `ResearchOutputDTO` — episode metadata, context summary
-  - [ ] `presentation/dtos/transcript_output_dto.py`: `TranscriptOutputDTO` — selected moments, timestamps, narrative roles
-  - [ ] `presentation/dtos/content_output_dto.py`: `ContentOutputDTO` — descriptions, hashtags, music suggestions
-  - [ ] `presentation/dtos/layout_analysis_output_dto.py`: `LayoutAnalysisOutputDTO` — face positions, layout classification
-  - [ ] `presentation/dtos/ffmpeg_encoding_plan_dto.py`: `FfmpegEncodingPlanDTO` — segments, crop regions, encoding params
-  - [ ] `presentation/dtos/assembly_report_dto.py`: `AssemblyReportDTO` — final reel path, quality metrics
-  - [ ] Each DTO has field-level validators and descriptive error messages
+- [x] **Task 2: Create stage-specific output DTOs** (AC: #1)
+  - [x] `presentation/dtos/router_output_dto.py`: `RouterOutputDTO` — tier, elicitation answers, topic extraction
+  - [x] `presentation/dtos/research_output_dto.py`: `ResearchOutputDTO` — episode metadata, context summary
+  - [x] `presentation/dtos/transcript_output_dto.py`: `TranscriptOutputDTO` — selected moments, timestamps, narrative roles
+  - [x] `presentation/dtos/content_output_dto.py`: `ContentOutputDTO` — descriptions, hashtags, music suggestions
+  - [x] `presentation/dtos/layout_analysis_output_dto.py`: `LayoutAnalysisOutputDTO` — face positions, layout classification
+  - [x] `presentation/dtos/ffmpeg_encoding_plan_dto.py`: `FfmpegEncodingPlanDTO` — segments, crop regions, encoding params
+  - [x] `presentation/dtos/assembly_report_dto.py`: `AssemblyReportDTO` — final reel path, quality metrics
+  - [x] Each DTO has field-level validators and descriptive error messages
 
-- [ ] **Task 3: Create DTO-to-domain mapper functions** (AC: #2)
-  - [ ] Create `src/pipeline/presentation/dtos/mappers/` package
-  - [ ] One mapper per stage: `map_router_dto_to_domain()`, `map_transcript_dto_to_domain()`, etc.
-  - [ ] Each mapper: validates DTO (Gate 1), constructs domain entity (Gate 2 in `__post_init__`)
-  - [ ] Mappers are pure functions — no side effects, no I/O
+- [x] **Task 3: Create DTO-to-domain mapper functions** (AC: #2)
+  - [x] Create `src/pipeline/presentation/dtos/mappers/` package
+  - [x] One mapper per stage: `map_router_dto_to_domain()`, `map_transcript_dto_to_domain()`, etc.
+  - [x] Each mapper: validates DTO (Gate 1), constructs domain entity (Gate 2 in `__post_init__`)
+  - [x] Mappers are pure functions — no side effects, no I/O
 
-- [ ] **Task 4: Create validation error response format** (AC: #3)
-  - [ ] Define `AgentValidationErrorDTO` with:
+- [x] **Task 4: Create validation error response format** (AC: #3)
+  - [x] Define `AgentValidationErrorDTO` with:
     - `error_type: str` (e.g., "validation_error")
     - `invalid_fields: list[FieldErrorDetailDTO]` with `field_name`, `error_message`, `received_value`
     - `suggested_correction: str | None`
-  - [ ] Format designed for LLM consumption (agent self-correction)
+  - [x] Format designed for LLM consumption (agent self-correction)
 
-- [ ] **Task 5: Write unit tests** (AC: #1, #2, #3, #4)
-  - [ ] `tests/unit/presentation/test_router_output_dto.py`: valid/invalid payload handling
-  - [ ] `tests/unit/presentation/test_transcript_output_dto.py`: timestamp validation
-  - [ ] `tests/unit/presentation/test_dto_mappers.py`: round-trip DTO → domain entity
-  - [ ] `tests/unit/presentation/test_validation_error_format.py`: structured error output
-  - [ ] Verify all DTOs reject `extra` fields and enforce strict types
+- [x] **Task 5: Write unit tests** (AC: #1, #2, #3, #4)
+  - [x] `tests/unit/presentation/test_router_output_dto.py`: valid/invalid payload handling
+  - [x] `tests/unit/presentation/test_transcript_output_dto.py`: timestamp validation
+  - [x] `tests/unit/presentation/test_dto_mappers.py`: round-trip DTO → domain entity (implemented as `test_stage_output_mappers.py`)
+  - [x] `tests/unit/presentation/test_validation_error_format.py`: structured error output
+  - [x] Verify all DTOs reject `extra` fields and enforce strict types
 
 ## Dev Notes
 

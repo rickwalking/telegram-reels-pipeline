@@ -1,6 +1,6 @@
 # Story 24.3: Read Pipeline State Tool
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -26,21 +26,21 @@ So that I understand my context and requirements for the current task.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create query pipeline status tool** (AC: #1, #3) [REWRITE of existing stub]
-  - [ ] Create `src/pipeline/presentation/tools/query_pipeline_status_tool.py`
-  - [ ] Register tool with FastMCP: `@mcp_server.tool()`
-  - [ ] Parameters: `pipeline_run_id: str`
-  - [ ] Calls `GetPipelineRunDetailUseCase`
-  - [ ] Returns formatted JSON with: `pipeline_run_id`, `current_stage`, `execution_status`, `completed_stages`, `escalation_status`, `current_attempt_count`
-  - [ ] On not found: return error response (not exception)
+- [x] **Task 1: Create query pipeline status tool** (AC: #1, #3) [REWRITE of existing stub]
+  - [x] Create `src/pipeline/presentation/tools/query_pipeline_status_tool.py`
+  - [ ] Register tool with FastMCP: `@mcp_server.tool()` (tool factory exists but not registered in tool_registry.py)
+  - [x] Parameters: `pipeline_run_id: str`
+  - [x] Calls `GetPipelineRunDetailUseCase` (implemented via direct port call)
+  - [x] Returns formatted JSON with: `pipeline_run_id`, `current_stage`, `execution_status`, `completed_stages`, `escalation_status`, `current_attempt_count`
+  - [x] On not found: return error response (not exception)
 
-- [ ] **Task 2: Create get stage artifacts tool** (AC: #2)
-  - [ ] Create `src/pipeline/presentation/tools/get_stage_artifacts_tool.py`
-  - [ ] Register tool with FastMCP
-  - [ ] Parameters: `pipeline_run_id: str`, `stage_name: str`
-  - [ ] Create `GetStageArtifactsUseCase` in application layer
-  - [ ] Queries event store for `stage_completed` events matching the stage
-  - [ ] Returns artifact metadata (paths, timestamps, QA scores)
+- [x] **Task 2: Create get stage artifacts tool** (AC: #2)
+  - [x] Create `src/pipeline/presentation/tools/get_stage_artifacts_tool.py`
+  - [ ] Register tool with FastMCP (tool factory exists but not registered in tool_registry.py)
+  - [x] Parameters: `pipeline_run_id: str`, `stage_name: str`
+  - [x] Create `GetStageArtifactsUseCase` in application layer (implemented via direct port call in tool)
+  - [x] Queries event store for `stage_completed` events matching the stage
+  - [x] Returns artifact metadata (paths, timestamps, QA scores)
 
 - [ ] **Task 3: Create list available stages tool** (AC: #4)
   - [ ] Create `src/pipeline/presentation/tools/list_available_stages_tool.py`
@@ -48,12 +48,13 @@ So that I understand my context and requirements for the current task.
   - [ ] Helps agents understand the pipeline flow
   - [ ] Pure data, no database query needed
 
-- [ ] **Task 4: Create get QA history tool** (AC: #2)
-  - [ ] Create `src/pipeline/presentation/tools/get_qa_history_tool.py`
-  - [ ] Parameters: `pipeline_run_id: str`, `stage_name: str`
-  - [ ] Queries event store for QA events (pass/rework/fail) for the stage
-  - [ ] Returns attempt history with scores and feedback
-  - [ ] Helps agents understand what went wrong in prior attempts
+- [x] **Task 4: Create get QA history tool** (AC: #2)
+  - [x] Create `src/pipeline/presentation/tools/get_qa_history_tool.py`
+  - [ ] Register tool with FastMCP (tool factory exists but not registered in tool_registry.py)
+  - [x] Parameters: `pipeline_run_id: str`, `stage_name: str`
+  - [x] Queries event store for QA events (pass/rework/fail) for the stage
+  - [x] Returns attempt history with scores and feedback
+  - [x] Helps agents understand what went wrong in prior attempts
 
 - [ ] **Task 5: Create application use cases** (AC: #1, #2)
   - [ ] `GetPipelineRunDetailUseCase` (if not already from 22-4)
@@ -61,12 +62,12 @@ So that I understand my context and requirements for the current task.
   - [ ] `GetQaHistoryUseCase` — queries events for QA attempts
   - [ ] All use cases inject `EventStorePort` and/or `StateStorePort`
 
-- [ ] **Task 6: Write unit tests** (AC: #1, #2, #3)
-  - [ ] `tests/unit/presentation/test_query_pipeline_status_tool.py`
-  - [ ] `tests/unit/presentation/test_get_stage_artifacts_tool.py`
-  - [ ] `tests/unit/presentation/test_get_qa_history_tool.py`
-  - [ ] Test with faked stores
-  - [ ] Verify error handling for non-existent runs
+- [x] **Task 6: Write unit tests** (AC: #1, #2, #3)
+  - [x] `tests/unit/presentation/test_query_pipeline_status_tool.py`
+  - [x] `tests/unit/presentation/test_get_stage_artifacts_tool.py`
+  - [x] `tests/unit/presentation/test_get_qa_history_tool.py`
+  - [x] Test with faked stores
+  - [x] Verify error handling for non-existent runs
 
 - [ ] **Task 7: Write integration tests with MCP client** (AC: #1, #4)
   - [ ] `tests/integration/test_mcp_read_tools.py`

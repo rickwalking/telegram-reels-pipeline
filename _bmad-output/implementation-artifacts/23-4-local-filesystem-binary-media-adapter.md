@@ -1,6 +1,6 @@
 # Story 23.4: Local File System Adapter for Binary Media
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -20,41 +20,41 @@ So that the MongoDB instance is kept lightweight and only handles JSON event dat
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Define FileStoragePort protocol** (AC: #1, #2)
-  - [ ] Ensure `domain/ports/file_storage_port.py` defines:
+- [x] **Task 1: Define FileStoragePort protocol** (AC: #1, #2)
+  - [x] Ensure `domain/ports/file_storage_port.py` defines:
     - `async save_binary_asset(pipeline_run_id: str, asset_name: str, binary_content: bytes) -> str` (returns relative path)
     - `async save_binary_asset_from_path(pipeline_run_id: str, asset_name: str, source_path: str) -> str` (move/copy file)
     - `async get_asset_absolute_path(pipeline_run_id: str, asset_name: str) -> str`
     - `async list_run_assets(pipeline_run_id: str) -> tuple[str, ...]`
     - `async delete_run_assets(pipeline_run_id: str) -> None`
 
-- [ ] **Task 2: Implement LocalFileStorageAdapter** (AC: #1, #2, #3)
-  - [ ] Create `src/pipeline/infrastructure/adapters/local_file_storage_adapter.py`
-  - [ ] Constructor accepts `workspace_base_directory: str`
-  - [ ] `save_binary_asset()`:
+- [x] **Task 2: Implement LocalFileStorageAdapter** (AC: #1, #2, #3)
+  - [x] Create `src/pipeline/infrastructure/adapters/local_file_storage_adapter.py`
+  - [x] Constructor accepts `workspace_base_directory: str`
+  - [x] `save_binary_asset()`:
     - Create run directory if not exists: `{workspace_base_directory}/runs/{pipeline_run_id}/`
     - Atomic write: write to `.tmp` file, then `os.rename()` to final path
     - Return relative path: `runs/{pipeline_run_id}/{asset_name}`
-  - [ ] `save_binary_asset_from_path()`:
+  - [x] `save_binary_asset_from_path()`:
     - Move or copy source file to run directory atomically
-  - [ ] `get_asset_absolute_path()`:
+  - [x] `get_asset_absolute_path()`:
     - Resolve and validate path (prevent directory traversal)
     - Return absolute path
-  - [ ] `list_run_assets()`:
+  - [x] `list_run_assets()`:
     - List files in run directory
-  - [ ] `delete_run_assets()`:
+  - [x] `delete_run_assets()`:
     - Remove entire run directory (for cleanup)
 
-- [ ] **Task 3: Add path validation and security** (AC: #3)
-  - [ ] Validate `asset_name` does not contain `..` or absolute paths
-  - [ ] Validate `pipeline_run_id` matches expected format (prevent injection)
-  - [ ] All paths resolved via `pathlib.Path.resolve()` and checked against workspace root
-  - [ ] Raise `DomainValidationError` on path traversal attempts
+- [x] **Task 3: Add path validation and security** (AC: #3)
+  - [x] Validate `asset_name` does not contain `..` or absolute paths
+  - [x] Validate `pipeline_run_id` matches expected format (prevent injection)
+  - [x] All paths resolved via `pathlib.Path.resolve()` and checked against workspace root
+  - [x] Raise `DomainValidationError` on path traversal attempts
 
-- [ ] **Task 4: Integrate with event payload pattern** (AC: #2)
-  - [ ] Document the convention: when saving binary assets, include only the **relative path** in event payloads
-  - [ ] Example event payload: `{"artifact_paths": ("runs/run-abc/final-reel.mp4",)}`
-  - [ ] The Presentation layer can later resolve relative paths to serve files via HTTP
+- [x] **Task 4: Integrate with event payload pattern** (AC: #2)
+  - [x] Document the convention: when saving binary assets, include only the **relative path** in event payloads
+  - [x] Example event payload: `{"artifact_paths": ("runs/run-abc/final-reel.mp4",)}`
+  - [x] The Presentation layer can later resolve relative paths to serve files via HTTP
 
 - [ ] **Task 5: Create workspace cleanup service** (AC: #3)
   - [ ] Create `src/pipeline/application/services/workspace_cleanup_service.py`
@@ -63,14 +63,14 @@ So that the MongoDB instance is kept lightweight and only handles JSON event dat
   - [ ] Only deletes runs that are `COMPLETED` or `FAILED` and older than retention period
   - [ ] Emits `workspace.cleaned` event for audit trail
 
-- [ ] **Task 6: Write integration tests** (AC: #1, #3, #4)
-  - [ ] `tests/integration/test_local_file_storage_adapter.py`
-  - [ ] Test: save binary → file exists on disk
-  - [ ] Test: save from path → file moved atomically
-  - [ ] Test: isolated directories per run
-  - [ ] Test: path traversal rejection
-  - [ ] Test: list assets, delete assets
-  - [ ] Use `tmp_path` pytest fixture for test isolation
+- [x] **Task 6: Write integration tests** (AC: #1, #3, #4)
+  - [x] `tests/integration/test_local_file_storage_adapter.py`
+  - [x] Test: save binary → file exists on disk
+  - [x] Test: save from path → file moved atomically
+  - [x] Test: isolated directories per run
+  - [x] Test: path traversal rejection
+  - [x] Test: list assets, delete assets
+  - [x] Use `tmp_path` pytest fixture for test isolation
 
 - [ ] **Task 7: Write unit tests** (AC: #1)
   - [ ] `tests/unit/application/test_workspace_cleanup_service.py`
