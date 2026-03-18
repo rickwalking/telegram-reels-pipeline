@@ -233,24 +233,27 @@ development_status:
 
   # Epic 25: Real-Time Observability Dashboard (The Glass Wall)
   # FRs: FR12 (view runs), FR13 (SSE), FR14 (time-travel), FR15 (payload inspection)
-  epic-25: backlog
-  25-1-react-spa-foundation-api-client: ready-for-dev
-  25-2-realtime-sse-integration: ready-for-dev
-  25-3-historical-event-scrubber-pipeline-dvr: ready-for-dev
-  25-4-document-carousel-payload-inspection: ready-for-dev
+  epic-25: done
+  25-1-react-spa-foundation-api-client: done
+  25-2-realtime-sse-integration: done
+  25-3-historical-event-scrubber-pipeline-dvr: done
+  25-4-document-carousel-payload-inspection: done
+  epic-25-retrospective: optional
 
   # Epic 26: Core Processing Engine (Legacy Parity)
   # FRs: FR16 (download), FR17 (transcript), FR18 (layout), FR19 (ffmpeg), FR20 (QA)
-  epic-26: backlog
-  26-1-video-download-metadata-extraction-agent: ready-for-dev
-  26-2-transcript-analysis-moment-selection-agent: ready-for-dev
-  26-3-camera-layout-detection-agent: ready-for-dev
-  26-4-ffmpeg-video-generation-agent: ready-for-dev
-  26-5-automated-qa-reflection-loop: ready-for-dev
+  epic-26: done
+  26-1-video-download-metadata-extraction-agent: done
+  26-2-transcript-analysis-moment-selection-agent: done
+  26-3-camera-layout-detection-agent: done
+  26-4-ffmpeg-video-generation-agent: done
+  26-5-automated-qa-reflection-loop: done
+  epic-26-retrospective: optional
 
   # Epic 27: Operator Intervention & Recovery
   # FRs: FR4 (pause), FR5 (resume)
-  epic-27: backlog
-  27-1-escalate-to-operator-state-transition: ready-for-dev
-  27-2-pause-pipeline-api-endpoint: ready-for-dev
-  27-3-resume-pipeline-api-endpoint: ready-for-dev
+  epic-27: done
+  27-1-escalate-to-operator-state-transition: done
+  27-2-pause-pipeline-api-endpoint: done
+  27-3-resume-pipeline-api-endpoint: done
+  epic-27-retrospective: optional
