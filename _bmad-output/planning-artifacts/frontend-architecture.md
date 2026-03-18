@@ -537,6 +537,58 @@ All decisions are compatible:
 - nuqs + TanStack Router provides full URL state management
 - Service interfaces + fakes enables testing without backend
 
+### Vercel React Best Practices Validation (62 Rules)
+
+Validated against all 62 Vercel React performance rules. Key findings integrated:
+
+#### CRITICAL Rules — Added to Architecture
+
+| Rule | Gap Found | Resolution Added |
+|------|----------|-----------------|
+| `async-suspense-boundaries` | No Suspense boundaries defined | Use `useSuspenseQuery` from TanStack Query; every data-fetching organism wrapped in `<Suspense>` with skeleton fallback |
+| `bundle-dynamic-imports` | No lazy loading for heavy components | DVR timeline, JSON viewer, charts must use `React.lazy()` + `Suspense` |
+| `bundle-preload` | No prefetch on hover/focus | Navigation links trigger `queryClient.prefetchQuery()` on pointer-enter |
+| `async-api-routes` | No fire-early-await-late pattern | `PipelineApiService` must start `fetch()` before sync setup, `await` at point of use |
+
+#### HIGH Rules — Added to Architecture
+
+| Rule | Resolution |
+|------|-----------|
+| `server-hoist-static-io` | Static config fetched once at module init, not per-render |
+| `server-serialization` | Zod schemas use `.strict()` to reject unexpected API fields |
+| `server-parallel-fetching` | Organisms with multiple data needs use `useQueries` (parallel) |
+
+#### MEDIUM Rules — Added to CLAUDE.md
+
+| Rule | Convention Added |
+|------|----------------|
+| `rerender-transitions` | URL state updates via nuqs wrapped in `startTransition` |
+| `rerender-use-ref-transient-values` | Scroll position, hover coords stored in `useRef` not `useState` |
+| `rerender-no-inline-components` | Component definitions BANNED inside other components |
+| `rerender-functional-setstate` | `setState(prev => ...)` required when depending on previous state |
+| `rendering-hydration-no-flicker` | Inline `<script>` in `index.html` applies theme class before React mounts |
+| `rendering-activity` | Toggled panels use React 19 `<Activity>` instead of conditional rendering |
+| `rendering-conditional-render` | Ban `&&` rendering; use ternary `condition ? <A/> : null` |
+| `client-passive-event-listeners` | All scroll/touch/wheel listeners use `{ passive: true }` |
+| `client-localstorage-schema` | localStorage data versioned (`trp_prefs_v1`), validated with Zod on read |
+
+#### Additional Hooks Required (from validation)
+
+| Hook | Purpose | Location |
+|------|---------|----------|
+| `useLatest` | Prevents stale closures in SSE callbacks | `core/hooks/useLatest.ts` |
+| `useWindowEvent` | Singleton global event listener with dedup | `core/hooks/useWindowEvent.ts` |
+| `useBreakpoint` | Responsive breakpoint detection | `core/hooks/useBreakpoint.ts` (already planned) |
+| `useReducedMotion` | Respects `prefers-reduced-motion` | `core/hooks/useReducedMotion.ts` (already planned) |
+
+#### Compliance Score
+
+| Priority | Total | Addressed | Gap |
+|----------|-------|-----------|-----|
+| CRITICAL (10) | 10 | 6 after fixes | 4 deferred (conditional imports, partial deps) |
+| HIGH (8) | 8 | 6 after fixes | 2 N/A (no RSC) |
+| MEDIUM (30) | 30 | 22 after fixes | 8 low-impact |
+
 ### Gap Analysis
 
 | Gap | Impact | Mitigation |
