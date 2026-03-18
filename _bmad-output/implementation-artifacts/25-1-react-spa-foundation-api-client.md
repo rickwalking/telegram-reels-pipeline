@@ -27,7 +27,7 @@ So that all future frontend development follows the Atomic Design architecture w
 ## Tasks / Subtasks
 
 - [ ] **Task 1: Scaffold Vite + React + TypeScript project**
-  - [ ] `npm create vite@latest frontend -- --template react-ts`
+  - [ ] `npm create vite@latest frontend -- --template react-ts` (at monorepo root, sibling to `telegram-reels-pipeline/`)
   - [ ] Configure `tsconfig.json`: `strictNullChecks`, `noUncheckedIndexedAccess`, `noImplicitAny`, `paths` alias `@/`
   - [ ] Configure `vite.config.ts`: proxy `/api` → `http://localhost:8000`, React Compiler plugin
   - [ ] Install core deps: `@tanstack/react-query @tanstack/react-form @tanstack/react-router zod nuqs`

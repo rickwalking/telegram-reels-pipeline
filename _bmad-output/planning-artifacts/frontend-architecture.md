@@ -82,7 +82,7 @@ npm install -D vitest @testing-library/react @testing-library/jest-dom @storyboo
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Location | `frontend/` inside `telegram-reels-pipeline/` repo | Same repo as backend; shared CI, single PR for full-stack changes |
+| Location | `frontend/` at monorepo root, sibling to `telegram-reels-pipeline/` | Same repo as backend; shared CI, single PR for full-stack changes |
 | Package manager | npm (not pnpm/yarn) | Simplicity for solo dev, compatible with Vite |
 
 ### Decision 2: State Management
@@ -267,8 +267,12 @@ export function useMountEffect(callback: () => void | (() => void)): void {
 ## Project Structure & Boundaries
 
 ```
-telegram-reels-pipeline/
-└── frontend/                              # React SPA root
+claude_docker/                                 # Monorepo root
+├── telegram-reels-pipeline/                   # Python backend
+├── _bmad/                                     # BMAD framework
+├── _bmad-output/                              # Planning artifacts
+├── CLAUDE.md                                  # Root project rules
+└── frontend/                                  # React SPA root
     ├── package.json
     ├── tsconfig.json                      # strictNullChecks: true, noUncheckedIndexedAccess: true
     ├── vite.config.ts                     # Proxy /api → backend, React Compiler plugin
