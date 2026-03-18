@@ -4,8 +4,8 @@ import {
   createRouter,
 } from "@tanstack/react-router";
 import { RootLayout } from "@/app/routes/RootLayout";
-import { RunListPage } from "@/app/pages/RunListPage";
-import { RunDetailPage } from "@/app/pages/RunDetailPage";
+import { DashboardPage } from "@/app/pages/DashboardPage/DashboardPage";
+import { RunDetailPage } from "@/app/pages/RunDetailPage/RunDetailPage";
 import { RunDvrPage } from "@/app/pages/RunDvrPage";
 import { TriggerRunPage } from "@/app/pages/TriggerRunPage";
 
@@ -16,7 +16,7 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: RunListPage,
+  component: DashboardPage,
 });
 
 export const runDetailRoute = createRoute({
