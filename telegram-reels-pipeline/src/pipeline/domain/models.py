@@ -19,7 +19,7 @@ from pipeline.domain.enums import (
     RevisionType,
     ShotType,
 )
-from pipeline.domain.types import GateName, RunId, SessionId
+from pipeline.domain.types import EventId, GateName, RunId, SessionId
 
 
 def _freeze_mapping(m: Mapping[str, Any]) -> MappingProxyType[str, Any]:
@@ -405,6 +405,21 @@ class PipelineEvent:
             object.__setattr__(self, "data", _freeze_mapping(self.data))
         if not self.event_name:
             raise ValueError("event_name must not be empty")
+
+
+@dataclass(frozen=True)
+class StoredPipelineEvent:
+    """Pipeline event persisted with a unique ID and associated run."""
+
+    event_id: EventId
+    pipeline_run_id: RunId
+    event: PipelineEvent
+
+    def __post_init__(self) -> None:
+        if not self.event_id:
+            raise ValueError("event_id must not be empty")
+        if not self.pipeline_run_id:
+            raise ValueError("pipeline_run_id must not be empty")
 
 
 @dataclass(frozen=True)
