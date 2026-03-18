@@ -9,6 +9,7 @@ import {
   pipelineRunDetailSchema,
   pipelineRunSummaryListSchema,
 } from "@/schemas/pipelineRunSchema";
+import { snakeToCamel } from "@/utils/snakeToCamel";
 
 const API_BASE_URL = "/api";
 
@@ -27,7 +28,8 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
     const body = await response.text().catch(() => "Unknown error");
     throw new PipelineApiError(body, response.status);
   }
-  return response.json() as Promise<unknown>;
+  const rawJson = await response.json() as unknown;
+  return snakeToCamel(rawJson);
 }
 
 function buildRunListUrl(params: RunListQueryParams): string {

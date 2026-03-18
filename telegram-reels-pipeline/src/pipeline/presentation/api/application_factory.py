@@ -9,30 +9,52 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from motor.motor_asyncio import AsyncIOMotorClient
+from odmantic import AIOEngine
 
 from pipeline.application.services.pipeline_orchestrator_worker import (
     OrchestratorWorkerConfig,
     PipelineOrchestratorWorker,
 )
+from pipeline.infrastructure.database.adapters.mongodb_event_store_adapter import MongoDbEventStoreAdapter
+from pipeline.infrastructure.database.adapters.mongodb_state_store_adapter import MongoDbStateStoreAdapter
 from pipeline.presentation.api.exception_handlers import register_exception_handlers
-from pipeline.presentation.api.pipeline_runs_router import pipeline_runs_router
+from pipeline.presentation.api.pipeline_runs_router import (
+    get_event_store_port,
+    get_state_store_port,
+    pipeline_runs_router,
+)
 
 logger = logging.getLogger(__name__)
 
-ALLOWED_ORIGINS: tuple[str, ...] = ("http://localhost:5173",)
+ALLOWED_ORIGINS: tuple[str, ...] = ("http://localhost:5173", "http://192.168.1.142:5173")
+MONGODB_URI = "mongodb://localhost:27017"
+MONGODB_DATABASE = "telegram_reels_pipeline"
 
 
 @asynccontextmanager
 async def application_lifespan(application: FastAPI) -> AsyncIterator[None]:
-    """Manage the background orchestrator worker lifecycle."""
+    """Connect MongoDB, wire adapters, start orchestrator worker."""
+    motor_client = AsyncIOMotorClient(MONGODB_URI)
+    odmantic_engine = AIOEngine(client=motor_client, database=MONGODB_DATABASE)
+
+    event_store = MongoDbEventStoreAdapter(odmantic_engine)
+    state_store = MongoDbStateStoreAdapter(odmantic_engine)
+
+    application.dependency_overrides[get_event_store_port] = lambda: event_store
+    application.dependency_overrides[get_state_store_port] = lambda: state_store
+
     worker = PipelineOrchestratorWorker(config=OrchestratorWorkerConfig())
     application.state.orchestrator_worker = worker
     worker_task = asyncio.create_task(worker.start_processing_loop())
-    logger.info("Orchestrator worker background task created")
+    logger.info("Backend started — MongoDB connected, orchestrator worker running")
+
     yield
+
     worker.request_graceful_shutdown()
     await worker_task
-    logger.info("Orchestrator worker background task completed")
+    motor_client.close()
+    logger.info("Backend stopped — MongoDB disconnected")
 
 
 def create_fastapi_application() -> FastAPI:
