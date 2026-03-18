@@ -1,139 +1,127 @@
-# Story 25.1: React SPA Foundation & API Client
+# Story 25.1: React SPA Foundation — Scaffolding, Core Library & API Client
 
 Status: ready-for-dev
 
 ## Story
 
-As a UI Developer,
-I want to set up the base React SPA and API client,
-So that I have a clean foundation to build the dashboard views.
+As a Developer,
+I want to scaffold the React SPA with Vite, Shadcn/ui, TanStack stack, and the `core/` component library structure,
+So that all future frontend development follows the Atomic Design architecture with strict TypeScript and accessibility rules.
 
 ## Acceptance Criteria
 
-1. **Given** a new frontend project, **When** scaffolded, **Then** it must use React 19+ with TypeScript, Vite for bundling, and Tailwind CSS for styling, **And** it must be located at `frontend/` in the project root.
+1. **Given** `frontend/` directory, **When** `npm run dev` is executed, **Then** Vite dev server starts with proxy to FastAPI backend at `/api`.
 
-2. **Given** the React app, **When** I navigate to `/`, **Then** it must render a Dashboard view with a list of pipeline runs, **And** clicking a run must navigate to `/runs/{pipeline_run_id}` (Run Detail view).
+2. **Given** the project, **When** I inspect `tsconfig.json`, **Then** `strictNullChecks: true`, `noUncheckedIndexedAccess: true`, and `noImplicitAny: true` must be enabled.
 
-3. **Given** the API client, **When** it calls `GET /api/runs`, **Then** it must receive typed responses matching `PipelineRunListItemDTO`, **And** handle network errors gracefully with user-visible feedback.
+3. **Given** Shadcn/ui is initialized, **When** I run `npx shadcn add button badge tabs`, **Then** components install into `src/core/atoms/ui/` with Tailwind CSS 4 tokens.
 
-4. **Given** the frontend dev server, **When** I run `npm run dev`, **Then** it must proxy API requests to the FastAPI backend, **And** hot module replacement must work.
+4. **Given** the `core/` directory, **When** I inspect it, **Then** Atomic Design layers exist: `atoms/`, `molecules/`, `organisms/`, `templates/`, `hooks/`, `themes/`.
+
+5. **Given** `PipelineApiService`, **When** I call `fetchRunList()`, **Then** it returns Zod-validated response data from `GET /api/runs`.
+
+6. **Given** the dark mode toggle, **When** clicked, **Then** theme switches via CSS class on `<html>` without flicker (inline script in `index.html`).
+
+7. **Given** Storybook, **When** `npm run storybook` is executed, **Then** it starts and shows the first atom stories.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Scaffold React project** (AC: #1)
-  - [ ] Run `npm create vite@latest frontend -- --template react-ts`
-  - [ ] Install core deps: `react-router-dom`, `tailwindcss`, `@headlessui/react`
-  - [ ] Install dev deps: `@types/react`, `eslint`, `prettier`
-  - [ ] Configure Tailwind CSS with project design tokens
-  - [ ] Configure Vite proxy for `/api` → FastAPI backend
+- [ ] **Task 1: Scaffold Vite + React + TypeScript project**
+  - [ ] `npm create vite@latest frontend -- --template react-ts`
+  - [ ] Configure `tsconfig.json`: `strictNullChecks`, `noUncheckedIndexedAccess`, `noImplicitAny`, `paths` alias `@/`
+  - [ ] Configure `vite.config.ts`: proxy `/api` → `http://localhost:8000`, React Compiler plugin
+  - [ ] Install core deps: `@tanstack/react-query @tanstack/react-form @tanstack/react-router zod nuqs`
+  - [ ] Install dev deps: `vitest @testing-library/react @testing-library/jest-dom`
+  - [ ] Create `frontend/CLAUDE.md` (already exists — verify)
 
-- [ ] **Task 2: Create routing structure** (AC: #2)
-  - [ ] Create `frontend/src/routes/` directory
-  - [ ] Define routes:
-    - `/` → `DashboardPage` (list of runs)
-    - `/runs/:pipelineRunId` → `RunDetailPage` (single run detail)
-    - `/runs/:pipelineRunId/dvr` → `PipelineDvrPage` (time-travel view)
-  - [ ] Create `AppLayout` component with navigation header
-  - [ ] Add loading and error boundary components
+- [ ] **Task 2: Initialize Shadcn/ui + Tailwind CSS**
+  - [ ] `npx shadcn@latest init` (configure for `src/core/atoms/ui/`)
+  - [ ] Configure `tailwind.config.ts` with custom status color tokens (`--status-pending`, `--status-active`, etc.)
+  - [ ] Add theme tokens from UX spec (colors, spacing, typography)
+  - [ ] Create `src/core/themes/tokens.css` with CSS variables
+  - [ ] Create `src/core/themes/defaultTheme.ts`
 
-- [ ] **Task 3: Create typed API client** (AC: #3)
-  - [ ] Create `frontend/src/api/pipeline_api_client.ts`
-  - [ ] Define TypeScript interfaces matching backend DTOs:
-    - `PipelineRunListItem`
-    - `PipelineRunDetail`
-    - `PipelineEventItem`
-    - `ErrorResponse`
-  - [ ] Functions: `fetchPipelineRuns()`, `fetchPipelineRunDetail(id)`, `triggerPipelineRun(payload)`
-  - [ ] Use `fetch` with proper error handling (no axios — keep it simple)
-  - [ ] Generic `apiRequest<T>()` helper with typed responses
+- [ ] **Task 3: Create Atomic Design directory structure**
+  - [ ] Create all directories per architecture: `core/{atoms,molecules,organisms,templates,hooks,themes}`, `app/{pages,hooks,routes,providers}`, `services/{interfaces,implementations,fakes}`, `schemas/`, `utils/`
+  - [ ] Create `__init__` placeholder files where needed
 
-- [ ] **Task 4: Create Dashboard page** (AC: #2, #3)
-  - [ ] Create `frontend/src/pages/DashboardPage.tsx`
-  - [ ] Fetch and display list of pipeline runs
-  - [ ] Show: run ID, YouTube URL (truncated), status badge, stage, created at
-  - [ ] Color-coded status badges: green (completed), blue (in progress), yellow (pending), red (failed)
-  - [ ] Click row → navigate to Run Detail page
-  - [ ] "New Run" button (triggers modal/form)
+- [ ] **Task 4: Create core hooks**
+  - [ ] `src/core/hooks/useMountEffect.ts` — mount-only effect (replaces useEffect)
+  - [ ] `src/core/hooks/useLatest.ts` — stable ref to latest callback (prevents stale closures)
+  - [ ] `src/core/hooks/useCopyToClipboard.ts` — clipboard API with aria-live announcement
+  - [ ] `src/core/hooks/useBreakpoint.ts` — responsive breakpoint detection (mobile/tablet/desktop)
+  - [ ] `src/core/hooks/useReducedMotion.ts` — `prefers-reduced-motion` detection
+  - [ ] `src/core/hooks/useWindowEvent.ts` — singleton global event listener with dedup
+  - [ ] Unit tests for each hook
 
-- [ ] **Task 5: Create Run Detail page (skeleton)** (AC: #2)
-  - [ ] Create `frontend/src/pages/RunDetailPage.tsx`
-  - [ ] Fetch run detail by ID from route params
-  - [ ] Display: current stage, status, stage progression indicator
-  - [ ] Placeholder sections for: SSE stream (Story 25-2), DVR (Story 25-3), Document Carousel (Story 25-4)
+- [ ] **Task 5: Create service interfaces + implementations**
+  - [ ] `src/services/interfaces/pipelineApiClientInterface.ts` — `fetchRunList`, `fetchRunDetail`, `triggerRun`, `pauseRun`, `resumeRun`
+  - [ ] `src/services/interfaces/sseConnectionInterface.ts` — `connect`, `disconnect`, `onEvent`
+  - [ ] `src/services/interfaces/clipboardInterface.ts` — `copyToClipboard`
+  - [ ] `src/services/implementations/PipelineApiService.ts` — native `fetch`, Zod validation on responses
+  - [ ] `src/services/implementations/SseConnectionService.ts` — native `EventSource` with auto-reconnect + `Last-Event-ID`
+  - [ ] `src/services/implementations/ClipboardService.ts`
+  - [ ] `src/services/fakes/FakePipelineApiService.ts`
+  - [ ] `src/services/fakes/FakeSseConnectionService.ts`
+  - [ ] `src/services/fakes/FakeClipboardService.ts`
 
-- [ ] **Task 6: Create design system components** (AC: #1)
-  - [ ] `StatusBadge` — color-coded status display
-  - [ ] `StageProgressBar` — visual pipeline stage progression
-  - [ ] `LoadingSpinner` — async loading state
-  - [ ] `ErrorAlert` — API error display
-  - [ ] `PageHeader` — consistent page titles and navigation
-  - [ ] All components use Tailwind utility classes
+- [ ] **Task 6: Create Zod schemas for API responses**
+  - [ ] `src/schemas/pipelineRunSchema.ts` — validates `GET /api/runs` and `GET /api/runs/:id` responses
+  - [ ] `src/schemas/pipelineEventSchema.ts` — validates event stream data
+  - [ ] `src/schemas/triggerRunSchema.ts` — validates `POST /api/runs` response
+  - [ ] All schemas use `.strict()` to reject unexpected fields
 
-- [ ] **Task 7: Configure build and deployment** (AC: #4)
-  - [ ] `vite.config.ts` with API proxy configuration
-  - [ ] `npm run build` produces static assets in `frontend/dist/`
-  - [ ] FastAPI serves `frontend/dist/` as static files in production
-  - [ ] Create `StaticFileMiddleware` or mount in FastAPI for SPA routing
+- [ ] **Task 7: Create app providers + routing**
+  - [ ] `src/app/providers/QueryProvider.tsx` — TanStack Query client (singleton, `useSuspenseQuery` default)
+  - [ ] `src/app/providers/ThemeProvider.tsx` — dark/light mode via CSS class + localStorage
+  - [ ] `src/app/providers/ServiceProvider.tsx` — DI container for service interfaces
+  - [ ] `src/app/routes/routeTree.tsx` — TanStack Router with 4 routes: `/`, `/runs/:runId`, `/runs/:runId/dvr`, `/trigger`
+  - [ ] `src/App.tsx` — compose providers + router
+  - [ ] `src/main.tsx` — entry point
 
-- [ ] **Task 8: Write frontend tests** (AC: #2, #3)
-  - [ ] Install vitest + @testing-library/react
-  - [ ] `tests/DashboardPage.test.tsx`: renders run list, handles empty state
-  - [ ] `tests/pipeline_api_client.test.ts`: API client typed responses, error handling
-  - [ ] `tests/StatusBadge.test.tsx`: correct colors for each status
+- [ ] **Task 8: Theme flicker prevention**
+  - [ ] Inline `<script>` in `index.html` that reads `localStorage("theme")` and applies class to `<html>` before React mounts
+  - [ ] `<meta name="theme-color">` set per theme
+  - [ ] `color-scheme: dark` applied on `<html>` when dark
+
+- [ ] **Task 9: Initialize Storybook**
+  - [ ] `npx storybook@latest init --type react`
+  - [ ] Configure `.storybook/main.ts` for Vite
+  - [ ] Configure `.storybook/preview.ts` with Tailwind CSS + theme tokens
+  - [ ] Create first story: `core/atoms/ui/Button.stories.tsx` (Shadcn button variants)
+
+- [ ] **Task 10: Create first atom — StatusBadge**
+  - [ ] Write `statusBadge.feature` (Gherkin scenarios FIRST)
+  - [ ] Create `statusBadgeInterface.ts` — `StatusBadgeProps { status, size?, showIcon? }`, `StatusBadgeVariant`
+  - [ ] Create `StatusBadge.tsx` — 5 variants (pending/active/completed/failed/paused), dark mode, icon + text
+  - [ ] Create `StatusBadge.test.tsx` — all variants, dark mode, aria-hidden on icon, color contrast
+  - [ ] Create `StatusBadge.stories.tsx` — all variants + sizes + dark mode
+
+- [ ] **Task 11: Create SkipLink atom**
+  - [ ] `SkipLink.tsx` — `<a href="#main-content" class="sr-only focus:not-sr-only">`
+  - [ ] First focusable element in DOM
+  - [ ] Unit test + story
+
+- [ ] **Task 12: E2E test infrastructure**
+  - [ ] Install Playwright: `npm install -D @playwright/test`
+  - [ ] Create `e2e/` directory with `features/` and `steps/`
+  - [ ] Create `playwright.config.ts` with Vite dev server
+  - [ ] Create placeholder `e2e/features/dashboard.feature`
 
 ## Dev Notes
 
-### Frontend Architecture
-
-```
-frontend/
-├── src/
-│   ├── api/                    # API client and TypeScript interfaces
-│   │   └── pipeline_api_client.ts
-│   ├── components/             # Reusable UI components
-│   │   ├── StatusBadge.tsx
-│   │   ├── StageProgressBar.tsx
-│   │   └── ...
-│   ├── pages/                  # Page-level components
-│   │   ├── DashboardPage.tsx
-│   │   ├── RunDetailPage.tsx
-│   │   └── PipelineDvrPage.tsx
-│   ├── hooks/                  # Custom React hooks
-│   │   └── use_pipeline_sse.ts (Story 25-2)
-│   ├── routes/                 # React Router config
-│   │   └── index.tsx
-│   └── App.tsx
-├── index.html
-├── vite.config.ts
-├── tailwind.config.js
-├── tsconfig.json
-└── package.json
-```
-
-### API Proxy Configuration
-
-During development, Vite proxies API calls to FastAPI:
-
-```typescript
-// vite.config.ts
-export default defineConfig({
-  server: {
-    proxy: {
-      '/api': 'http://localhost:8000',
-    }
-  }
-})
-```
-
-In production, FastAPI serves the built SPA as static files.
-
-### TypeScript DTO Alignment
-
-TypeScript interfaces must mirror the Python Pydantic DTOs exactly. Any change to a backend DTO requires a corresponding frontend type update. Consider generating types from OpenAPI spec in the future.
-
 ### References
 
-- [Source: prd.md#User Success] — Visual engagement, observability
-- [Source: prd.md#MVP Feature Set] — React SPA frontend with SSE
-- [Source: epics.md#Story 4.1] — React SPA Foundation & API Client
-- [Source: implementation-readiness-report] — UX: basic, intuitive UI using modern web practices
+- [Source: ux-design-specification.md] — Screen inventory, component list, responsive patterns
+- [Source: frontend-architecture.md] — Project structure, tech stack, patterns, CLAUDE.md rules
+- [Source: frontend/CLAUDE.md] — All coding rules, bans, limits, naming conventions
+- [Source: Vercel React Best Practices] — 62 performance rules
+- [Source: Vercel Web Interface Guidelines] — 100+ accessibility/UX rules
+
+### Key Architecture Decisions
+
+- `useSuspenseQuery` (not `useQuery`) — every data-fetching component inside `<Suspense>` boundary
+- Service interfaces injected via React Context, never imported directly
+- No barrel exports — import from specific file paths only
+- React Compiler eliminates need for manual `useMemo`/`useCallback`
+- Gherkin scenarios written BEFORE component implementation

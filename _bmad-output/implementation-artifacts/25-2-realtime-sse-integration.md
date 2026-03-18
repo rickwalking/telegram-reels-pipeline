@@ -10,101 +10,105 @@ So that I have live visibility into the exact stage the AI agents are working on
 
 ## Acceptance Criteria
 
-1. **Given** an active pipeline run, **When** I open the Run Detail view, **Then** the UI must establish an SSE connection to `GET /api/runs/{pipeline_run_id}/stream`, **And** immediately reflect state changes (e.g., stage transitions, QA results).
+1. **Given** an active pipeline run, **When** I open the Run Detail view, **Then** the UI must establish an SSE connection to `GET /api/runs/{pipeline_run_id}/stream`, **And** stage transitions reflect within 1 second.
 
-2. **Given** a connected SSE stream, **When** a pipeline event occurs, **Then** the UI must update within 1 second of the event being persisted to MongoDB.
+2. **Given** a connected SSE stream, **When** the connection drops, **Then** the client must auto-reconnect with exponential backoff, replay missed events via `Last-Event-ID`, **And** show a connection status indicator (green/amber/red).
 
-3. **Given** a dropped SSE connection, **When** the network recovers, **Then** the client must automatically reconnect and replay missed events.
+3. **Given** a `usePipelineSse` hook, **When** an SSE event arrives, **Then** it must update the TanStack Query cache directly (`queryClient.setQueryData`), **And** the UI re-renders only the affected components.
 
-4. **Given** no active pipeline run, **When** the SSE stream is idle, **Then** the server must send periodic heartbeat messages to keep the connection alive.
+4. **Given** the event feed component, **When** new events stream in, **Then** they must appear with a slide-in animation (honoring `prefers-reduced-motion`), **And** auto-scroll to latest unless the user has scrolled up.
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create SSE FastAPI endpoint** (AC: #1, #2, #4)
+- [ ] **Task 1: Create SSE backend endpoint (FastAPI)**
   - [ ] Create `src/pipeline/presentation/api/sse_stream_router.py`
-  - [ ] `GET /api/runs/{pipeline_run_id}/stream` endpoint
-  - [ ] Use `sse-starlette` `EventSourceResponse` for SSE delivery
+  - [ ] `GET /api/runs/{pipeline_run_id}/stream` using `sse-starlette` `EventSourceResponse`
   - [ ] Subscribe to `SseBroadcastPort` for real-time events
   - [ ] Send heartbeat every 15 seconds when idle
-  - [ ] Include `Last-Event-ID` support for reconnection
+  - [ ] Include `id` field on each event for `Last-Event-ID` reconnection
+  - [ ] Register router in `application_factory.py`
 
-- [ ] **Task 2: Implement SseBroadcastPort adapter** (AC: #2)
-  - [ ] Create `src/pipeline/infrastructure/adapters/in_memory_sse_broadcast_adapter.py`
-  - [ ] `InMemorySseBroadcastAdapter` implementing `SseBroadcastPort`:
-    - `async broadcast_event(pipeline_run_id: str, event: PipelineStateEvent) -> None`
-    - `async subscribe_to_run(pipeline_run_id: str) -> AsyncIterator[PipelineStateEvent]`
-  - [ ] Use `asyncio.Queue` per subscriber for fan-out delivery
+- [ ] **Task 2: Create `SseConnectionService` implementation**
+  - [ ] Write `sseConnection.feature` (Gherkin scenarios FIRST)
+  - [ ] Implement `src/services/implementations/SseConnectionService.ts`
+  - [ ] Native `EventSource` with auto-reconnect and exponential backoff
+  - [ ] `Last-Event-ID` header sent on reconnection
+  - [ ] Connection state tracking: `connected`, `reconnecting`, `disconnected`
+  - [ ] `onEvent` callback fires for each parsed event
+  - [ ] `disconnect()` cleanly closes the connection
+
+- [ ] **Task 3: Create `usePipelineSse` app hook**
+  - [ ] Write Gherkin scenarios FIRST
+  - [ ] `src/app/hooks/usePipelineSse.ts`
+  - [ ] Uses `useMountEffect` (not `useEffect`) to establish connection
+  - [ ] Uses `useLatest` for callback to prevent stale closure
+  - [ ] On event: calls `queryClient.setQueryData` to update run detail cache
+  - [ ] Exposes: `connectionStatus`, `latestEventTimestamp`
+  - [ ] Returns cleanup function for unmount
+
+- [ ] **Task 4: Create `InMemorySseBroadcastAdapter` (backend)**
+  - [ ] `src/pipeline/infrastructure/adapters/in_memory_sse_broadcast_adapter.py`
+  - [ ] Implements `SseBroadcastPort`: `broadcast_event()`, `subscribe_to_run()`
+  - [ ] `asyncio.Queue` per subscriber for fan-out
   - [ ] Clean up subscriptions on disconnect
 
-- [ ] **Task 3: Wire event emission to SSE broadcast** (AC: #2)
-  - [ ] When `PipelineEventEmitterService` appends an event to MongoDB, also broadcast via `SseBroadcastPort`
-  - [ ] This bridges the persistent store and real-time delivery
-  - [ ] Pattern: append to DB → broadcast to SSE subscribers (fire-and-forget, non-blocking)
+- [ ] **Task 5: Wire event emission to SSE broadcast (backend)**
+  - [ ] When `PipelineEventEmitterService` appends event to MongoDB, also call `SseBroadcastPort.broadcast_event()`
+  - [ ] Non-blocking: fire-and-forget, don't block the DB write
 
-- [ ] **Task 4: Create React SSE hook** (AC: #1, #3)
-  - [ ] Create `frontend/src/hooks/use_pipeline_sse.ts`
-  - [ ] Custom React hook: `usePipelineSse(pipelineRunId: string)`
-  - [ ] Returns: `{ events: PipelineEvent[], connectionStatus: string, latestStage: string }`
-  - [ ] Use native `EventSource` API
-  - [ ] Auto-reconnect with exponential backoff on connection loss
-  - [ ] Track `Last-Event-ID` for replay on reconnect
+- [ ] **Task 6: Create `ConnectionStatusIndicator` atom**
+  - [ ] Write `connectionStatusIndicator.feature` (Gherkin FIRST)
+  - [ ] `connectionStatusIndicatorInterface.ts` — props: `status: "connected" | "reconnecting" | "disconnected"`
+  - [ ] `ConnectionStatusIndicator.tsx` — green dot / amber pulse / red dot
+  - [ ] `ConnectionStatusIndicator.test.tsx` — all 3 states, `prefers-reduced-motion`
+  - [ ] `ConnectionStatusIndicator.stories.tsx` — all variants + dark mode
 
-- [ ] **Task 5: Integrate SSE into Run Detail page** (AC: #1)
-  - [ ] Update `RunDetailPage.tsx` to use `usePipelineSse` hook
-  - [ ] Real-time updates to: current stage indicator, status badge, event log
-  - [ ] Visual pulse/animation when a new event arrives
-  - [ ] Connection status indicator (connected/reconnecting/disconnected)
+- [ ] **Task 7: Create `EventFeed` organism**
+  - [ ] Write `eventFeed.feature` (Gherkin FIRST)
+  - [ ] `eventFeedInterface.ts` — props: `events`, `isLive`, `onEventClick`
+  - [ ] `EventFeed.tsx` — scrolling card list, `aria-live="polite"`, auto-scroll with pause detection
+  - [ ] Virtualize with `virtua` if >50 events
+  - [ ] Slide-in animation on new events (transform + opacity, `prefers-reduced-motion` variant)
+  - [ ] "New events — scroll to latest" button when scroll is paused
+  - [ ] `EventFeed.test.tsx` + `EventFeed.stories.tsx`
 
-- [ ] **Task 6: Create SSE event type formatting** (AC: #1, #2)
-  - [ ] Define SSE event types: `stage_update`, `qa_result`, `error`, `heartbeat`
-  - [ ] Each event type has a specific JSON payload structure
-  - [ ] Frontend dispatches on event type to update appropriate UI sections
+- [ ] **Task 8: Backend unit + integration tests**
+  - [ ] `tests/unit/presentation/test_sse_stream_router.py` — SSE endpoint sends events
+  - [ ] `tests/unit/infrastructure/test_in_memory_sse_broadcast_adapter.py` — fan-out, cleanup
 
-- [ ] **Task 7: Write integration tests** (AC: #1, #2, #3)
-  - [ ] `tests/integration/test_sse_stream_endpoint.py`
-  - [ ] Test: connect → emit event → receive via SSE
-  - [ ] Test: reconnect with Last-Event-ID → receive missed events
-  - [ ] Test: heartbeat sent during idle
-  - [ ] Use `httpx` SSE client for testing
-
-- [ ] **Task 8: Write frontend tests** (AC: #1, #3)
-  - [ ] `frontend/tests/use_pipeline_sse.test.ts`
-  - [ ] Test: hook connects and receives events
-  - [ ] Test: auto-reconnect on disconnect
-  - [ ] Mock EventSource for unit testing
+- [ ] **Task 9: Frontend unit tests**
+  - [ ] `SseConnectionService.test.ts` — connect, reconnect, disconnect
+  - [ ] `usePipelineSse.test.tsx` — cache update on event, connection status
+  - [ ] `EventFeed.test.tsx` — renders events, auto-scroll, pause detection
 
 ## Dev Notes
 
-### SSE vs WebSocket
-
-SSE was chosen over WebSocket because:
-- Simpler server implementation (uni-directional)
-- Native browser `EventSource` API with auto-reconnect
-- Works through HTTP proxies without upgrade negotiation
-- Sufficient for our read-only real-time use case
-
-### Event Fan-Out Architecture
+### SSE Architecture
 
 ```
-PipelineEventEmitterService
-    ├── EventStorePort.append_event() ──→ MongoDB (persistent)
-    └── SseBroadcastPort.broadcast() ──→ In-Memory Queue ──→ SSE Subscribers
-                                                               ├── Browser 1
-                                                               └── Browser 2
+FastAPI Backend                              React Frontend
+┌─────────────────────┐                     ┌──────────────────────┐
+│ PipelineEventEmitter │                     │ usePipelineSse hook  │
+│   ├── MongoDB append │                     │   ├── EventSource    │
+│   └── SSE broadcast  │────(SSE stream)────→│   ├── queryClient    │
+│                      │                     │   │   .setQueryData() │
+│ SseBroadcastPort     │                     │   └── connectionState│
+│   └── asyncio.Queue  │                     └──────────────────────┘
+└─────────────────────┘
 ```
 
-### Reconnection with Replay
+### Stale Closure Prevention
 
-Each SSE event includes an `id` field (the event's `event_id`). When a client reconnects, it sends `Last-Event-ID` header. The server queries MongoDB for events after that ID and replays them before resuming the live stream.
+The `usePipelineSse` hook receives an `onEvent` callback that accesses TanStack Query cache. This callback MUST use `useLatest` to prevent stale closure:
 
-### NFR Compliance
-
-- NFR-S1: Event store supports high-volume writes — SSE broadcast is non-blocking, decoupled from DB writes
-- Zero-Downtime Resilience: UI reconstructs state on reconnection via event replay
+```typescript
+const latestOnEvent = useLatest(onEventCallback);
+// In SSE handler:
+sseService.onEvent((event) => latestOnEvent.current(event));
+```
 
 ### References
 
-- [Source: prd.md#Observability & UI] — FR13 (real-time SSE updates)
-- [Source: prd.md#Business Success] — Zero-downtime resilience, Pipeline DVR
-- [Source: epics.md#Story 4.2] — Real-time SSE Integration
-- [Source: brainstorming-session-2026-02-24.md#Theme 2] — The Agnostic Broadcaster
+- [Source: ux-design-specification.md#Responsive Interaction Patterns] — event feed mobile/desktop patterns
+- [Source: frontend-architecture.md#Decision 2] — state management with SSE
+- [Source: frontend/CLAUDE.md#State Management] — SSE hook updates query cache

@@ -10,92 +10,115 @@ So that I can retroactively debug what happened or see exactly how long each sta
 
 ## Acceptance Criteria
 
-1. **Given** a completed or failed pipeline run, **When** I navigate to its DVR view, **Then** the UI must fetch the list of events from `GET /api/runs/{pipeline_run_id}/events`, **And** render them in a chronological timeline.
+1. **Given** a completed or failed run, **When** I navigate to `/runs/:runId/dvr`, **Then** a chronological event timeline renders with stage boundary markers and duration labels.
 
-2. **Given** the DVR timeline, **When** I click on a specific event, **Then** the detail panel must show the event's full JSON payload, metadata, and timing information.
+2. **Given** the DVR timeline, **When** I click/tap an event marker, **Then** the detail panel shows the event's full JSON payload with syntax highlighting and copy-to-clipboard.
 
-3. **Given** the DVR timeline, **When** I hover over stage boundaries, **Then** the UI must show the duration of each stage and any QA rework cycles.
+3. **Given** the DVR timeline, **When** I use keyboard Left/Right arrows, **Then** the selection moves between events (roving `tabindex`).
 
-4. **Given** the API endpoint, **When** queried, **Then** it must return paginated events with support for `?offset=N&limit=M` query parameters.
+4. **Given** the events API, **When** queried with pagination, **Then** it returns events with `?offset=N&limit=M` support and the DVR loads more on scroll.
+
+5. **Given** mobile view, **When** I tap an event, **Then** a bottom sheet slides up with the event detail (not a side panel).
 
 ## Tasks / Subtasks
 
-- [ ] **Task 1: Create events list API endpoint** (AC: #1, #4)
-  - [ ] Add `GET /api/runs/{pipeline_run_id}/events` to router
-  - [ ] Create `PipelineEventListResponseDTO` with pagination metadata
-  - [ ] Create `PipelineEventItemDTO` with: `event_id`, `event_type`, `stage_name`, `created_at`, `payload_summary`
-  - [ ] Create `ListPipelineEventsUseCase` — queries event store with pagination
-  - [ ] Support query params: `offset` (default 0), `limit` (default 50, max 200)
+- [ ] **Task 1: Create events list API endpoint (backend)**
+  - [ ] `GET /api/runs/{pipeline_run_id}/events` with `offset`/`limit` query params
+  - [ ] `PipelineEventListResponseDTO` with pagination metadata
+  - [ ] `PipelineEventItemDTO`: `event_id`, `event_type`, `stage_name`, `created_at`, `payload_summary`
+  - [ ] Ordered by `created_at` ascending (chronological)
 
-- [ ] **Task 2: Create event detail API endpoint** (AC: #2)
-  - [ ] Add `GET /api/runs/{pipeline_run_id}/events/{event_id}` to router
-  - [ ] Create `PipelineEventDetailResponseDTO` with full payload
-  - [ ] Return 404 if event not found
+- [ ] **Task 2: Create event detail API endpoint (backend)**
+  - [ ] `GET /api/runs/{pipeline_run_id}/events/{event_id}`
+  - [ ] Returns full event payload
+  - [ ] 404 if event not found
 
-- [ ] **Task 3: Create DVR timeline component** (AC: #1, #3)
-  - [ ] Create `frontend/src/components/PipelineDvrTimeline.tsx`
-  - [ ] Render events as a vertical timeline with:
-    - Stage boundary markers (colored by stage)
-    - Event dots (sized by importance: stage transitions large, QA events medium)
-    - Duration labels between stage boundaries
-    - QA rework cycle indicators (loop arrows)
-  - [ ] Highlight errors in red, successes in green
+- [ ] **Task 3: Create `TimelineEventMarker` atom**
+  - [ ] Write `timelineEventMarker.feature` (Gherkin FIRST)
+  - [ ] `timelineEventMarkerInterface.ts` — props: `eventType`, `stageName`, `timestamp`, `isSelected`, `onClick`
+  - [ ] `TimelineEventMarker.tsx` — `<button>` element, min 44x44px touch target, `aria-label` with event description
+  - [ ] Color-coded by event type: stage events (blue), QA events (amber), errors (red)
+  - [ ] `TimelineEventMarker.test.tsx` + `.stories.tsx`
 
-- [ ] **Task 4: Create event detail panel** (AC: #2)
-  - [ ] Create `frontend/src/components/EventDetailPanel.tsx`
-  - [ ] Side panel or modal that opens when clicking a timeline event
-  - [ ] Display: event type, timestamp, stage, full JSON payload
-  - [ ] Syntax-highlighted JSON viewer
-  - [ ] Copy-to-clipboard button for payload
+- [ ] **Task 4: Create `StageBoundaryMarker` atom**
+  - [ ] `stageBoundaryMarkerInterface.ts` — props: `stageName`, `durationSeconds`
+  - [ ] `StageBoundaryMarker.tsx` — decorative divider (`aria-hidden="true"`), duration label with `tabular-nums`
+  - [ ] `<time datetime="PTNs">` for semantic correctness
+  - [ ] Test + story
 
-- [ ] **Task 5: Create Pipeline DVR page** (AC: #1, #2, #3)
-  - [ ] Create `frontend/src/pages/PipelineDvrPage.tsx`
-  - [ ] Layout: timeline on left, detail panel on right
-  - [ ] Stage duration summary at top (bar chart showing time per stage)
-  - [ ] Infinite scroll or "Load More" for paginated events
-  - [ ] Link from Run Detail page to DVR view
+- [ ] **Task 5: Create `EventDetailPanel` molecule**
+  - [ ] Write `eventDetailPanel.feature` (Gherkin FIRST)
+  - [ ] `eventDetailPanelInterface.ts` — props: `event`, `onClose`
+  - [ ] JSON payload with syntax highlighting (dark-mode aware)
+  - [ ] Collapsible sections (`<button>` with `aria-expanded`)
+  - [ ] CopyButton for full payload
+  - [ ] Renders as side panel (desktop) or bottom sheet via `ModalSheetLayout` (mobile)
+  - [ ] Tests + stories
 
-- [ ] **Task 6: Create stage duration calculation** (AC: #3)
-  - [ ] Utility function: calculate duration between `stage_entered` and `stage_completed` events
-  - [ ] Account for QA rework cycles (multiple enter/complete pairs)
-  - [ ] Display total time and rework time separately
+- [ ] **Task 6: Create `PipelineDvrTimeline` organism**
+  - [ ] Write `pipelineDvrTimeline.feature` (Gherkin FIRST)
+  - [ ] `pipelineDvrTimelineInterface.ts` — props: `runId`, `selectedEventId`, `onEventSelect`
+  - [ ] Fetches events via `useSuspenseQuery` + `<Suspense>` boundary with skeleton
+  - [ ] Renders `TimelineEventMarker` + `StageBoundaryMarker` components
+  - [ ] Keyboard navigation: Left/Right arrows (roving `tabindex`)
+  - [ ] URL state: selected event synced via nuqs `?event=evt-123`
+  - [ ] Virtualize if >50 events (`content-visibility: auto`)
+  - [ ] `touch-action: pan-y` (mobile vertical), `overscroll-behavior: contain`
+  - [ ] Timestamps use `Intl.DateTimeFormat`
+  - [ ] Tests + stories
 
-- [ ] **Task 7: Write backend tests** (AC: #1, #4)
-  - [ ] `tests/unit/application/test_list_pipeline_events_use_case.py`
-  - [ ] Test: pagination (offset/limit), empty events, chronological ordering
-  - [ ] `tests/integration/test_pipeline_events_endpoint.py`
-  - [ ] Test: API returns paginated events with correct structure
+- [ ] **Task 7: Create `PipelineDvrPage` page**
+  - [ ] `src/app/pages/PipelineDvrPage/PipelineDvrPage.tsx`
+  - [ ] Layout: `DvrLayout` template — resizable split (desktop) / stacked (mobile)
+  - [ ] Left/top: `PipelineDvrTimeline`
+  - [ ] Right/bottom: `EventDetailPanel`
+  - [ ] Back link to run detail: `<Link to="/runs/$runId">`
+  - [ ] Stage duration summary bar at top
 
-- [ ] **Task 8: Write frontend tests** (AC: #1, #2, #3)
-  - [ ] `frontend/tests/PipelineDvrTimeline.test.tsx`: renders events, stage boundaries
-  - [ ] `frontend/tests/EventDetailPanel.test.tsx`: displays payload, copy button
-  - [ ] `frontend/tests/stage_duration.test.ts`: duration calculation accuracy
+- [ ] **Task 8: Create `JsonPayloadViewer` molecule**
+  - [ ] Write Gherkin scenarios FIRST
+  - [ ] `jsonPayloadViewerInterface.ts` — props: `payload`, `maxHeight?`
+  - [ ] Syntax highlighting via CSS (no heavy dependency)
+  - [ ] Collapsible object/array sections
+  - [ ] `break-words` / `overflow-wrap` for long values
+  - [ ] Dark-mode aware theme
+  - [ ] `content-visibility: auto` on large JSON trees
+  - [ ] CopyButton integrated
+  - [ ] Tests + stories
+
+- [ ] **Task 9: Write E2E tests**
+  - [ ] `e2e/features/pipeline-dvr.feature`:
+    - Scenario: Navigate to DVR from run detail
+    - Scenario: Click event to see detail
+    - Scenario: Keyboard navigate between events
+    - Scenario: Copy event payload
+  - [ ] Playwright MCP step definitions
 
 ## Dev Notes
 
-### DVR User Journey
+### DVR User Journey (from UX spec)
 
-From the PRD Journey 2 (Time-Travel Debugger):
-> A run fails. Pedro uses the React SPA Pipeline DVR to scrub back through the event history, finds an agent hallucination, updates the FastMCP constraints in the code, and resumes the run from the checkpoint directly in the UI.
+```
+[Dashboard] → See red "Failed" badge → tap
+[Run Detail] → Stage stepper shows red on "transcript" → tap "View DVR"
+[DVR Timeline] → Scrub through events → tap error event (red marker)
+[Event Detail] → See exact error + QA history → "Found it!" moment
+```
 
-This is the core debugging experience. The timeline must make it easy to:
-1. See which stage failed and why
-2. Inspect the exact agent output that caused the failure
-3. Compare QA rework attempts
-4. Understand timing (where did the pipeline spend the most time?)
+Time to debug target: **< 1 minute** (PRD measurable outcome).
 
-### Pagination Strategy
+### Mobile vs Desktop Layout
 
-Events are ordered by `created_at` descending (newest first) in the API, but displayed chronologically in the UI timeline. The frontend reverses the order after fetching. Pagination uses cursor-based offset for consistency.
-
-### Performance Consideration
-
-A full pipeline run might generate 50-100 events. Pagination with limit=50 should cover most runs in a single request. For long runs with many QA rework cycles, the "Load More" button fetches the next page.
+| Element | Desktop | Mobile |
+|---------|---------|--------|
+| Timeline | Left panel (resizable) | Full width, vertical scroll |
+| Event detail | Right panel (resizable) | Bottom sheet (slide up) |
+| Navigation | Mouse click + keyboard arrows | Tap + swipe |
+| Payload view | Full syntax-highlighted panel | Collapsible accordion |
 
 ### References
 
-- [Source: prd.md#Observability & UI] — FR14 (time-travel debugging)
-- [Source: prd.md#Measurable Outcomes] — Time to debug: <1 minute
-- [Source: prd.md#User Journeys] — Journey 2: Time-Travel Debugger
-- [Source: epics.md#Story 4.3] — Historical Event Scrubber
-- [Source: brainstorming-session-2026-02-24.md#Theme 1] — The Pipeline DVR
+- [Source: ux-design-specification.md#Screen 3: Pipeline DVR] — wireframe and interaction patterns
+- [Source: ux-design-specification.md#Journey 2: Time-Travel Debugger] — user journey flow
+- [Source: frontend-architecture.md#Decision 4] — API client with Zod validation
+- [Source: frontend/CLAUDE.md#Accessibility] — keyboard nav, touch targets, aria patterns
