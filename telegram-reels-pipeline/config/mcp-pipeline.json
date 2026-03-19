@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "pipeline": {
+      "command": "poetry",
+      "args": ["run", "python", "-m", "pipeline.presentation.tools.mcp_server_factory"],
+      "env": {}
+    }
+  }
+}

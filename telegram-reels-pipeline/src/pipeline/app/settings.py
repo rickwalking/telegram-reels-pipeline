@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class PipelineSettings(BaseSettings):
@@ -58,4 +58,37 @@ class PipelineSettings(BaseSettings):
     veo3_timeout_s: int = Field(default=300, ge=30, description="Timeout for Veo3 await gate in seconds")
     veo3_crop_bottom_px: int = Field(default=16, ge=0, description="Pixels to crop from bottom for watermark removal")
 
+    # FastAPI
+    fastapi_host: str = Field(default="0.0.0.0", description="FastAPI server bind host")
+    fastapi_port: int = Field(default=8000, ge=1, le=65535, description="FastAPI server bind port")
+
+    # MongoDB (event-sourced state store)
+    mongodb_connection_string: str = Field(
+        default="mongodb://localhost:27017",
+        description="MongoDB connection URI for event-sourced state",
+    )
+    mongodb_database_name: str = Field(
+        default="telegram_reels_pipeline",
+        description="MongoDB database name for pipeline state",
+    )
+
     model_config = {"env_prefix": "", "env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
+
+
+class MongoDbSettings(BaseSettings):
+    """MongoDB connection configuration loaded from environment variables.
+
+    Used by the infrastructure layer to initialise ``MongoDbConnectionManager``.
+    All fields are prefixed with ``MONGODB_`` in the environment.
+    """
+
+    mongodb_connection_string: str = Field(
+        default="mongodb://localhost:27017",
+        description="MongoDB connection string (URI format)",
+    )
+    mongodb_database_name: str = Field(
+        default="telegram_reels_pipeline",
+        description="Target MongoDB database name",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="MONGODB_", env_file=".env", env_file_encoding="utf-8", extra="ignore")

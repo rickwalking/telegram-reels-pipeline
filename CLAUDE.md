@@ -100,6 +100,70 @@ Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fa
 - Line length: 120
 - No nested `if` blocks — prefer early returns / guard clauses
 
+### Strict Architectural Quality Standards
+
+- **File Size Limit:** Maximum 450 lines per file to prevent God Classes. If an adapter or use case exceeds this, refactor using composition (e.g., Mapper classes).
+- **Double-Gate Validation:** Use Pydantic DTOs in the Presentation Layer for syntactic validation. Use pure frozen dataclasses with `__post_init__` in the Domain Layer for semantic/business validation.
+- **Hexagonal Tool-Adapter:** Agents interact with the system via CLI/MCP tools that call the REST API. The Application Use Cases must not know about external DBs or LLMs.
+- **BDD Testing:** Application Layer Use Cases must be tested using `pytest-bdd` with Gherkin `.feature` files. Use explicit `target_fixture` passing and isolated state-machine test steps. Do not use procedural scripts. Example:
+  ```python
+  from pytest_bdd import scenario, given, when, then
+
+  @scenario('publish_article.feature', 'Publishing the article')
+  def test_publish():
+      pass
+
+  @given("I have an article", target_fixture="article")
+  def article(author):
+      return create_test_article(author=author)
+
+  @when("I press the publish button")
+  def publish_article(browser):
+      browser.find_by_css('button[name=publish]').first.click()
+
+  @then("the article should be published")
+  def article_is_published(article):
+      article.refresh()
+      assert article.is_published
+  ```
+- **Visual Flow Mapping:** Cross-layer boundaries should be documented with Mermaid sequence diagrams.
+- **Omni-Channel Core (FastAPI):** All external interfaces (React SPA, Telegram, CI) must communicate with the core pipeline via a unified FastAPI REST layer. The Telegram Bot should not run its own isolated pipeline loop.
+- **Event Sourced State (MongoDB):** Pipeline state is stored in an event-sourced NoSQL document database (`ODMantic` + MongoDB) to enable real-time SSE observability ("Pipeline DVR") for the frontend. File system is restricted to raw binary media (`.mp4`, `.png`).
+- **Variable Naming Conventions:** Variables must have a descriptive name that follows the snake_case convention. Do not use abbreviations or acronyms unless they are well-known and universally understood.
+Bad example: `run_id` instead of `run_id_timestamp_short_id`, `run` instead of `run_pipeline`, `run_cli` instead of `run_pipeline_cli`, `response_.
+Good example: `run_id_timestamp_short_id` instead of `run_id`, `transcription_results` instead of `transcript`, `pipeline_state` instead of `state`.
+- **Function Naming Conventions:** Functions must have a descriptive name that follows the snake_case convention. Do not use abbreviations or acronyms unless they are well-known and universally understood.
+Bad example: `run` instead of `run_pipeline`, `run_cli` instead of `run_pipeline_cli`.
+Good example: `run_pipeline` instead of `run`.
+- **Class Naming Conventions:** Classes must have a descriptive name that follows the PascalCase convention. Do not use abbreviations or acronyms unless they are well-known and universally understood.
+Bad example: `Router` instead of `RouterAgent`.
+Good example: `RouterAgent` instead of `Router`.
+- **Constant Naming Conventions:** Constants must have a descriptive name that follows the UPPER_SNAKE_CASE convention. Do not use abbreviations or acronyms unless they are well-known and universally understood.
+- **Strict Folder Structure:** The architecture must adhere to `app/`, `domain/`, `application/`, `presentation/`, and `infrastructure/` directories. The legacy `scripts/` directory is deprecated and must be removed.
+
+### Clean Code & Domain-Driven Design Standards
+
+- **Single File per Port/Interface:** Each port and interface (`Protocol`) must live in its own dedicated file.
+- **Strict Typing:** Leverage `mypy` in strict mode to enforce strict types across the entire codebase. The use of `Any` is strictly banned.
+- **Function Constraints:** 
+  - Maximum of **20 lines** per function.
+  - Maximum of **3 arguments** per function. If more are required, encapsulate them in a dataclass or DTO interface.
+- **Pure Functions & Side Effects:** Core domain functions must be pure and include a descriptive docstring. All side effects (I/O, DB, network) must be strictly isolated to the Infrastructure layer.
+- **Control Flow:** 
+  - **No nested `if` statements.** Always use early returns/guard clauses.
+  - For complex conditional routing, use **dictionary dispatch** (mapping keys to callable values) instead of large `if/elif` chains.
+- **Interfaces over Abstract Classes:** Prefer Python `typing.Protocol` (structural subtyping) over `abc.ABC` for defining interfaces and ports.
+- **Controller Error Handling:** Use advanced decorators to handle exceptions elegantly in presentation controllers, preventing domain errors from bleeding into API logic. 
+- **API Documentation:** Every API endpoint must have comprehensive OpenAPI documentation. Error codes must follow standard HTTP semantic conventions and must not be generic.
+
+### Advanced DDD & Python Implementation Patterns
+
+- **Dependency Injection:** Do not instantiate infrastructure dependencies (like repositories or loggers) inside Application Use Cases. Use a Composition Root (or a framework like `dependency-injector`) to inject adapters into ports at application startup.
+- **Deep Immutability:** When using frozen dataclasses for Value Objects, ensure nested collections are also immutable (use `frozenset`, `tuple`, or `types.MappingProxyType` instead of `set`, `list`, or `dict`).
+- **Result Monads for Expected Errors:** For expected business failures (e.g., "Invalid User" or "Stage Failed"), prefer returning a `Result[T, E]` or `Either` type from Use Cases instead of raising exceptions. Reserve Python exceptions strictly for fatal infrastructure crashes.
+- **Ubiquitous Language:** Class names, methods, and variables must strictly match the business domain language defined by the Product Manager/Analyst. (e.g., use `StartPipelineRun` rather than generic `ProcessTask`).
+- **Strict AAA Testing Structure:** Every unit test file (outside of the BDD Integration tests) must clearly separate and comment the `# Arrange`, `# Act`, and `# Assert` blocks.
+
 ## Commit Rules
 
 - Use conventional commits: `feat:`, `fix:`, `refactor:`, `chore:`, `test:`, `docs:`
@@ -108,6 +172,8 @@ Each stage goes through QA evaluation (Generator-Critic pattern). Stages that fa
 - Do not mention AI tools or models in commit messages
 - Stage specific files, never `git add -A` or `git add .`
 - Run tests and linters before committing
+- **Coverage Validation:** Test coverage must be validated automatically via a pre-commit hook.
+- **Pull Request Flow:** DO NOT merge directly to `master`/`main`. Always create a new branch and open a Pull Request.
 - Author: Pedro Marins <ph.marins@hotmail.com>
 
 ## Sprint Tracking

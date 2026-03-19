@@ -197,3 +197,63 @@ development_status:
   # QA pass: typed PipelineState (P0-2), layer violation fix (P0-1),
   # nan/inf guards (P0-3), exception chaining (P1-4), stage registry
   # extraction (P1-7), OutputPort protocol (P2-8), function extraction (P2-9/10)
+
+  # ═══════════════════════════════════════════════════════════════
+  # OMNI-CHANNEL HEXAGONAL REFACTOR (Epics 22-27)
+  # PRD: prd.md (2026-02-24), Epics: epics.md (2026-02-24)
+  # Architecture: FastAPI + MongoDB + FastMCP + React SPA
+  # ═══════════════════════════════════════════════════════════════
+
+  # Epic 22: Pipeline Foundation & Omni-Channel Core
+  # FRs: FR1 (trigger), FR2 (state machine), FR3 (FIFO queue)
+  epic-22: done
+  22-1-hexagonal-scaffolding-presentation-layer: done
+  22-2-domain-models-event-sourcing-extensions: done
+  22-3-fastapi-core-run-trigger-endpoint: done
+  22-4-fifo-queue-orchestrator-initialization: done
+  epic-22-retrospective: optional
+
+  # Epic 23: The Time-Travel State Store (Event Sourcing)
+  # FRs: FR6 (immutable events), FR7 (state projection), FR8 (binary media)
+  epic-23: done
+  23-1-odmantic-mongodb-setup-document-models: done
+  23-2-state-store-port-mongo-implementation: done
+  23-3-event-driven-state-transitions: done
+  epic-23-retrospective: optional
+  23-4-local-filesystem-binary-media-adapter: done
+
+  # Epic 24: AI Agent Core Tooling (FastMCP)
+  # FRs: FR9 (read state), FR10 (save artifacts), FR11 (DTO validation)
+  epic-24: done
+  24-1-dto-mapping-agent-state-transfer: done
+  24-2-fastmcp-server-initialization: done
+  24-3-read-pipeline-state-tool: done
+  24-4-save-stage-output-tool: done
+  epic-24-retrospective: optional
+
+  # Epic 25: Real-Time Observability Dashboard (The Glass Wall)
+  # FRs: FR12 (view runs), FR13 (SSE), FR14 (time-travel), FR15 (payload inspection)
+  epic-25: done
+  25-1-react-spa-foundation-api-client: done
+  25-2-realtime-sse-integration: done
+  25-3-historical-event-scrubber-pipeline-dvr: done
+  25-4-document-carousel-payload-inspection: done
+  epic-25-retrospective: optional
+
+  # Epic 26: Core Processing Engine (Legacy Parity)
+  # FRs: FR16 (download), FR17 (transcript), FR18 (layout), FR19 (ffmpeg), FR20 (QA)
+  epic-26: done
+  26-1-video-download-metadata-extraction-agent: done
+  26-2-transcript-analysis-moment-selection-agent: done
+  26-3-camera-layout-detection-agent: done
+  26-4-ffmpeg-video-generation-agent: done
+  26-5-automated-qa-reflection-loop: done
+  epic-26-retrospective: optional
+
+  # Epic 27: Operator Intervention & Recovery
+  # FRs: FR4 (pause), FR5 (resume)
+  epic-27: done
+  27-1-escalate-to-operator-state-transition: done
+  27-2-pause-pipeline-api-endpoint: done
+  27-3-resume-pipeline-api-endpoint: done
+  epic-27-retrospective: optional
